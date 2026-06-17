@@ -1,24 +1,40 @@
-# IT332 Capstone — SmartStock
+# Luraine — SmartStock
 
-SmartStock — IT332 Capstone Project.
+IT332 Capstone project. This branch belongs to **Luraine Villaranda** (GitHub: `ure23`).
 
-## Team Branches
+## SmartStock: An Inventory and Delivery Tracking System with AI-Assisted Analytics for Glassram Glass and Aluminum Supply
 
-| Branch | Owner | Role |
-| --- | --- | --- |
-| `main` | — | Shared integration branch (default) |
-| `Kim` | Kim Eduard Saludes | — |
-| `Luraine` | Luraine | — |
-| `Hazel` | Hazel | — |
+## System Architecture and Technologies
 
-> Each teammate works on their own branch. Open Pull Requests into `main` for review and integration.
+The system is developed using modern web and desktop technologies to ensure performance, scalability, and a unified user experience.
 
-## Workflow
+### Frontend (Desktop App & Web Portal)
+- Electron
+- React
 
-```bash
-git checkout main
-git pull
-git checkout -b Kim      # or Luraine / Hazel
-# ... work, commit, push
-gh pr create --base main
-```
+### Backend
+- Node.js / Bun
+- Hono
+
+### Database
+- PostgreSQL
+
+### AI & Automation
+- DeepSeek API
+- n8n
+
+### Deployment Platforms
+- Render
+- Vercel
+
+### Version Control
+- Git
+- GitHub
+
+## System Development Methodology
+
+This study adopts the **Agile Development Methodology** to guide the design and development of the SmartStock system. Agile is selected due to its iterative development approach, flexibility in accommodating evolving system requirements, and emphasis on continuous client feedback and integration.
+
+## About This Branch
+
+This branch (`Luraine`) is Luraine's working branch for the SmartStock project. It will host the architecture, technology stack, and methodology overview that fall under Luraine's section of the chapter.
