@@ -1,76 +1,96 @@
 # SmartStock
 
-> An Inventory and Delivery Tracking System with AI-Assisted Analytics for **Glassram Glass and Aluminum Supply**
+> **An Inventory and Delivery Tracking System with AI-Assisted Analytics for Glassram Glass and Aluminum Supply**
 
-**IT332 Capstone Project** — Kim Eduard Saludes · Luraine Villaranda · Hazel
+IT332 Capstone Project · Kim Eduard Saludes · Luraine Villaranda · Hazel
 
----
-
-## System Description
-
-SmartStock is a centralized desktop-based inventory and delivery management system designed to automate and optimize operations for Glassram Glass and Aluminum Supply. The system transitions the business from manual, error-prone processes to a unified digital platform. It provides real-time monitoring of stock levels, streamlines order and delivery logistics, and incorporates AI-Assisted Analytics to empower business owners with actionable insights for strategic decision-making.
-
-A core component of the system is its AI-Assisted analytics module, which analyzes historical sales data to forecast future product demand, visualize sales trends, and classify inventory into fast- and slow-moving categories. By integrating inventory control, logistics transparency, and predictive intelligence, SmartStock supports proactive stock management, reduces operational costs, and promotes data-driven business growth.
+[![Repo](https://img.shields.io/badge/repo-FireFlyDeveloper%2Fit332--capstone--SmartStock-blue)](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock)
+[![Branches](https://img.shields.io/badge/branches-4-success)]() [![License](https://img.shields.io/badge/license-Academic-lightgrey)]()
 
 ---
 
-## Main Features
+## 📑 Overview
 
-### 1. Automated Inventory Management *(Luraine)*
+SmartStock is a centralized desktop-based inventory and delivery management system designed to automate and optimize operations for **Glassram Glass and Aluminum Supply**. It transitions the business from manual, error-prone processes to a unified digital platform, providing real-time stock visibility, streamlined delivery logistics, and **AI-assisted analytics** for demand forecasting and inventory classification.
 
-Digitalizes the recording and monitoring of glass and aluminum stock levels, ensuring data accuracy and eliminating redundancies associated with manual bookkeeping. The system provides real-time stock visibility and automated low-stock alerts to prevent stockouts and overstocking.
-
-### 2. Integrated Order and Delivery Tracking *(Luraine)*
-
-Provides real-time status updates for orders (`Processing` → `In Transit` → `Delivered`) for both staff and customers through a public tracking portal. Enhances logistics efficiency by offering recommended delivery sequences based on location and schedule, improving route and operations efficiency.
-
-### 3. AI-Driven Analytics for Business Intelligence *(Luraine)*
-
-Analyzes monthly sales and transaction trends to visualize business performance. Identifies top-selling materials on an annual basis, classifies inventory as fast- or slow-moving, and applies predictive modeling using historical sales data to forecast future demand, enabling proactive inventory planning.
+The full chapter is split across the team's branches. **Each section lives in its own branch and PRs into `main` for review.**
 
 ---
 
-## System Architecture and Technologies *(Kim)*
+## 🌿 Branches
 
-The system is developed using modern web and desktop technologies to ensure performance, scalability, and a unified user experience.
+| Branch | Owner | GitHub | Section |
+| --- | --- | --- | --- |
+| [`Kim`](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/tree/Kim) | Kim Eduard Saludes | [`FireFlyDeveloper`](https://github.com/FireFlyDeveloper) | [Architecture & Technologies](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Kim/README.md) |
+| [`Luraine`](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/tree/Luraine) | Luraine Villaranda | [`ure23`](https://github.com/ure23) | [System Features & AI Analytics](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Luraine/README.md) |
+| [`Hazel`](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/tree/Hazel) | Hazel | [`HAZEL-2B`](https://github.com/HAZEL-2B) | [Development Methodology](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Hazel/README.md) |
+| `main` | — | — | This overview · integration branch |
+
+---
+
+## 📄 Chapter Sections
+
+The chapter (rendered across the branches) covers:
+
+### 1. System Description
+Centralized desktop inventory + delivery management for Glassram Glass and Aluminum Supply. AI-assisted analytics forecast demand, visualize trends, and classify inventory into fast- and slow-moving categories. → *Main branch (this README)*
+
+### 2. Main Features — _see [`Luraine`](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Luraine/README.md)_
+- **Automated Inventory Management** — real-time stock visibility, low-stock alerts
+- **Integrated Order & Delivery Tracking** — public portal, status updates, recommended routes
+- **AI-Driven Analytics** — sales trends, top materials, fast/slow classification, demand forecasting
+
+### 3. System Architecture & Technologies — _see [`Kim`](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Kim/README.md)_
+- Frontend: **Electron + React**
+- Backend: **Node.js / Bun + Hono**
+- Database: **PostgreSQL**
+- AI & Automation: **DeepSeek API + n8n**
+- Deployment: **Render + Vercel**
+
+### 4. System Development Methodology — _see [`Hazel`](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Hazel/README.md)_
+- **Agile Development** across six phases: Planning → Design → Development → Testing → Deployment → Review
+- Active client (Admin/Owner) participation throughout
+
+---
+
+## 🤝 Team Workflow
+
+```bash
+# Clone
+git clone git@github.com:FireFlyDeveloper/it332-capstone-SmartStock.git
+cd it332-capstone-SmartStock
+
+# Pick your branch
+git checkout Kim      # or Luraine / Hazel
+
+# Work, commit, push to your branch
+git add .
+git commit -m "docs: ..."
+git push -u origin <your-branch>
+
+# Open a PR into main when ready for integration
+gh pr create --base main --reviewer FireFlyDeveloper
+```
+
+Each teammate pushes to their **own branch** (via SSH configured for their GitHub account). PRs into `main` are reviewed and merged for integration.
+
+---
+
+## 🛠️ Tech Stack (summary)
 
 | Layer | Tech |
 | --- | --- |
-| Frontend (Desktop + Web Portal) | Electron, React |
-| Backend | Node.js / Bun, Hono |
-| Database | PostgreSQL |
-| AI & Automation | DeepSeek API, n8n |
-| Deployment | Render (backend + DB), Vercel (web portal) |
-| Version Control | Git, GitHub |
+| Desktop App | Electron |
+| Web Portal | React, deployed on Vercel |
+| Backend API | Node.js / Bun + Hono |
+| Database | PostgreSQL, deployed on Render |
+| AI Layer | DeepSeek API + n8n |
+| Version Control | Git + GitHub |
+
+Full architecture write-up: [`Kim` branch →](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Kim/README.md)
 
 ---
 
-## System Development Methodology *(Hazel)*
+## 📜 License
 
-This study adopts the **Agile Development Methodology** to guide the design and development of the SmartStock system. Agile is selected due to its iterative development approach, flexibility in accommodating evolving system requirements, and emphasis on continuous client feedback and integration.
-
-### Six-Phase Process
-
-1. **Planning Phase** — Define scope; analyze manual inventory + lack of centralized tracking. Identify modules with the store owner.
-2. **Design Phase** — Architecture, DB structure, UI. Wireframes + flow diagrams validated with the client.
-3. **Development Phase** — Incremental via Agile sprints. Each sprint ships a working module.
-4. **Testing Phase** — Functional, usability, performance. Issues fixed before sign-off.
-5. **Deployment Phase** — Packaged as Electron desktop app + web portal; users guided through transition.
-6. **Review Phase** — Post-deployment evaluation with Admin/Owner + Staff. Feeds future enhancements.
-
-### Client Involvement
-
-Throughout development, the client (Admin/Owner) actively participates in requirements validation, feature evaluation, and system testing to ensure the final product accurately reflects the operational workflows and needs of Glassram Glass and Aluminum Supply.
-
----
-
-## Team Workflow
-
-| Branch | Owner | GitHub Account | Section Owned |
-| --- | --- | --- | --- |
-| `main` | — | (integration) | All sections combined |
-| `Kim` | Kim Eduard Saludes | `FireFlyDeveloper` | Architecture & deployment |
-| `Luraine` | Luraine Villaranda | `ure23` | Features & AI analytics |
-| `Hazel` | Hazel | `HAZEL-2B` | Methodology & process |
-
-Each teammate works on their own branch. Open Pull Requests into `main` for review and integration.
+Academic capstone project — all rights reserved by the team and Glassram Glass and Aluminum Supply.
