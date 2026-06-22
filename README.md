@@ -5,7 +5,7 @@
 IT332 Capstone Project · Kim Eduard Saludes · Luraine Villaranda · Hazel
 
 [![Repo](https://img.shields.io/badge/repo-FireFlyDeveloper%2Fit332--capstone--SmartStock-blue)](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock)
-[![Branches](https://img.shields.io/badge/branches-4-success)]() [![License](https://img.shields.io/badge/license-Academic-lightgrey)]()
+[![License](https://img.shields.io/badge/license-Academic-lightgrey)]()
 
 ---
 
@@ -13,66 +13,65 @@ IT332 Capstone Project · Kim Eduard Saludes · Luraine Villaranda · Hazel
 
 SmartStock is a centralized desktop-based inventory and delivery management system designed to automate and optimize operations for **Glassram Glass and Aluminum Supply**. It transitions the business from manual, error-prone processes to a unified digital platform, providing real-time stock visibility, streamlined delivery logistics, and **AI-assisted analytics** for demand forecasting and inventory classification.
 
-The full chapter is split across the team's branches. **Each section lives in its own branch and PRs into `main` for review.**
+---
+
+## 🤝 Team Workflow
+
+We collaborate directly on **`main`** — pull, modify, push. No branch-per-section split, no PRs.
+
+```bash
+git pull origin main
+# edit files (e.g. db/schema.sql under your section header)
+git add .
+git commit -m "feat(db): <what you changed>"
+git push origin main
+```
+
+Each teammate uses their own SSH key — push attempts are authenticated as the
+committer. To avoid conflicts, **stay in your own section** of any shared file
+(see `db/README.md` for the section ownership table) and keep the
+`Last touched:` line at the top of your section header up to date.
+
+| GitHub | Teammate | Section / file area |
+| --- | --- | --- |
+| [`FireFlyDeveloper`](https://github.com/FireFlyDeveloper) | Kim Eduard Saludes | Architecture & Technologies, top-level README |
+| [`ure23`](https://github.com/ure23) | Luraine Villaranda | System Features & AI Analytics |
+| [`HAZEL-2B`](https://github.com/HAZEL-2B) | Hazel | Development Methodology |
 
 ---
 
-## 🌿 Branches
+## 📂 Repository layout
 
-| Branch | Owner | GitHub | Section |
-| --- | --- | --- | --- |
-| [`Kim`](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/tree/Kim) | Kim Eduard Saludes | [`FireFlyDeveloper`](https://github.com/FireFlyDeveloper) | [Architecture & Technologies](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Kim/README.md) |
-| [`Luraine`](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/tree/Luraine) | Luraine Villaranda | [`ure23`](https://github.com/ure23) | [System Features & AI Analytics](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Luraine/README.md) |
-| [`Hazel`](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/tree/Hazel) | Hazel | [`HAZEL-2B`](https://github.com/HAZEL-2B) | [Development Methodology](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Hazel/README.md) |
-| `main` | — | — | This overview · integration branch |
+| Path | What's in it |
+| --- | --- |
+| `db/schema.sql` | The single canonical PostgreSQL schema (all 3 sections, one transaction) |
+| `db/README.md` | Section ownership, conventions, apply instructions |
+| `README.kim.md` | Kim's chapter write-up — Architecture & Technologies |
+| `README.luraine.md` | Luraine's chapter write-up — System Features & AI Analytics |
+| `README.hazel.md` | Hazel's chapter write-up — Development Methodology |
 
 ---
 
 ## 📄 Chapter Sections
 
-The chapter (rendered across the branches) covers:
-
 ### 1. System Description
-Centralized desktop inventory + delivery management for Glassram Glass and Aluminum Supply. AI-assisted analytics forecast demand, visualize trends, and classify inventory into fast- and slow-moving categories. → *Main branch (this README)*
+Centralized desktop inventory + delivery management for Glassram Glass and Aluminum Supply. AI-assisted analytics forecast demand, visualize trends, and classify inventory into fast- and slow-moving categories.
 
-### 2. Main Features — _see [`Luraine`](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Luraine/README.md)_
+### 2. Main Features — _see [`README.luraine.md`](./README.luraine.md)_
 - **Automated Inventory Management** — real-time stock visibility, low-stock alerts
 - **Integrated Order & Delivery Tracking** — public portal, status updates, recommended routes
 - **AI-Driven Analytics** — sales trends, top materials, fast/slow classification, demand forecasting
 
-### 3. System Architecture & Technologies — _see [`Kim`](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Kim/README.md)_
+### 3. System Architecture & Technologies — _see [`README.kim.md`](./README.kim.md)_
 - Frontend: **Electron + React**
 - Backend: **Node.js / Bun + Hono**
 - Database: **PostgreSQL**
 - AI & Automation: **DeepSeek API + n8n**
 - Deployment: **Render + Vercel**
 
-### 4. System Development Methodology — _see [`Hazel`](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Hazel/README.md)_
+### 4. System Development Methodology — _see [`README.hazel.md`](./README.hazel.md)_
 - **Agile Development** across six phases: Planning → Design → Development → Testing → Deployment → Review
 - Active client (Admin/Owner) participation throughout
-
----
-
-## 🤝 Team Workflow
-
-```bash
-# Clone
-git clone git@github.com:FireFlyDeveloper/it332-capstone-SmartStock.git
-cd it332-capstone-SmartStock
-
-# Pick your branch
-git checkout Kim      # or Luraine / Hazel
-
-# Work, commit, push to your branch
-git add .
-git commit -m "docs: ..."
-git push -u origin <your-branch>
-
-# Open a PR into main when ready for integration
-gh pr create --base main --reviewer FireFlyDeveloper
-```
-
-Each teammate pushes to their **own branch** (via SSH configured for their GitHub account). PRs into `main` are reviewed and merged for integration.
 
 ---
 
@@ -87,7 +86,7 @@ Each teammate pushes to their **own branch** (via SSH configured for their GitHu
 | AI Layer | DeepSeek API + n8n |
 | Version Control | Git + GitHub |
 
-Full architecture write-up: [`Kim` branch →](https://github.com/FireFlyDeveloper/it332-capstone-SmartStock/blob/Kim/README.md)
+Full architecture write-up: [`README.kim.md`](./README.kim.md)
 
 ---
 
