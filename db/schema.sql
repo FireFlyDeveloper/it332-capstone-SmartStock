@@ -1,0 +1,17 @@
+-- =============================================================
+-- SmartStock :: Database Schema
+-- Master migration
+-- Engine:   PostgreSQL 14+
+-- =============================================================
+-- Apply order is significant — each file may reference tables
+-- created in a previous one. Run them in this order:
+--
+--   psql -f schema.kim.sql
+--   psql -f schema.luraine.sql
+--   psql -f schema.hazel.sql
+--
+-- Authoritative split:
+--   schema.kim.sql     — Architecture & Technologies   (Kim Eduard Saludes)
+--   schema.luraine.sql — System Features & AI Analytics (Luraine Villaranda)
+--   schema.hazel.sql   — Development Methodology       (Hazel)
+-- =============================================================
