@@ -33,3 +33,16 @@ yarn-error.log*
 # Coverage
 coverage/
 .nyc_output/
+
+# Monorepo
+*.tsbuildinfo
+**/dist/
+pnpm-lock.yaml
+yarn.lock
+bun.lockb
+
+# Backend
+backend/.wrangler/
+
+# Frontend
+frontend/.vite/
