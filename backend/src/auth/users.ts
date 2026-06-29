@@ -53,3 +53,15 @@ export function createUser(input: {
   byEmail.set(record.email, record.id);
   return record;
 }
+
+/**
+ * Test-only helper — clears the in-memory user store between tests.
+ * Exported with a leading underscore to signal "do not import in app code".
+ *
+ * Author: Hazel
+ * Last touched: 2026-06-29
+ */
+export function _resetUserStore(): void {
+  users.clear();
+  byEmail.clear();
+}
