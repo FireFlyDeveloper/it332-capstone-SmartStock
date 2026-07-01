@@ -1,0 +1,42 @@
+/* AuthLayout — asymmetric split shell.
+ * Tokens come from index.css. This file owns layout + composition only. */
+
+.auth {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+@media (min-width: 880px) {
+  .auth {
+    grid-template-columns: 1.05fr 1fr;
+  }
+}
+
+.auth__form-pane {
+  display: grid;
+  place-items: center;
+  padding: 32px 24px;
+}
+
+@media (max-width: 879px) {
+  .auth__form-pane {
+    padding: 24px 20px;
+  }
+}
+
+.auth__art-pane {
+  display: none;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, #1a1916 0%, #2a261f 50%, #3a2f22 100%);
+  color: #f0ede4;
+}
+
+@media (min-width: 880px) {
+  .auth__art-pane {
+    display: block;
+  }
+}
