@@ -1,0 +1,88 @@
+/* AuthArtPanel — ambient brand surface for the auth layout's right pane. */
+
+.auth-art {
+  position: absolute;
+  inset: 0;
+  padding: 48px;
+  display: grid;
+  grid-template-rows: 1fr auto;
+}
+
+.auth-art__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(240, 237, 228, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(240, 237, 228, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 60% at 60% 40%, #000 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 60% 40%, #000 30%, transparent 80%);
+  pointer-events: none;
+}
+
+.auth-art__grain {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 20% 80%, rgba(184, 115, 42, 0.18), transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(212, 145, 84, 0.10), transparent 55%);
+  pointer-events: none;
+}
+
+.auth-art__stat {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  background: rgba(240, 237, 228, 0.04);
+  border: 1px solid rgba(240, 237, 228, 0.10);
+  border-radius: var(--radius-card);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.auth-art__stat--offset {
+  top: 25%;
+  right: 12%;
+}
+
+.auth-art__stat--bottom {
+  bottom: 22%;
+  left: 8%;
+}
+
+.auth-art__stat-num {
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 500;
+  color: #f0ede4;
+  letter-spacing: -0.5px;
+}
+
+.auth-art__stat-label {
+  font-size: 11px;
+  color: rgba(240, 237, 228, 0.65);
+  letter-spacing: 0.04em;
+}
+
+.auth-art__quote {
+  align-self: end;
+  max-width: 32ch;
+}
+
+.auth-art__quote p {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.4;
+  color: rgba(240, 237, 228, 0.92);
+  letter-spacing: -0.2px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .auth-art__stat {
+    background: rgba(15, 14, 11, 0.6);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
