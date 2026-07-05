@@ -8,7 +8,7 @@
  * prefers-reduced-transparency.
  *
  * Author: Hazel
- * Last touched: 2026-07-01
+ * Last touched: 2026-07-07
  */
 
 import './AuthArtPanel.css'
@@ -22,7 +22,7 @@ interface Stat {
 const STATS: Stat[] = [
   { num: '12', label: 'branches' },
   { num: '3.4k', label: 'SKUs tracked', className: 'auth-art__stat--offset' },
-  { num: '98.2%', label: 'stock accuracy, 30d', className: 'auth-art__stat--bottom' },
+  { num: '98.2%', label: 'stock accuracy, 30d', className: 'auth-art__stat--bottom' }
 ]
 
 export function AuthArtPanel() {
@@ -41,6 +41,9 @@ export function AuthArtPanel() {
       ))}
       <div className="auth-art__quote">
         <p>From receiving bay to delivery truck, one count.</p>
+      </div>
+      <div className="auth-art__footer" aria-hidden="true">
+        Demo build · SmartStock IT332
       </div>
     </div>
   )

@@ -2,13 +2,19 @@
  * LoginForm — email + password form, owns state, calls /auth/login.
  *
  * Author: Luraine Villaranda
- * Last touched: 2026-07-01
+ * Last touched: 2026-07-07
  */
 
 import { useState, type FormEvent } from 'react'
+import { toast } from 'sonner'
 import { apiFetch } from '../api'
 import { useAuth, type User } from './AuthContext'
 import './LoginForm.css'
+
+const DEMO_CREDENTIALS = [
+  { label: 'Admin', email: 'admin@smartstock.local', password: 'admin123' },
+  { label: 'Staff', email: 'staff@smartstock.local', password: 'staff123' },
+] as const
 
 export function LoginForm() {
   const { login } = useAuth()
@@ -17,6 +23,7 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [showDemoCard, setShowDemoCard] = useState(true)
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -37,6 +44,26 @@ export function LoginForm() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  function handleForgot(e: React.MouseEvent<HTMLAnchorElement>) {
+    e.preventDefault()
+    toast.warning('Contact your admin to reset your password.')
+  }
+
+  async function copyToClipboard(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success(`${label} copied to clipboard`)
+    } catch {
+      toast.error('Copy failed — your browser blocked clipboard access.')
+    }
+  }
+
+  function useDemoCredential(creds: { email: string; password: string }) {
+    setEmail(creds.email)
+    setPassword(creds.password)
+    toast.info('Demo credentials filled in — press Sign in.')
   }
 
   return (
@@ -74,7 +101,7 @@ export function LoginForm() {
         <div className="login-form__field">
           <div className="login-form__label-row">
             <label htmlFor="password" className="login-form__label">Password</label>
-            <a className="login-form__link" href="#reset">Forgot?</a>
+            <a className="login-form__link" href="#reset" onClick={handleForgot}>Forgot?</a>
           </div>
           <div className="login-form__input-wrap">
             <input
@@ -117,6 +144,60 @@ export function LoginForm() {
           <span>{submitting ? 'Signing in' : 'Sign in to SmartStock'}</span>
         </button>
       </form>
+
+      {showDemoCard && (
+        <aside className="login-form__demo" aria-label="Demo credentials">
+          <div className="login-form__demo-head">
+            <span className="login-form__demo-pill">Demo build</span>
+            <span className="login-form__demo-title">Use one of these accounts</span>
+            <button
+              type="button"
+              className="login-form__demo-close"
+              onClick={() => setShowDemoCard(false)}
+              aria-label="Dismiss demo credentials"
+            >
+              ×
+            </button>
+          </div>
+          <ul className="login-form__demo-list">
+            {DEMO_CREDENTIALS.map((c) => (
+              <li key={c.email} className="login-form__demo-row">
+                <div className="login-form__demo-meta">
+                  <span className="login-form__demo-role">{c.label}</span>
+                  <code className="login-form__demo-creds">
+                    {c.email} · {c.password}
+                  </code>
+                </div>
+                <div className="login-form__demo-actions">
+                  <button
+                    type="button"
+                    className="login-form__demo-btn"
+                    onClick={() => useDemoCredential(c)}
+                  >
+                    Fill
+                  </button>
+                  <button
+                    type="button"
+                    className="login-form__demo-btn"
+                    onClick={() => copyToClipboard(c.email, `${c.label} email`)}
+                    aria-label={`Copy ${c.label} email`}
+                  >
+                    Copy email
+                  </button>
+                  <button
+                    type="button"
+                    className="login-form__demo-btn"
+                    onClick={() => copyToClipboard(c.password, `${c.label} password`)}
+                    aria-label={`Copy ${c.label} password`}
+                  >
+                    Copy password
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </aside>
+      )}
 
       <footer className="login-form__meta">
         <span>Glassram Glass &amp; Aluminum Supply</span>

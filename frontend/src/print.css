@@ -1,0 +1,96 @@
+/**
+ * Print stylesheet for the Reports page (and any other demo surface that
+ * wants a clean printout).
+ *
+ * Hides the topbar, sidebar, and on-screen-only chrome; expands the
+ * report content to full width; inserts page breaks between report
+ * sections so the printed report reads top-to-bottom.
+ *
+ * Last touched: 2026-07-07
+ */
+
+@media print {
+  /* Hide screen-only chrome */
+  .layout-topbar,
+  .layout-sidebar,
+  .layout-mobile-bar,
+  .no-print,
+  button,
+  nav {
+    display: none !important;
+  }
+
+  /* Reset the layout so the report fills the page */
+  .layout,
+  .layout__main,
+  main {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  /* Page setup */
+  @page {
+    size: A4;
+    margin: 16mm 14mm;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11pt;
+  }
+
+  /* Headings */
+  h1, h2, h3, h4 {
+    color: #000 !important;
+    page-break-after: avoid;
+  }
+
+  /* Tables */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: avoid;
+  }
+
+  th, td {
+    border: 1px solid #ddd !important;
+    padding: 6pt 8pt !important;
+    color: #000 !important;
+    background: #fff !important;
+  }
+
+  th {
+    background: #f4f4f4 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Cards: remove shadow + flatten */
+  .bg-white,
+  .rounded-xl,
+  .rounded-2xl,
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+  }
+
+  /* Section breaks */
+  .print-break-before {
+    page-break-before: always;
+  }
+
+  .print-break-after {
+    page-break-after: always;
+  }
+
+  /* Anchors: don't print URL after the text */
+  a[href]::after {
+    content: '' !important;
+  }
+}

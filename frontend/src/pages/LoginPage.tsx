@@ -2,7 +2,7 @@
  * LoginPage — composes AuthLayout with LoginForm + AuthArtPanel.
  *
  * Author: Kim Eduard Saludes
- * Last touched: 2026-07-01
+ * Last touched: 2026-07-07
  */
 
 import { AuthLayout } from '../components/AuthLayout'

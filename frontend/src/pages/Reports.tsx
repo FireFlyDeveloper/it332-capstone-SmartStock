@@ -9,12 +9,22 @@ import {
   RotateCcw,
   Settings,
   DollarSign,
-  Clock
+  Clock,
+  Calendar
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
 import { Layout } from '../components/Layout';
 import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
 import { toast } from 'sonner';
+
+// Last touched: 2026-07-07 (round 2 — demo polish)
+type DateRange = '7d' | '30d' | 'all';
+
+const DATE_PILLS: { key: DateRange; label: string }[] = [
+  { key: '7d', label: 'Last 7 days' },
+  { key: '30d', label: 'Last 30 days' },
+  { key: 'all', label: 'All time' },
+];
 
 const ReportCard: React.FC<{
   title: string;
@@ -40,6 +50,8 @@ const ReportCard: React.FC<{
 export const Reports: React.FC = () => {
   const { products, orders } = useData();
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange>('30d');
+  const [generatedAt] = useState(() => new Date().toLocaleString());
 
   // Build dynamic transaction history from orders
   const transactionHistory = useMemo(() => {
@@ -77,12 +89,17 @@ export const Reports: React.FC = () => {
   const totalInventoryValue = products.reduce((sum, p) => sum + (p.stock * p.price), 0);
 
   const handlePrint = () => {
-    toast.info('Print functionality - opens browser print dialog');
+    toast.info('Opening browser print dialog…');
     window.print();
   };
 
   const handleExport = () => {
     toast.info('Export functionality - would download CSV/PDF');
+  };
+
+  const handleDatePill = (key: DateRange) => {
+    setDateRange(key);
+    toast.info('Demo data is static — date range is for display only.');
   };
 
   const getTransactionIcon = (type: 'sale' | 'restock' | 'return' | 'adjustment') => {
@@ -108,7 +125,34 @@ export const Reports: React.FC = () => {
   return (
     <Layout>
       <div className="space-y-6 animate-fadeIn">
-        {/* Header Actions */}
+        {/* Header — title + generated-at + date pills */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Generated at: <span className="font-mono text-gray-700">{generatedAt}</span>
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2" aria-label="Date range">
+            <Calendar className="w-4 h-4 text-gray-400" aria-hidden="true" />
+            {DATE_PILLS.map((pill) => (
+              <button
+                key={pill.key}
+                type="button"
+                onClick={() => handleDatePill(pill.key)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  dateRange === pill.key
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {pill.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Search + Print/Export row */}
         <div className="flex flex-col sm:flex-row gap-4 justify-between">
           <div className="flex gap-3">
             <div className="relative">
@@ -122,7 +166,7 @@ export const Reports: React.FC = () => {
               />
             </div>
           </div>
-          
+
           <div className="flex gap-3">
             <button
               onClick={handleExport}

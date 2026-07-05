@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+// Last touched: 2026-07-07 (round 2 — demo polish)
 import { 
   TrendingUp, 
   Package, 
@@ -10,12 +11,14 @@ import {
   Brain,
   TrendingDown,
   Minus,
-  Zap
+  Zap,
+  Calendar
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
 import { Layout } from '../components/Layout';
 import { formatCurrency, checkStockStatus } from '../utils/helpers';
 import { generateDemandForecast } from '../utils/aiHelpers';
+import { toast } from 'sonner';
 import { 
   AreaChart, 
   Area, 
@@ -38,8 +41,17 @@ import {
   mockAIRecommendations 
 } from '../data/mockData';
 
+type DateRange = '7d' | '30d' | 'all';
+
+const DATE_PILLS: { key: DateRange; label: string }[] = [
+  { key: '7d', label: 'Last 7 days' },
+  { key: '30d', label: 'Last 30 days' },
+  { key: 'all', label: 'All time' },
+];
+
 export const Analytics: React.FC = () => {
   const { products, orders } = useData();
+  const [dateRange, setDateRange] = useState<DateRange>('30d');
 
   // AI Demand Forecasting
   const aiForecasts = useMemo(() => generateDemandForecast(products, orders), [products, orders]);
@@ -77,9 +89,39 @@ export const Analytics: React.FC = () => {
     };
   });
 
+  const handleDatePill = (key: DateRange) => {
+    setDateRange(key);
+    toast.info('Demo data is static — date range is for display only.');
+  };
+
   return (
     <Layout>
       <div className="space-y-8 animate-fadeIn">
+        {/* Date range pills + page title */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+            <p className="text-sm text-gray-500 mt-1">AI-assisted insights across inventory, sales, and demand.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2" aria-label="Date range">
+            <Calendar className="w-4 h-4 text-gray-400" aria-hidden="true" />
+            {DATE_PILLS.map((pill) => (
+              <button
+                key={pill.key}
+                type="button"
+                onClick={() => handleDatePill(pill.key)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  dateRange === pill.key
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {pill.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Key Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">

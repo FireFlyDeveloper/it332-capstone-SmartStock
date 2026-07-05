@@ -19,6 +19,8 @@ SmartStock is a centralized desktop-based inventory and delivery management syst
 
 We collaborate directly on **`main`** — pull, modify, push. No branch-per-section split, no PRs.
 
+> Demo build for IT332 capstone presentation — frontend is polished; backend is offline by design. Use the demo credentials on the login screen.
+
 ```bash
 git pull origin main
 # edit files (e.g. db/schema.sql under your section header)
