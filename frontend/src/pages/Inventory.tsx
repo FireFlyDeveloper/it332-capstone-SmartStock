@@ -1,17 +1,19 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Package, 
-  Plus, 
-  Search, 
-  Edit2, 
-  Trash2, 
+import {
+  Plus,
+  Search,
+  Edit2,
+  Trash2,
   RefreshCw,
-  X
+  X,
+  Download,
+  PackagePlus,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
 import { Layout } from '../components/Layout';
 import type { Product } from '../types';
 import { formatCurrency, getStatusColor, checkStockStatus } from '../utils/helpers';
+import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
 
 const initialProductForm: Omit<Product, 'id'> = {
@@ -27,7 +29,7 @@ const initialProductForm: Omit<Product, 'id'> = {
 };
 
 export const Inventory: React.FC = () => {
-  const { products, addProduct, updateProduct, deleteProduct, restockProduct } = useData();
+  const { products, addProduct, updateProduct, deleteProduct, restockProduct, loading } = useData();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'glass' | 'aluminum'>('all');
@@ -110,6 +112,29 @@ export const Inventory: React.FC = () => {
     }
   };
 
+  const handleExportCSV = () => {
+    const csv = toCSV(filteredProducts, [
+      { key: 'sku', header: 'SKU' },
+      { key: 'name', header: 'Product' },
+      { key: 'category', header: 'Category' },
+      { key: 'unit', header: 'Unit' },
+      { key: 'stock', header: 'Stock' },
+      { key: 'price', header: 'Price (PHP)' },
+      { key: 'threshold', header: 'Reorder Threshold' },
+      { key: 'status', header: 'Status' },
+    ]);
+    downloadCSV(`inventory-${new Date().toISOString().split('T')[0]}.csv`, csv);
+    toast.success(`Exported ${filteredProducts.length} products to CSV`);
+  };
+
+  const statusPills: { key: typeof stockFilter; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'low', label: 'Low Stock' },
+    { key: 'healthy', label: 'In Stock' },
+  ];
+
+  const isEmpty = !loading && products.length === 0;
+
   return (
     <Layout>
       <div className="space-y-6 animate-fadeIn">
@@ -151,13 +176,41 @@ export const Inventory: React.FC = () => {
             </select>
           </div>
 
-          <button
-            onClick={() => handleOpenModal()}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            Add Product
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              disabled={filteredProducts.length === 0}
+              className="inline-flex items-center gap-2 self-start rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
+            >
+              <Download className="h-4 w-4" /> Export CSV
+            </button>
+            <button
+              onClick={() => handleOpenModal()}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Add Product
+            </button>
+          </div>
+        </div>
+
+        {/* Status filter pills */}
+        <div className="flex flex-wrap gap-2">
+          {statusPills.map((pill) => (
+            <button
+              key={pill.key}
+              type="button"
+              onClick={() => setStockFilter(pill.key)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                stockFilter === pill.key
+                  ? 'bg-amber-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {pill.label}
+            </button>
+          ))}
         </div>
 
         {/* Stats */}
@@ -262,10 +315,30 @@ export const Inventory: React.FC = () => {
             </table>
           </div>
           
-          {filteredProducts.length === 0 && (
+          {filteredProducts.length === 0 && !isEmpty && (
             <div className="p-12 text-center">
-              <Package className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No products found</p>
+              <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">No products match the current filters.</p>
+            </div>
+          )}
+
+          {isEmpty && (
+            <div className="p-12 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
+                <PackagePlus className="h-8 w-8 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">No products yet</h3>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
+                Demo data will appear once the backend is connected. In the meantime, you can
+                add a demo product below.
+              </p>
+              <button
+                type="button"
+                onClick={() => toast.info('Demo build — this would open the create form.')}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700"
+              >
+                <Plus className="h-4 w-4" /> Add your first product
+              </button>
             </div>
           )}
         </div>

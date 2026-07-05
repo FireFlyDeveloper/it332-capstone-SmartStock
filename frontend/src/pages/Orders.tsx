@@ -1,10 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  ShoppingCart, 
-  Plus, 
-  Search, 
-  Package, 
-  Truck, 
+import {
+  Plus,
+  Search,
+  Package,
+  Truck,
   X,
   Phone,
   Clock,
@@ -17,12 +16,15 @@ import {
   CheckCircle,
   Circle,
   DollarSign,
-  RotateCcw
+  RotateCcw,
+  Download,
+  ShoppingBag,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
 import { Layout } from '../components/Layout';
 import type { Order, OrderItem } from '../types';
 import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
+import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
 
 // ── Order progress steps ──────────────────────────────────────────
@@ -63,7 +65,7 @@ const emptyForm = {
 
 // ── Component ──────────────────────────────────────────────────────
 export const Orders: React.FC = () => {
-  const { products, orders, addOrder, updateOrder, processPayment, processRefund } = useData();
+  const { products, orders, addOrder, updateOrder, processPayment, processRefund, loading } = useData();
 
   // ── Filter / search / modal state ────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
@@ -285,6 +287,36 @@ export const Orders: React.FC = () => {
     ['pending', 'packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)
   ).length;
 
+  // ── CSV export ──────────────────────────────────────────────────
+  const handleExportCSV = () => {
+    const csv = toCSV(filteredOrders, [
+      { key: 'referenceNumber', header: 'Reference' },
+      { key: 'customerName', header: 'Customer' },
+      { key: 'contact', header: 'Contact' },
+      { key: 'address', header: 'Address' },
+      { key: 'orderType', header: 'Type' },
+      { key: 'orderStatus', header: 'Order Status' },
+      { key: 'paymentStatus', header: 'Payment' },
+      { key: 'total', header: 'Total (PHP)' },
+      { key: 'paidAmount', header: 'Paid (PHP)' },
+      { key: 'date', header: 'Date' },
+    ]);
+    downloadCSV(`orders-${new Date().toISOString().split('T')[0]}.csv`, csv);
+    toast.success(`Exported ${filteredOrders.length} orders to CSV`);
+  };
+
+  const statusPills: { key: typeof statusFilter; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'pending', label: 'Pending' },
+    { key: 'ready_for_pickup', label: 'Ready for Pickup' },
+    { key: 'packed', label: 'Packed' },
+    { key: 'out_for_delivery', label: 'Out for Delivery' },
+    { key: 'completed', label: 'Completed' },
+    { key: 'cancelled', label: 'Cancelled' },
+  ];
+
+  const isEmpty = !loading && orders.length === 0;
+
   // ── View modal item search ───────────────────────────────────────
   const filteredViewItems = useMemo(() => {
     if (!viewOrder) return [];
@@ -330,9 +362,37 @@ export const Orders: React.FC = () => {
               <option value="cancelled">Cancelled</option>
             </select>
           </div>
-          <button onClick={openCreate} className="btn-primary flex items-center gap-2">
-            <Plus className="w-5 h-5" /> New Order
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              disabled={filteredOrders.length === 0}
+              className="inline-flex items-center gap-2 self-start rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
+            >
+              <Download className="h-4 w-4" /> Export CSV
+            </button>
+            <button onClick={openCreate} className="btn-primary flex items-center gap-2">
+              <Plus className="w-5 h-5" /> New Order
+            </button>
+          </div>
+        </div>
+
+        {/* Status filter pills */}
+        <div className="flex flex-wrap gap-2">
+          {statusPills.map((pill) => (
+            <button
+              key={pill.key}
+              type="button"
+              onClick={() => setStatusFilter(pill.key)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                statusFilter === pill.key
+                  ? 'bg-amber-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {pill.label}
+            </button>
+          ))}
         </div>
 
         {/* ── Stats ──────────────────────────────────────────────── */}
@@ -404,11 +464,31 @@ export const Orders: React.FC = () => {
               </div>
             );
           })}
-          {filteredOrders.length === 0 && (
+          {filteredOrders.length === 0 && !isEmpty && (
             <div className="col-span-full p-12 text-center">
-              <ShoppingCart className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No orders found</p>
+              <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">No orders match the current filters.</p>
               {searchTerm && <button onClick={() => setSearchTerm('')} className="text-blue-600 text-sm mt-1 hover:underline">Clear search</button>}
+            </div>
+          )}
+
+          {isEmpty && (
+            <div className="col-span-full p-12 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
+                <ShoppingBag className="h-8 w-8 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">No orders yet</h3>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
+                Demo data will appear once the backend is connected. In the meantime, you can
+                create a demo order below.
+              </p>
+              <button
+                type="button"
+                onClick={() => toast.info('Demo build — this would open the create form.')}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700"
+              >
+                <Plus className="h-4 w-4" /> Create your first order
+              </button>
             </div>
           )}
         </div>
