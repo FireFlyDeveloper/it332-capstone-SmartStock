@@ -15,6 +15,7 @@ import { Reports } from './pages/Reports'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import './App.css'
+// Last touched: 2026-07-07 (round 2 — demo polish, route table confirmed)
 
 function AuthBootstrap({ children }: { children: React.ReactNode }) {
   const { token, setAuth } = useAuth()

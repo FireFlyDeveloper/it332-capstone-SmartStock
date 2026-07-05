@@ -2,6 +2,8 @@
  * Pure helpers copied from the Capstone frontend. No backend dependency.
  * Some localStorage/state-management helpers were dropped because we now
  * fetch from the Hono backend.
+ *
+ * Last touched: 2026-07-07
  */
 
 import type { Product } from '../types'

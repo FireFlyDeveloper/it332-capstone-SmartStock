@@ -7,7 +7,7 @@
  * auth headers.
  *
  * Author: Kim Eduard Saludes (original), adapted for the multi-team project
- * Last touched: 2026-07-06
+ * Last touched: 2026-07-07
  */
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:3000'

@@ -2,7 +2,7 @@
  * Auth context — holds the current user + token, exposes login/logout.
  *
  * Author: Kim Eduard Saludes
- * Last touched: 2026-07-01
+ * Last touched: 2026-07-07
  */
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'

@@ -1,5 +1,7 @@
 import type { Product, Order, Delivery, User, Transaction, AIRecommendation } from '../types';
 
+// Last touched: 2026-07-07
+//
 // Initial mock products for inventory
 export const initialProducts: Product[] = [
   // Glass Products

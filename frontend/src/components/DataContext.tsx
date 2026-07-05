@@ -5,6 +5,8 @@
  * before updating local state.
  *
  * Pages should call useData() to read or mutate domain data.
+ *
+ * Last touched: 2026-07-07
  */
 
 import {

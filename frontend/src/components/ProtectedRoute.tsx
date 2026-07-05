@@ -1,6 +1,8 @@
 /**
  * ProtectedRoute — redirects to /login if there's no token in the auth
  * context. Otherwise renders the children.
+ *
+ * Last touched: 2026-07-07
  */
 
 import { Navigate, useLocation } from 'react-router-dom'

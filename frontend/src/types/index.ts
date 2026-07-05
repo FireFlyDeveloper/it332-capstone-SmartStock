@@ -1,6 +1,8 @@
 // Domain types — mirrored from the Capstone frontend, lightly normalized for
 // the Hono backend. The backend is expected to return these shapes from the
 // /products, /orders, /deliveries, /reports, /analytics endpoints.
+//
+// Last touched: 2026-07-07
 
 export interface Product {
   id: string;

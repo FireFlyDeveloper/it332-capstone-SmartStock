@@ -17,6 +17,7 @@ import {
   Menu,
   User as UserIcon,
   Map as TrackingIcon,
+  Sparkles,
 } from 'lucide-react'
 import { useAuth } from './AuthContext'
 
@@ -139,6 +140,13 @@ export function Layout({ children }: LayoutProps) {
             <h2 className="text-lg font-semibold text-gray-800">
               SmartStock
             </h2>
+            <span
+              title="This is a demo build. Data is mock data."
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 rounded-full border border-amber-200"
+            >
+              <Sparkles className="w-3 h-3" />
+              Demo build
+            </span>
           </div>
 
           <div className="flex items-center gap-3">

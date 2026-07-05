@@ -1,21 +1,23 @@
-import React, { useMemo } from 'react';
-import { 
-  Package, 
-  AlertTriangle, 
-  ShoppingCart, 
-  Truck, 
+import React, { useMemo, useState } from 'react';
+import {
+  Package,
+  AlertTriangle,
+  ShoppingCart,
+  Truck,
   TrendingUp,
   ArrowUpRight,
   ArrowDownRight,
   Clock,
   Sparkles,
   Brain,
-  Zap
+  Zap,
+  X,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
 import { Layout } from '../components/Layout';
 import { formatCurrency, getStatusColor, checkStockStatus } from '../utils/helpers';
 import { generateDemandForecast, generateAIRecommendations, getAIInsights } from '../utils/aiHelpers';
+import { toast } from 'sonner';
 import { 
   AreaChart, 
   Area, 
@@ -65,6 +67,7 @@ export const Dashboard: React.FC = () => {
     orders,
     deliveries,
   } = useData();
+  const [showDemoBanner, setShowDemoBanner] = useState(true);
 
   // Calculate stats
   const totalProducts = products.length;
@@ -98,6 +101,41 @@ export const Dashboard: React.FC = () => {
   return (
     <Layout>
       <div className="space-y-8 animate-fadeIn">
+        {/* Demo banner + date pill row */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {showDemoBanner && (
+            <div
+              role="status"
+              className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 sm:flex-1"
+            >
+              <Sparkles className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+              <div className="flex-1 text-sm">
+                <p className="font-medium">🎉 Demo build — data is sourced from local mock data.</p>
+                <p className="text-xs text-amber-800/80">
+                  All numbers on this dashboard come from <code className="font-mono text-[11px]">mockData.ts</code> via the offline fallback.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDemoBanner(false)}
+                aria-label="Dismiss demo banner"
+                className="rounded p-1 text-amber-700 hover:bg-amber-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => toast.info('Demo data is static — no real date filtering applied.')}
+            className="inline-flex items-center gap-2 self-start rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 sm:self-auto"
+          >
+            <Clock className="h-3.5 w-3.5 text-gray-500" />
+            Last 30 days
+            <span className="text-gray-400">▾</span>
+          </button>
+        </div>
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard

@@ -2,6 +2,8 @@
  * AI helpers — pure functions, copied verbatim from the Capstone frontend.
  * The "AI" predictions here are simple heuristics (sufficient for the UI
  * until a real /analytics/* endpoint lands). No backend dependency.
+ *
+ * Last touched: 2026-07-07
  */
 
 import type {
