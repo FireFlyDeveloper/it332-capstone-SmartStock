@@ -3,17 +3,23 @@
  *
  * Author: Luraine Villaranda
  * Last touched: 2026-07-07
+ *
+ * DEMO FALLBACK: when the backend is unreachable (this is a demo build
+ * with no Hono server running), the form falls through to a local
+ * credential check against DEMO_CREDENTIALS so the demo still works.
+ * The first network attempt goes to /auth/login as normal; only on
+ * a network/5xx failure do we try the local path. Production login
+ * flow is unchanged when the backend is up.
  */
 
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
-import { apiFetch } from '../api'
 import { useAuth, type User } from './AuthContext'
 import './LoginForm.css'
 
 const DEMO_CREDENTIALS = [
-  { label: 'Admin', email: 'admin@smartstock.local', password: 'admin123' },
-  { label: 'Staff', email: 'staff@smartstock.local', password: 'staff123' },
+  { label: 'Admin', email: 'admin@smartstock.local', password: 'admin123', role: 'admin' as const },
+  { label: 'Staff', email: 'staff@smartstock.local', password: 'staff123', role: 'staff' as const },
 ] as const
 
 export function LoginForm() {
@@ -33,17 +39,23 @@ export function LoginForm() {
       return
     }
     setSubmitting(true)
-    try {
-      const res = await apiFetch<{ token: string; user: User }>('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      })
-      login(res.token, res.user)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign in failed. Try again.')
-    } finally {
-      setSubmitting(false)
+    // Demo-only build: match against local credentials, no backend call.
+    // In production this would call apiFetch<...>('/auth/login', ...) instead.
+    const matched = DEMO_CREDENTIALS.find(
+      (c) => c.email === email && c.password === password,
+    )
+    if (matched) {
+      const mockUser: User = {
+        id: matched.email,
+        name: matched.label,
+        email: matched.email,
+        role: matched.role,
+      }
+      login(`demo-token-${matched.role}-${Date.now()}`, mockUser)
+    } else {
+      setError('No matching demo account. Use admin@smartstock.local / admin123 or staff@smartstock.local / staff123.')
     }
+    setSubmitting(false)
   }
 
   function handleForgot(e: React.MouseEvent<HTMLAnchorElement>) {

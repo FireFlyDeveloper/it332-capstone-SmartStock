@@ -15,7 +15,6 @@ import {
   Calendar
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
-import { Layout } from '../components/Layout';
 import { formatCurrency, checkStockStatus } from '../utils/helpers';
 import { generateDemandForecast } from '../utils/aiHelpers';
 import { toast } from 'sonner';
@@ -95,7 +94,6 @@ export const Analytics: React.FC = () => {
   };
 
   return (
-    <Layout>
       <div className="space-y-8 animate-fadeIn">
         {/* Date range pills + page title */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -549,6 +547,5 @@ export const Analytics: React.FC = () => {
           </div>
         </div>
       </div>
-    </Layout>
   );
 };

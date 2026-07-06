@@ -13,7 +13,6 @@ import {
   Calendar
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
-import { Layout } from '../components/Layout';
 import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
 import { toast } from 'sonner';
 
@@ -123,7 +122,6 @@ export const Reports: React.FC = () => {
   };
 
   return (
-    <Layout>
       <div className="space-y-6 animate-fadeIn">
         {/* Header — title + generated-at + date pills */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -382,6 +380,5 @@ export const Reports: React.FC = () => {
           </div>
         </div>
       </div>
-    </Layout>
   );
 };

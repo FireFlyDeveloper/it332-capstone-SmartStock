@@ -21,7 +21,6 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
-import { Layout } from '../components/Layout';
 import type { Order, OrderItem } from '../types';
 import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
@@ -333,7 +332,7 @@ export const Orders: React.FC = () => {
   }, [products, productSearch]);
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6 animate-fadeIn">
         {/* ── Header ────────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row gap-4 justify-between">
@@ -1042,6 +1041,6 @@ export const Orders: React.FC = () => {
           </div>
         </div>
       )}
-    </Layout>
+    </>
   );
 };

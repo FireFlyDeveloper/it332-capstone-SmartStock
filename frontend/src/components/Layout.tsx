@@ -16,7 +16,6 @@ import {
   LogOut,
   Menu,
   User as UserIcon,
-  Map as TrackingIcon,
   Sparkles,
 } from 'lucide-react'
 import { useAuth } from './AuthContext'
@@ -30,7 +29,6 @@ const menuItems = [
   { icon: Package, label: 'Inventory', path: '/inventory' },
   { icon: ShoppingCart, label: 'Orders', path: '/orders' },
   { icon: Truck, label: 'Delivery', path: '/delivery' },
-  { icon: TrackingIcon, label: 'Tracking', path: '/tracking' },
   { icon: BarChart3, label: 'Analytics', path: '/analytics' },
   { icon: FileText, label: 'Reports', path: '/reports' },
 ]

@@ -13,7 +13,6 @@ import {
   Search,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
-import { Layout } from '../components/Layout';
 import type { Delivery } from '../types';
 import { getStatusColor } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
@@ -121,7 +120,6 @@ export const DeliveryPage: React.FC = () => {
   const isEmpty = !loading && deliveries.length === 0;
 
   return (
-    <Layout>
       <div className="space-y-6 animate-fadeIn">
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -305,6 +303,5 @@ export const DeliveryPage: React.FC = () => {
           )}
         </div>
       </div>
-    </Layout>
   );
 };

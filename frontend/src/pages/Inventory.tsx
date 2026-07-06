@@ -10,7 +10,6 @@ import {
   PackagePlus,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
-import { Layout } from '../components/Layout';
 import type { Product } from '../types';
 import { formatCurrency, getStatusColor, checkStockStatus } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
@@ -136,7 +135,6 @@ export const Inventory: React.FC = () => {
   const isEmpty = !loading && products.length === 0;
 
   return (
-    <Layout>
       <div className="space-y-6 animate-fadeIn">
         {/* Header Actions */}
         <div className="flex flex-col sm:flex-row gap-4 justify-between">
@@ -539,6 +537,5 @@ export const Inventory: React.FC = () => {
           </div>
         )}
       </div>
-    </Layout>
   );
 };

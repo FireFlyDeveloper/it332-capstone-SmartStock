@@ -14,7 +14,6 @@ import {
   X,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
-import { Layout } from '../components/Layout';
 import { formatCurrency, getStatusColor, checkStockStatus } from '../utils/helpers';
 import { generateDemandForecast, generateAIRecommendations, getAIInsights } from '../utils/aiHelpers';
 import { toast } from 'sonner';
@@ -99,7 +98,6 @@ export const Dashboard: React.FC = () => {
   const aiInsights = useMemo(() => getAIInsights(aiForecasts, aiRecommendations), [aiForecasts, aiRecommendations]);
 
   return (
-    <Layout>
       <div className="space-y-8 animate-fadeIn">
         {/* Demo banner + date pill row */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -411,6 +409,5 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
-    </Layout>
   );
 };
