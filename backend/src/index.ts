@@ -8,6 +8,7 @@ const app = new Hono()
 app.get('/', (c) => c.json({ message: 'SmartStock API', status: 'ok' }))
 
 app.route('/auth', authRoutes)
+app.route('/products', inventoryRoutes)
 app.route('/inventory', inventoryRoutes)
 
 const port = Number(process.env.PORT) || 3000

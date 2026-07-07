@@ -1,5 +1,5 @@
 /**
- * Inventory in-memory store — product records and stock mutations.
+ * Inventory in-memory store — Product-shaped records for SmartStock frontend.
  *
  * Author: FireFlyDeveloper
  * Last touched: 2026-07-07
@@ -7,142 +7,122 @@
 
 import { randomUUID } from 'node:crypto';
 
-export type InventoryStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
+export type ProductCategory = 'glass' | 'aluminum';
+export type ProductStatus = 'active' | 'discontinued';
 
-export interface InventoryItem {
+export interface Product {
   id: string;
-  sku: string;
   name: string;
-  category: string;
+  category: ProductCategory;
   unit: string;
-  quantity: number;
-  reorderLevel: number;
-  supplier?: string;
-  location?: string;
-  status: InventoryStatus;
-  createdAt: string;
-  updatedAt: string;
+  stock: number;
+  price: number;
+  threshold: number;
+  status: ProductStatus;
+  description?: string;
+  sku: string;
 }
 
-export interface InventoryCreateInput {
-  sku: string;
+export interface ProductCreateInput {
   name: string;
-  category: string;
+  category: ProductCategory;
   unit: string;
-  quantity: number;
-  reorderLevel: number;
-  supplier?: string;
-  location?: string;
+  stock: number;
+  price: number;
+  threshold: number;
+  status?: ProductStatus;
+  description?: string;
+  sku: string;
 }
 
-export type InventoryUpdateInput = Partial<InventoryCreateInput>;
+export type ProductUpdateInput = Partial<ProductCreateInput>;
 
-const items = new Map<string, InventoryItem>();
+const products = new Map<string, Product>();
 const bySku = new Map<string, string>();
-
-function now() {
-  return new Date().toISOString();
-}
-
-function deriveStatus(quantity: number, reorderLevel: number): InventoryStatus {
-  if (quantity <= 0) return 'out_of_stock';
-  if (quantity <= reorderLevel) return 'low_stock';
-  return 'in_stock';
-}
 
 function normalizeSku(sku: string) {
   return sku.trim().toUpperCase();
 }
 
-function toRecord(input: InventoryCreateInput): InventoryItem {
-  const timestamp = now();
+function toRecord(input: ProductCreateInput): Product {
   return {
     id: randomUUID(),
-    sku: normalizeSku(input.sku),
     name: input.name.trim(),
-    category: input.category.trim(),
+    category: input.category,
     unit: input.unit.trim(),
-    quantity: input.quantity,
-    reorderLevel: input.reorderLevel,
-    supplier: input.supplier?.trim() || undefined,
-    location: input.location?.trim() || undefined,
-    status: deriveStatus(input.quantity, input.reorderLevel),
-    createdAt: timestamp,
-    updatedAt: timestamp,
+    stock: input.stock,
+    price: input.price,
+    threshold: input.threshold,
+    status: input.status ?? 'active',
+    description: input.description?.trim() || undefined,
+    sku: normalizeSku(input.sku),
   };
 }
 
-export function listInventory(): InventoryItem[] {
-  return [...items.values()].sort((a, b) => a.name.localeCompare(b.name));
+export function listProducts(): Product[] {
+  return [...products.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function findInventoryById(id: string): InventoryItem | null {
-  return items.get(id) ?? null;
+export function findProductById(id: string): Product | null {
+  return products.get(id) ?? null;
 }
 
-export function findInventoryBySku(sku: string): InventoryItem | null {
-  const id = bySku.get(normalizeSku(sku));
-  return id ? findInventoryById(id) : null;
-}
-
-export function createInventory(input: InventoryCreateInput): InventoryItem {
+export function createProduct(input: ProductCreateInput): Product {
   const sku = normalizeSku(input.sku);
   if (bySku.has(sku)) throw new Error('sku already exists');
   const record = toRecord({ ...input, sku });
-  items.set(record.id, record);
+  products.set(record.id, record);
   bySku.set(record.sku, record.id);
   return record;
 }
 
-export function updateInventory(id: string, input: InventoryUpdateInput): InventoryItem | null {
-  const current = items.get(id);
+export function updateProduct(id: string, input: ProductUpdateInput): Product | null {
+  const current = products.get(id);
   if (!current) return null;
 
   const nextSku = input.sku === undefined ? current.sku : normalizeSku(input.sku);
   const existingId = bySku.get(nextSku);
   if (existingId && existingId !== id) throw new Error('sku already exists');
 
-  const next: InventoryItem = {
+  const next: Product = {
     ...current,
-    sku: nextSku,
     name: input.name === undefined ? current.name : input.name.trim(),
-    category: input.category === undefined ? current.category : input.category.trim(),
+    category: input.category ?? current.category,
     unit: input.unit === undefined ? current.unit : input.unit.trim(),
-    quantity: input.quantity ?? current.quantity,
-    reorderLevel: input.reorderLevel ?? current.reorderLevel,
-    supplier: input.supplier === undefined ? current.supplier : input.supplier.trim() || undefined,
-    location: input.location === undefined ? current.location : input.location.trim() || undefined,
-    updatedAt: now(),
-    status: current.status,
+    stock: input.stock ?? current.stock,
+    price: input.price ?? current.price,
+    threshold: input.threshold ?? current.threshold,
+    status: input.status ?? current.status,
+    description: input.description === undefined ? current.description : input.description.trim() || undefined,
+    sku: nextSku,
   };
-  next.status = deriveStatus(next.quantity, next.reorderLevel);
 
   if (next.sku !== current.sku) {
     bySku.delete(current.sku);
     bySku.set(next.sku, id);
   }
-  items.set(id, next);
+  products.set(id, next);
   return next;
 }
 
-export function deleteInventory(id: string): boolean {
-  const current = items.get(id);
+export function deleteProduct(id: string): boolean {
+  const current = products.get(id);
   if (!current) return false;
-  items.delete(id);
+  products.delete(id);
   bySku.delete(current.sku);
   return true;
 }
 
 export function _resetInventoryStore(seed = true): void {
-  items.clear();
+  products.clear();
   bySku.clear();
   if (!seed) return;
   for (const item of [
-    { sku: 'GLS-CLR-6MM', name: 'Clear Glass 6mm', category: 'Glass Panels', unit: 'sheet', quantity: 24, reorderLevel: 8, supplier: 'Glassram', location: 'Rack A1' },
-    { sku: 'ALU-FRM-BLK', name: 'Black Aluminum Frame', category: 'Aluminum', unit: 'length', quantity: 7, reorderLevel: 10, supplier: 'Glassram', location: 'Rack B2' },
-    { sku: 'SEAL-SIL-CLR', name: 'Clear Silicone Sealant', category: 'Sealants', unit: 'tube', quantity: 0, reorderLevel: 12, supplier: 'Glassram', location: 'Cabinet C1' },
+    { sku: 'GLS-CLR-6MM', name: 'Clear Glass 6mm', category: 'glass' as const, unit: 'sheet', stock: 24, price: 1200, threshold: 8, description: 'Standard clear glass sheet' },
+    { sku: 'ALU-FRM-BLK', name: 'Black Aluminum Frame', category: 'aluminum' as const, unit: 'length', stock: 7, price: 850, threshold: 10, description: 'Powder-coated aluminum frame' },
+    { sku: 'GLS-TMP-10MM', name: 'Tempered Glass 10mm', category: 'glass' as const, unit: 'sheet', stock: 0, price: 2200, threshold: 6, description: 'Heavy-duty tempered glass panel' },
   ]) {
-    createInventory(item);
+    createProduct(item);
   }
 }
 

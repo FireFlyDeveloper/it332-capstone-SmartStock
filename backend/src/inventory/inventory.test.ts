@@ -1,5 +1,5 @@
 /**
- * Inventory integration tests — routes, service validation, RBAC.
+ * Inventory integration tests — products routes, service validation, RBAC.
  *
  * Author: Hazel
  * Last touched: 2026-07-07
@@ -16,6 +16,7 @@ import { _resetInventoryStore } from './store.js';
 function buildApp() {
   const app = new Hono();
   app.route('/auth', authRoutes);
+  app.route('/products', inventoryRoutes);
   app.route('/inventory', inventoryRoutes);
   return app;
 }
@@ -39,7 +40,7 @@ const AT = String.fromCharCode(64);
 const ADMIN = 'admin' + AT + 'smartstock.local';
 const STAFF = 'staff' + AT + 'smartstock.local';
 
-describe('inventory routes', () => {
+describe('product inventory routes', () => {
   let app: Hono;
 
   beforeEach(async () => {
@@ -50,95 +51,107 @@ describe('inventory routes', () => {
     await seedUser(STAFF, 'staff');
   });
 
-  it('lists seeded inventory for authenticated staff', async () => {
+  it('lists seeded products for authenticated staff', async () => {
+    const token = await login(app, STAFF);
+    const res = await app.request('/products', {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as Array<{ sku: string; stock: number; threshold: number; price: number }>;
+    expect(json).toHaveLength(3);
+    expect(json[0]).toHaveProperty('price');
+    expect(json[0]).toHaveProperty('threshold');
+    expect(json[0]).toHaveProperty('stock');
+  });
+
+  it('keeps /inventory as a compatibility alias', async () => {
     const token = await login(app, STAFF);
     const res = await app.request('/inventory', {
       headers: { authorization: 'Bearer ' + token },
     });
     expect(res.status).toBe(200);
-    const json = (await res.json()) as { data: { total: number; lowStock: number; outOfStock: number } };
-    expect(json.data.total).toBe(3);
-    expect(json.data.lowStock).toBe(1);
-    expect(json.data.outOfStock).toBe(1);
+    const json = (await res.json()) as Array<{ sku: string }>;
+    expect(json.length).toBeGreaterThan(0);
   });
 
-  it('filters inventory by query and status', async () => {
+  it('filters products by query and category', async () => {
     const token = await login(app, STAFF);
-    const res = await app.request('/inventory?q=glass&status=in_stock', {
+    const res = await app.request('/products?q=glass&category=glass', {
       headers: { authorization: 'Bearer ' + token },
     });
     expect(res.status).toBe(200);
-    const json = (await res.json()) as { data: { total: number; items: Array<{ sku: string }> } };
-    expect(json.data.total).toBe(1);
-    expect(json.data.items[0].sku).toBe('GLS-CLR-6MM');
+    const json = (await res.json()) as Array<{ sku: string; category: string }>;
+    expect(json.length).toBeGreaterThan(0);
+    expect(json.every((item) => item.category === 'glass')).toBe(true);
   });
 
-  it('blocks anonymous inventory access', async () => {
-    const res = await app.request('/inventory');
+  it('blocks anonymous product access', async () => {
+    const res = await app.request('/products');
     expect(res.status).toBe(401);
   });
 
-  it('allows admin to create, update, and delete inventory items', async () => {
+  it('allows admin to create, update, and delete products', async () => {
     const token = await login(app, ADMIN);
-    const create = await app.request('/inventory', {
+    const create = await app.request('/products', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
       body: JSON.stringify({
         sku: 'acc-lock-01',
         name: 'Sliding Lock Set',
-        category: 'Accessories',
+        category: 'aluminum',
         unit: 'set',
-        quantity: 5,
-        reorderLevel: 6,
-        supplier: 'Glassram',
-        location: 'Drawer D1',
+        stock: 5,
+        price: 320,
+        threshold: 6,
+        status: 'active',
+        description: 'Door lock accessory',
       }),
     });
     expect(create.status).toBe(201);
-    const created = (await create.json()) as { item: { id: string; sku: string; status: string } };
-    expect(created.item.sku).toBe('ACC-LOCK-01');
-    expect(created.item.status).toBe('low_stock');
+    const created = (await create.json()) as { id: string; sku: string; stock: number };
+    expect(created.sku).toBe('ACC-LOCK-01');
+    expect(created.stock).toBe(5);
 
-    const update = await app.request('/inventory/' + created.item.id, {
-      method: 'PATCH',
+    const update = await app.request('/products/' + created.id, {
+      method: 'PUT',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ quantity: 12 }),
+      body: JSON.stringify({ stock: 12 }),
     });
     expect(update.status).toBe(200);
-    const updated = (await update.json()) as { item: { status: string; quantity: number } };
-    expect(updated.item.quantity).toBe(12);
-    expect(updated.item.status).toBe('in_stock');
+    const updated = (await update.json()) as { stock: number };
+    expect(updated.stock).toBe(12);
 
-    const remove = await app.request('/inventory/' + created.item.id, {
+    const remove = await app.request('/products/' + created.id, {
       method: 'DELETE',
       headers: { authorization: 'Bearer ' + token },
     });
     expect(remove.status).toBe(200);
+    expect(await remove.json()).toEqual({ ok: true });
   });
 
-  it('blocks staff from mutating inventory', async () => {
+  it('blocks staff from mutating products', async () => {
     const token = await login(app, STAFF);
-    const res = await app.request('/inventory', {
+    const res = await app.request('/products', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ sku: 'x', name: 'x', category: 'x', unit: 'pc', quantity: 1, reorderLevel: 1 }),
+      body: JSON.stringify({ sku: 'x', name: 'x', category: 'glass', unit: 'pc', stock: 1, price: 1, threshold: 1 }),
     });
     expect(res.status).toBe(403);
   });
 
   it('rejects duplicate SKU and invalid payloads', async () => {
     const token = await login(app, ADMIN);
-    const duplicate = await app.request('/inventory', {
+    const duplicate = await app.request('/products', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ sku: 'GLS-CLR-6MM', name: 'Duplicate', category: 'Glass', unit: 'sheet', quantity: 1, reorderLevel: 1 }),
+      body: JSON.stringify({ sku: 'GLS-CLR-6MM', name: 'Duplicate', category: 'glass', unit: 'sheet', stock: 1, price: 1, threshold: 1 }),
     });
     expect(duplicate.status).toBe(409);
 
-    const invalid = await app.request('/inventory', {
+    const invalid = await app.request('/products', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ sku: '', quantity: -1 }),
+      body: JSON.stringify({ sku: '', category: 'wood', stock: -1 }),
     });
     expect(invalid.status).toBe(400);
   });

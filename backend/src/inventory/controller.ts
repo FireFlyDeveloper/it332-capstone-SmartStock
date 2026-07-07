@@ -1,60 +1,68 @@
 /**
- * Inventory controller — HTTP handlers for stock CRUD.
+ * Inventory controller — Product API handlers for SmartStock frontend.
  *
- * Author: Luraine Villaranda
+ * Author: Hazel
  * Last touched: 2026-07-07
  */
 
 import type { Context } from 'hono';
 import {
-  addInventoryItem,
-  editInventoryItem,
-  getInventory,
-  getInventoryItem,
-  removeInventoryItem,
+  addProductRecord,
+  editProductRecord,
+  getProductRecord,
+  listProductRecords,
+  removeProductRecord,
 } from './service.js';
-import type { InventoryStatus } from './store.js';
+import type { ProductCategory, ProductStatus } from './store.js';
 
-function toStatus(value: string | undefined): InventoryStatus | undefined {
-  if (value === 'in_stock' || value === 'low_stock' || value === 'out_of_stock') return value;
+function toCategory(value: string | undefined): ProductCategory | undefined {
+  if (value === 'glass' || value === 'aluminum') return value;
   return undefined;
 }
 
-export function listInventoryController(c: Context) {
+function toStatus(value: string | undefined): ProductStatus | undefined {
+  if (value === 'active' || value === 'discontinued') return value;
+  return undefined;
+}
+
+export function listProductsController(c: Context) {
   const statusQuery = c.req.query('status');
+  const categoryQuery = c.req.query('category');
   const status = toStatus(statusQuery);
+  const category = toCategory(categoryQuery);
   if (statusQuery && !status) return c.json({ error: 'invalid status filter' }, 400);
-  return c.json({ data: getInventory({ q: c.req.query('q'), category: c.req.query('category'), status }) });
+  if (categoryQuery && !category) return c.json({ error: 'invalid category filter' }, 400);
+  return c.json(listProductRecords({ q: c.req.query('q'), status, category }));
 }
 
-export function getInventoryController(c: Context) {
+export function getProductController(c: Context) {
   const id = c.req.param('id');
-  if (!id) return c.json({ error: 'inventory item id is required' }, 400);
-  const result = getInventoryItem(id);
+  if (!id) return c.json({ error: 'product id is required' }, 400);
+  const result = getProductRecord(id);
   if (!result.ok) return c.json({ error: result.error }, result.status);
-  return c.json({ item: result.data });
+  return c.json(result.data);
 }
 
-export async function createInventoryController(c: Context) {
+export async function createProductController(c: Context) {
   const body = await c.req.json().catch(() => null);
-  const result = addInventoryItem(body);
+  const result = addProductRecord(body);
   if (!result.ok) return c.json({ error: result.error }, result.status);
-  return c.json({ item: result.data }, 201);
+  return c.json(result.data, 201);
 }
 
-export async function updateInventoryController(c: Context) {
+export async function updateProductController(c: Context) {
   const id = c.req.param('id');
-  if (!id) return c.json({ error: 'inventory item id is required' }, 400);
+  if (!id) return c.json({ error: 'product id is required' }, 400);
   const body = await c.req.json().catch(() => null);
-  const result = editInventoryItem(id, body);
+  const result = editProductRecord(id, body);
   if (!result.ok) return c.json({ error: result.error }, result.status);
-  return c.json({ item: result.data });
+  return c.json(result.data);
 }
 
-export function deleteInventoryController(c: Context) {
+export function deleteProductController(c: Context) {
   const id = c.req.param('id');
-  if (!id) return c.json({ error: 'inventory item id is required' }, 400);
-  const result = removeInventoryItem(id);
+  if (!id) return c.json({ error: 'product id is required' }, 400);
+  const result = removeProductRecord(id);
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data);
 }
