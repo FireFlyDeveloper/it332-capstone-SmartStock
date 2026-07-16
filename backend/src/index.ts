@@ -3,10 +3,12 @@ import { serve } from '@hono/node-server'
 import { authRoutes } from './auth/routes.js'
 import { inventoryRoutes } from './inventory/routes.js'
 import { deliveryRoutes } from './delivery/routes.js'
+import { getDatabaseHealth } from './db/health.js'
 
-const app = new Hono()
+export const app = new Hono()
 
 app.get('/', (c) => c.json({ message: 'SmartStock API', status: 'ok' }))
+app.get('/health/db', async (c) => c.json(await getDatabaseHealth()))
 
 app.route('/auth', authRoutes)
 app.route('/products', inventoryRoutes)
