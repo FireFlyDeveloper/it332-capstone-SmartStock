@@ -3,6 +3,7 @@ import { serve } from '@hono/node-server'
 import { authRoutes } from './auth/routes.js'
 import { inventoryRoutes } from './inventory/routes.js'
 import { deliveryRoutes } from './delivery/routes.js'
+import { orderRoutes } from './orders/routes.js'
 import { getDatabaseHealth } from './db/health.js'
 
 export const app = new Hono()
@@ -14,6 +15,7 @@ app.route('/auth', authRoutes)
 app.route('/products', inventoryRoutes)
 app.route('/inventory', inventoryRoutes)
 app.route('/deliveries', deliveryRoutes)
+app.route('/orders', orderRoutes)
 
 const port = Number(process.env.PORT) || 3000
 console.log(`Server running on http://localhost:${port}`)
