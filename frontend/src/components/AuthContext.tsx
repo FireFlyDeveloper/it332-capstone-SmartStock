@@ -1,5 +1,5 @@
 /**
- * Auth context — holds the current user + token, exposes login/logout.
+ * Auth context - holds the current user + token, exposes login/logout.
  *
  * Author: Kim Eduard Saludes
  * Last touched: 2026-07-17

@@ -1,5 +1,5 @@
 /**
- * LoginPage — composes AuthLayout with LoginForm + AuthArtPanel.
+ * LoginPage - composes AuthLayout with LoginForm + AuthArtPanel.
  *
  * Author: Kim Eduard Saludes
  * Last touched: 2026-07-07

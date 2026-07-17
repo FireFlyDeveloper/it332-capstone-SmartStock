@@ -14,7 +14,7 @@ import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import './App.css'
 /*
- * App — SmartStock frontend root.
+ * App - SmartStock frontend root.
  * Stored auth is validated against /auth/me before protected routes render.
  *
  * Team: Kim Eduard Saludes (infra/shell), Luraine Villaranda (features),
@@ -45,8 +45,8 @@ function AuthBootstrap({ children }: { children: React.ReactNode }) {
 
   if (!ready) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
-        <div className="font-mono text-xs uppercase tracking-[0.22em] text-gray-500">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-surface-2">
+        <div className="font-mono text-xs uppercase tracking-[0.22em] text-text-muted">
           Loading SmartStock...
         </div>
       </div>

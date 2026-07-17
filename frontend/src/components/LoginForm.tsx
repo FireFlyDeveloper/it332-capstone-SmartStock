@@ -1,5 +1,5 @@
 /**
- * LoginForm — email + password form, owns state, calls /auth/login.
+ * LoginForm - email + password form, owns state, calls /auth/login.
  *
  * Author: Luraine Villaranda
  * Last touched: 2026-07-17
@@ -58,14 +58,14 @@ export function LoginForm() {
       await navigator.clipboard.writeText(text)
       toast.success(`${label} copied to clipboard`)
     } catch {
-      toast.error('Copy failed — your browser blocked clipboard access.')
+      toast.error('Copy failed - your browser blocked clipboard access.')
     }
   }
 
   function fillDemoCredential(creds: { email: string; password: string }) {
     setEmail(creds.email)
     setPassword(creds.password)
-    toast.info('Demo credentials filled in — press Sign in.')
+    toast.info('Demo credentials filled in - press Sign in.')
   }
 
   return (

@@ -123,21 +123,21 @@ export const DeliveryPage: React.FC = () => {
       <div className="space-y-6 animate-fadeIn">
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Total Deliveries</p>
-            <p className="text-2xl font-bold text-gray-900">{deliveries.length}</p>
+          <div className="metric-card p-4">
+            <p className="text-sm text-text-muted">Total Deliveries</p>
+            <p className="text-2xl font-bold text-text">{deliveries.length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600">{deliveries.filter(d => d.status === 'pending').length}</p>
+          <div className="metric-card p-4">
+            <p className="text-sm text-text-muted">Pending</p>
+            <p className="text-2xl font-bold text-accent">{deliveries.filter(d => d.status === 'pending').length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">In Transit</p>
-            <p className="text-2xl font-bold text-blue-600">{deliveries.filter(d => ['assigned', 'picked_up', 'in_transit', 'arrived'].includes(d.status)).length}</p>
+          <div className="metric-card p-4">
+            <p className="text-sm text-text-muted">In Transit</p>
+            <p className="text-2xl font-bold text-accent">{deliveries.filter(d => ['assigned', 'picked_up', 'in_transit', 'arrived'].includes(d.status)).length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Delivered</p>
-            <p className="text-2xl font-bold text-green-600">{deliveries.filter(d => d.status === 'delivered').length}</p>
+          <div className="metric-card p-4">
+            <p className="text-sm text-text-muted">Delivered</p>
+            <p className="text-2xl font-bold text-[var(--success)]">{deliveries.filter(d => d.status === 'delivered').length}</p>
           </div>
         </div>
 
@@ -151,8 +151,8 @@ export const DeliveryPage: React.FC = () => {
                 onClick={() => setFilterStatus(pill.key)}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                   filterStatus === pill.key
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-accent text-accent-fg'
+                    : 'bg-surface-2 text-text-muted hover:bg-[var(--surface-3)]'
                 }`}
               >
                 {pill.label}
@@ -163,7 +163,7 @@ export const DeliveryPage: React.FC = () => {
             type="button"
             onClick={handleExportCSV}
             disabled={filteredDeliveries.length === 0}
-            className="inline-flex items-center gap-2 self-start rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
+            className="btn-secondary gap-2 self-start disabled:opacity-50 sm:self-auto"
           >
             <Download className="h-4 w-4" /> Export CSV
           </button>
@@ -178,18 +178,18 @@ export const DeliveryPage: React.FC = () => {
             return (
               <div 
                 key={delivery.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow"
+                className="metric-card overflow-hidden"
               >
                 {/* Header */}
-                <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-primary-50 to-white">
+                <div className="p-5 border-b border-border bg-surface-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-primary-100 rounded-lg">
-                        <Truck className="w-5 h-5 text-primary-600" />
+                      <div className="p-2 bg-accent-soft rounded-lg">
+                        <Truck className="w-5 h-5 text-accent" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-gray-900">{delivery.id}</h3>
-                        <p className="text-sm text-gray-500">Order: {delivery.orderId}</p>
+                        <h3 className="font-semibold text-text">{delivery.id}</h3>
+                        <p className="text-sm text-text-muted">Order: {delivery.orderId}</p>
                       </div>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(delivery.status)}`}>
@@ -202,10 +202,10 @@ export const DeliveryPage: React.FC = () => {
                 <div className="p-5 space-y-4">
                   {/* Customer Info */}
                   {order && (
-                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-start gap-3 p-3 bg-surface-2 rounded-lg">
                       <div className="flex-1">
-                        <p className="font-medium text-gray-900">{order.customerName}</p>
-                        <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
+                        <p className="font-medium text-text">{order.customerName}</p>
+                        <div className="flex items-center gap-2 mt-1 text-sm text-text-muted">
                           <Phone className="w-4 h-4" />
                           <span>{order.contact}</span>
                         </div>
@@ -215,16 +215,16 @@ export const DeliveryPage: React.FC = () => {
 
                   {/* Destination */}
                   <div className="flex items-start gap-3">
-                    <MapPin className="w-5 h-5 text-gray-400 mt-0.5" />
+                    <MapPin className="w-5 h-5 text-text-subtle mt-0.5" />
                     <div>
-                      <p className="text-sm text-gray-500">Destination</p>
-                      <p className="font-medium text-gray-900">{delivery.destination}</p>
+                      <p className="text-sm text-text-muted">Destination</p>
+                      <p className="font-medium text-text">{delivery.destination}</p>
                     </div>
                   </div>
 
                   {/* Progress Timeline */}
-                  <div className="pt-4 border-t border-gray-100">
-                    <p className="text-sm font-medium text-gray-700 mb-3">Delivery Progress</p>
+                  <div className="pt-4 border-t border-border">
+                    <p className="text-sm font-medium text-text-muted mb-3">Delivery Progress</p>
                     <div className="flex items-center justify-between">
                       {deliverySteps.map((step, index) => {
                         const isCompleted = index <= currentStep;
@@ -234,8 +234,8 @@ export const DeliveryPage: React.FC = () => {
                           <div key={step.key} className="flex flex-col items-center">
                             <div className={`
                               w-8 h-8 rounded-full flex items-center justify-center
-                              ${isCompleted ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-400'}
-                              ${isCurrent ? 'ring-4 ring-primary-100' : ''}
+                              ${isCompleted ? 'bg-accent text-white' : 'bg-gray-200 text-text-subtle'}
+                              ${isCurrent ? 'ring-4 ring-accent-soft' : ''}
                             `}>
                               {isCurrent ? (
                                 <Loader className="w-4 h-4 animate-spin" />
@@ -245,7 +245,7 @@ export const DeliveryPage: React.FC = () => {
                                 <Circle className="w-4 h-4" />
                               )}
                             </div>
-                            <span className={`text-xs mt-1 hidden sm:block ${isCompleted ? 'text-gray-900' : 'text-gray-400'}`}>
+                            <span className={`text-xs mt-1 hidden sm:block ${isCompleted ? 'text-text' : 'text-text-subtle'}`}>
                               {step.label}
                             </span>
                           </div>
@@ -284,8 +284,8 @@ export const DeliveryPage: React.FC = () => {
 
           {filteredDeliveries.length === 0 && !isEmpty && (
             <div className="col-span-full p-12 text-center">
-              <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No deliveries match the current filter.</p>
+              <Search className="w-12 h-12 text-text-subtle mx-auto mb-4" />
+              <p className="text-text-muted">No deliveries match the current filter.</p>
             </div>
           )}
 
@@ -294,8 +294,8 @@ export const DeliveryPage: React.FC = () => {
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
                 <Truck className="h-8 w-8 text-amber-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900">No deliveries scheduled</h3>
-              <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
+              <h3 className="text-lg font-semibold text-text">No deliveries scheduled</h3>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-text-muted">
                 Demo data will appear once the backend is connected. The delivery list updates
                 automatically as orders move through the pipeline.
               </p>

@@ -1,5 +1,5 @@
 /**
- * DataContext — replaces the Capstone's localStorage-backed AppContext.
+ * DataContext - replaces the Capstone's localStorage-backed AppContext.
  * Holds products / orders / deliveries, fetches them from the Hono backend
  * via apiFetch, and exposes mutators that hit the appropriate endpoints
  * before updating local state.
@@ -60,7 +60,7 @@ interface DataContextValue {
 
 const DataContext = createContext<DataContextValue | null>(null)
 
-// Safe fetch — returns a typed empty value on failure so the page renders.
+// Safe fetch - returns a typed empty value on failure so the page renders.
 async function safeFetch<T>(path: string, fallback: T): Promise<T> {
   try {
     return await apiFetch<T>(path)

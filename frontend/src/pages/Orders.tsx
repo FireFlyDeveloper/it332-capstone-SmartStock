@@ -338,10 +338,10 @@ export const Orders: React.FC = () => {
         <div className="flex flex-col sm:flex-row gap-4 justify-between">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-subtle" />
               <input
                 type="text"
-                placeholder="Search by name, ID, or reference…"
+                placeholder="Search by name, ID, or reference..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="input pl-10 w-full sm:w-72"
@@ -366,7 +366,7 @@ export const Orders: React.FC = () => {
               type="button"
               onClick={handleExportCSV}
               disabled={filteredOrders.length === 0}
-              className="inline-flex items-center gap-2 self-start rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
+              className="btn-secondary gap-2 self-start disabled:opacity-50 sm:self-auto"
             >
               <Download className="h-4 w-4" /> Export CSV
             </button>
@@ -385,8 +385,8 @@ export const Orders: React.FC = () => {
               onClick={() => setStatusFilter(pill.key)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                 statusFilter === pill.key
-                  ? 'bg-amber-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-accent text-accent-fg'
+                  : 'bg-surface-2 text-text-muted hover:bg-[var(--surface-3)]'
               }`}
             >
               {pill.label}
@@ -396,21 +396,21 @@ export const Orders: React.FC = () => {
 
         {/* ── Stats ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Total Orders</p>
-            <p className="text-2xl font-bold text-gray-900">{orders.length}</p>
+          <div className="metric-card p-4">
+            <p className="text-sm text-text-muted">Total Orders</p>
+            <p className="text-2xl font-bold text-text">{orders.length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600">{orders.filter(o => o.orderStatus === 'pending').length}</p>
+          <div className="metric-card p-4">
+            <p className="text-sm text-text-muted">Pending</p>
+            <p className="text-2xl font-bold text-accent">{orders.filter(o => o.orderStatus === 'pending').length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">In Progress</p>
-            <p className="text-2xl font-bold text-blue-600">{inProgressCount}</p>
+          <div className="metric-card p-4">
+            <p className="text-sm text-text-muted">In Progress</p>
+            <p className="text-2xl font-bold text-accent">{inProgressCount}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Completed</p>
-            <p className="text-2xl font-bold text-green-600">{orders.filter(o => o.orderStatus === 'completed').length}</p>
+          <div className="metric-card p-4">
+            <p className="text-sm text-text-muted">Completed</p>
+            <p className="text-2xl font-bold text-[var(--success)]">{orders.filter(o => o.orderStatus === 'completed').length}</p>
           </div>
         </div>
 
@@ -421,21 +421,21 @@ export const Orders: React.FC = () => {
             return (
               <div
                 key={order.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+                className="metric-card cursor-pointer"
                 onClick={() => setViewOrder(order)}
               >
                 {/* Card header */}
                 <div className="p-5 pb-3">
                   <div className="flex items-start justify-between mb-3">
                     <div className="min-w-0 flex-1">
-                      <h4 className="font-semibold text-gray-900 truncate">{order.customerName}</h4>
-                      <p className="text-xs text-gray-400 mt-0.5">{order.referenceNumber}</p>
+                      <h4 className="font-semibold text-text truncate">{order.customerName}</h4>
+                      <p className="text-xs text-text-subtle mt-0.5">{order.referenceNumber}</p>
                     </div>
                     <span className={`ml-2 px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatusColor(order.orderStatus)}`}>
                       {order.orderStatus.replace(/_/g, ' ')}
                     </span>
                   </div>
-                  <div className="flex items-center gap-4 text-sm text-gray-500">
+                  <div className="flex items-center gap-4 text-sm text-text-muted">
                     <span className="flex items-center gap-1">
                       <Package className="w-3.5 h-3.5" /> {order.items.length} item{order.items.length !== 1 ? 's' : ''}
                     </span>
@@ -446,10 +446,10 @@ export const Orders: React.FC = () => {
                 </div>
 
                 {/* Card footer */}
-                <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
+                <div className="px-5 py-3 border-t border-border flex items-center justify-between">
                   <div>
-                    <p className="text-xs text-gray-400">{formatDate(order.date)}</p>
-                    <p className="font-bold text-gray-900">{formatCurrency(order.total)}</p>
+                    <p className="text-xs text-text-subtle">{formatDate(order.date)}</p>
+                    <p className="font-bold text-text">{formatCurrency(order.total)}</p>
                   </div>
                   <div className="text-right">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(order.paymentStatus)}`}>
@@ -465,9 +465,9 @@ export const Orders: React.FC = () => {
           })}
           {filteredOrders.length === 0 && !isEmpty && (
             <div className="col-span-full p-12 text-center">
-              <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No orders match the current filters.</p>
-              {searchTerm && <button onClick={() => setSearchTerm('')} className="text-blue-600 text-sm mt-1 hover:underline">Clear search</button>}
+              <Search className="w-12 h-12 text-text-subtle mx-auto mb-4" />
+              <p className="text-text-muted">No orders match the current filters.</p>
+              {searchTerm && <button onClick={() => setSearchTerm('')} className="text-accent text-sm mt-1 hover:underline">Clear search</button>}
             </div>
           )}
 
@@ -476,14 +476,14 @@ export const Orders: React.FC = () => {
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
                 <ShoppingBag className="h-8 w-8 text-amber-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900">No orders yet</h3>
-              <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
+              <h3 className="text-lg font-semibold text-text">No orders yet</h3>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-text-muted">
                 Demo data will appear once the backend is connected. In the meantime, you can
                 create a demo order below.
               </p>
               <button
                 type="button"
-                onClick={() => toast.info('Demo build — this would open the create form.')}
+                onClick={() => toast.info('Demo build - this would open the create form.')}
                 className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700"
               >
                 <Plus className="h-4 w-4" /> Create your first order
@@ -499,21 +499,21 @@ export const Orders: React.FC = () => {
       {modalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideIn">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
+            <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-white z-10">
               <div>
-                <h3 className="text-xl font-semibold text-gray-900">
+                <h3 className="text-xl font-semibold text-text">
                   {modalMode === 'create' ? 'Create New Order' : 'Edit Order'}
                 </h3>
-                {modalMode === 'edit' && <p className="text-sm text-gray-500">{editingOrderId}</p>}
+                {modalMode === 'edit' && <p className="text-sm text-text-muted">{editingOrderId}</p>}
               </div>
-              <button onClick={closeModal} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+              <button onClick={closeModal} className="p-2 hover:bg-surface-2 rounded-lg"><X className="w-5 h-5" /></button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               {/* ── Customer ─────────────────────────────────────── */}
               <div className="space-y-4">
-                <h4 className="font-medium text-gray-900 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-gray-400" /> Customer Information
+                <h4 className="font-medium text-text flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-text-subtle" /> Customer Information
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
@@ -550,17 +550,17 @@ export const Orders: React.FC = () => {
 
               {/* ── Items ─────────────────────────────────────────── */}
               <div className="space-y-4">
-                <h4 className="font-medium text-gray-900 flex items-center gap-2">
-                  <Package className="w-4 h-4 text-gray-400" /> Order Items
+                <h4 className="font-medium text-text flex items-center gap-2">
+                  <Package className="w-4 h-4 text-text-subtle" /> Order Items
                 </h4>
                 <div className="flex gap-3 items-end flex-wrap sm:flex-nowrap">
                   <div className="flex-1 min-w-[200px]">
                     <label className="label">Product</label>
                     <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-subtle" />
                       <input
                         type="text"
-                        placeholder="Search products…"
+                        placeholder="Search products..."
                         value={productSearch}
                         onChange={e => setProductSearch(e.target.value)}
                         className="input pl-9"
@@ -578,11 +578,11 @@ export const Orders: React.FC = () => {
                       <option value="">
                         {filteredCreateProducts.length === 0
                           ? 'No products found'
-                          : 'Select a product…'}
+                          : 'Select a product...'}
                       </option>
                       {filteredCreateProducts.map(p => (
                         <option key={p.id} value={p.id} disabled={p.stock === 0}>
-                          {p.name} — {formatCurrency(p.price)} ({p.stock} avail.)
+                          {p.name} - {formatCurrency(p.price)} ({p.stock} avail.)
                         </option>
                       ))}
                     </select>
@@ -597,35 +597,35 @@ export const Orders: React.FC = () => {
                 </div>
 
                 {form.items.length > 0 && (
-                  <div className="bg-gray-50 rounded-lg overflow-hidden border border-gray-200">
+                  <div className="bg-surface-2 rounded-lg overflow-hidden border border-border">
                     <table className="w-full">
                       <thead className="bg-gray-100">
                         <tr>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Item</th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Price</th>
-                          <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 w-20">Qty</th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 w-24">Subtotal</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-text-muted">Item</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-text-muted">Price</th>
+                          <th className="px-3 py-2 text-center text-xs font-semibold text-text-muted w-20">Qty</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-text-muted w-24">Subtotal</th>
                           <th className="px-3 py-2 w-10"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 bg-white">
                         {form.items.map((item, i) => (
-                          <tr key={i} className="hover:bg-gray-50">
-                            <td className="px-3 py-2 text-sm font-medium text-gray-900">{item.productName}</td>
-                            <td className="px-3 py-2 text-sm text-gray-600 text-right">{formatCurrency(item.unitPrice)}</td>
+                          <tr key={i} className="hover:bg-surface-2">
+                            <td className="px-3 py-2 text-sm font-medium text-text">{item.productName}</td>
+                            <td className="px-3 py-2 text-sm text-text-muted text-right">{formatCurrency(item.unitPrice)}</td>
                             <td className="px-3 py-2 text-center">
                               <div className="inline-flex items-center border border-gray-300 rounded-lg">
                                 <button type="button"
                                   onClick={() => updateItemQty(i, item.quantity - 1)}
-                                  className="px-2 py-0.5 text-gray-500 hover:bg-gray-100 text-sm leading-none"
+                                  className="px-2 py-0.5 text-text-muted hover:bg-surface-2 text-sm leading-none"
                                   disabled={item.quantity <= 1}>−</button>
                                 <span className="px-2 py-0.5 text-sm font-medium min-w-[2rem] text-center">{item.quantity}</span>
                                 <button type="button"
                                   onClick={() => updateItemQty(i, item.quantity + 1)}
-                                  className="px-2 py-0.5 text-gray-500 hover:bg-gray-100 text-sm leading-none">+</button>
+                                  className="px-2 py-0.5 text-text-muted hover:bg-surface-2 text-sm leading-none">+</button>
                               </div>
                             </td>
-                            <td className="px-3 py-2 text-sm font-medium text-gray-900 text-right">{formatCurrency(item.total)}</td>
+                            <td className="px-3 py-2 text-sm font-medium text-text text-right">{formatCurrency(item.total)}</td>
                             <td className="px-3 py-2">
                               <button type="button" onClick={() => removeItem(i)}
                                 className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded">
@@ -645,7 +645,7 @@ export const Orders: React.FC = () => {
                 <label className="label">Notes (optional)</label>
                 <textarea value={form.notes}
                   onChange={e => setForm({ ...form, notes: e.target.value })}
-                  className="input" rows={2} placeholder="Special instructions, remarks…" />
+                  className="input" rows={2} placeholder="Special instructions, remarks..." />
               </div>
 
               {/* ── Payment & Summary ─────────────────────────────── */}
@@ -663,7 +663,7 @@ export const Orders: React.FC = () => {
               )}
 
               <div className="flex items-center justify-between bg-primary-50 p-4 rounded-xl">
-                <span className="text-sm text-primary-600 font-medium">Total Amount</span>
+                <span className="text-sm text-accent font-medium">Total Amount</span>
                 <span className="text-2xl font-bold text-primary-900">{formatCurrency(form.total)}</span>
               </div>
 
@@ -685,28 +685,28 @@ export const Orders: React.FC = () => {
       {viewOrder && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideIn">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
+            <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-white z-10">
               <div>
-                <h3 className="text-xl font-semibold text-gray-900">Order Details</h3>
-                <p className="text-sm text-gray-500">{viewOrder.referenceNumber} · {viewOrder.id}</p>
+                <h3 className="text-xl font-semibold text-text">Order Details</h3>
+                <p className="text-sm text-text-muted">{viewOrder.referenceNumber} · {viewOrder.id}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => openEdit(viewOrder)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-blue-600" title="Edit Order">
+                <button onClick={() => openEdit(viewOrder)} className="p-2 hover:bg-surface-2 rounded-lg text-text-muted hover:text-accent" title="Edit Order">
                   <Edit3 className="w-5 h-5" />
                 </button>
-                <button onClick={() => { closeViewModal(); window.print(); }} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-700" title="Print Receipt">
+                <button onClick={() => { closeViewModal(); window.print(); }} className="p-2 hover:bg-surface-2 rounded-lg text-text-muted hover:text-text-muted" title="Print Receipt">
                   <Printer className="w-5 h-5" />
                 </button>
-                <button onClick={() => closeViewModal()} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+                <button onClick={() => closeViewModal()} className="p-2 hover:bg-surface-2 rounded-lg"><X className="w-5 h-5" /></button>
               </div>
             </div>
 
             <div className="p-6 space-y-6">
               {/* ── Progress Timeline ──────────────────────────────── */}
               {(viewOrder.orderStatus !== 'cancelled') && (
-                <div className="bg-gray-50 rounded-xl p-4 sm:p-6">
-                  <h4 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-gray-400" /> Order Progress
+                <div className="bg-surface-2 rounded-xl p-4 sm:p-6">
+                  <h4 className="font-medium text-text mb-4 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-text-subtle" /> Order Progress
                   </h4>
                   <div className="flex items-center justify-between relative">
                     <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-gray-200 -translate-y-1/2" />
@@ -723,12 +723,12 @@ export const Orders: React.FC = () => {
                       return (
                         <div key={step.key} className="relative flex flex-col items-center z-10">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                            done ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-400'
+                            done ? 'bg-blue-600 text-white' : 'bg-gray-200 text-text-subtle'
                           } ${isCurrent ? 'ring-4 ring-blue-100' : ''}`}>
                             {done ? <CheckCircle className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
                           </div>
                           <p className={`mt-1.5 text-[10px] font-medium text-center whitespace-nowrap ${
-                            isCurrent ? 'text-blue-700' : done ? 'text-gray-900' : 'text-gray-400'
+                            isCurrent ? 'text-accent' : done ? 'text-text' : 'text-text-subtle'
                           }`}>
                             {step.label}
                           </p>
@@ -749,21 +749,21 @@ export const Orders: React.FC = () => {
 
               {/* ── Customer Info ──────────────────────────────────── */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-gray-50 p-4 rounded-xl">
-                  <p className="text-xs text-gray-500 mb-1">Customer</p>
-                  <p className="font-semibold text-gray-900">{viewOrder.customerName}</p>
+                <div className="bg-surface-2 p-4 rounded-xl">
+                  <p className="text-xs text-text-muted mb-1">Customer</p>
+                  <p className="font-semibold text-text">{viewOrder.customerName}</p>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-xl">
-                  <p className="text-xs text-gray-500 mb-1">Contact</p>
-                  <p className="font-semibold text-gray-900 flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5 text-gray-400" /> {viewOrder.contact}
+                <div className="bg-surface-2 p-4 rounded-xl">
+                  <p className="text-xs text-text-muted mb-1">Contact</p>
+                  <p className="font-semibold text-text flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-text-subtle" /> {viewOrder.contact}
                   </p>
                 </div>
                 {viewOrder.address && (
-                  <div className="sm:col-span-2 bg-gray-50 p-4 rounded-xl">
-                    <p className="text-xs text-gray-500 mb-1">Delivery Address</p>
-                    <p className="font-semibold text-gray-900 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-gray-400" /> {viewOrder.address}
+                  <div className="sm:col-span-2 bg-surface-2 p-4 rounded-xl">
+                    <p className="text-xs text-text-muted mb-1">Delivery Address</p>
+                    <p className="font-semibold text-text flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-text-subtle" /> {viewOrder.address}
                     </p>
                   </div>
                 )}
@@ -771,14 +771,14 @@ export const Orders: React.FC = () => {
 
               {/* ── Status badges ──────────────────────────────────── */}
               <div className="flex flex-wrap gap-3">
-                <div className="px-4 py-3 rounded-xl bg-gray-50">
-                  <p className="text-xs text-gray-500 mb-1">Order Status</p>
+                <div className="px-4 py-3 rounded-xl bg-surface-2">
+                  <p className="text-xs text-text-muted mb-1">Order Status</p>
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(viewOrder.orderStatus)}`}>
                     {viewOrder.orderStatus.replace(/_/g, ' ')}
                   </span>
                 </div>
-                <div className="px-4 py-3 rounded-xl bg-gray-50">
-                  <p className="text-xs text-gray-500 mb-1">Payment</p>
+                <div className="px-4 py-3 rounded-xl bg-surface-2">
+                  <p className="text-xs text-text-muted mb-1">Payment</p>
                   <select
                     value={viewOrder.paymentStatus}
                     onChange={e => {
@@ -794,9 +794,9 @@ export const Orders: React.FC = () => {
                     <option value="refunded">Refunded</option>
                   </select>
                 </div>
-                <div className="px-4 py-3 rounded-xl bg-gray-50">
-                  <p className="text-xs text-gray-500 mb-1">Type</p>
-                  <span className="capitalize px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700">
+                <div className="px-4 py-3 rounded-xl bg-surface-2">
+                  <p className="text-xs text-text-muted mb-1">Type</p>
+                  <span className="capitalize px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-text-muted">
                     {viewOrder.orderType}
                   </span>
                 </div>
@@ -804,23 +804,23 @@ export const Orders: React.FC = () => {
 
               {/* ── Payment Summary ────────────────────────────────── */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-green-50 p-3 rounded-xl">
-                  <p className="text-xs text-green-600">Total</p>
-                  <p className="text-lg font-bold text-green-900">{formatCurrency(viewOrder.total)}</p>
+                <div className="bg-[var(--success-soft)] p-3 rounded-xl">
+                  <p className="text-xs text-[var(--success)]">Total</p>
+                  <p className="text-lg font-bold text-text">{formatCurrency(viewOrder.total)}</p>
                 </div>
-                <div className="bg-blue-50 p-3 rounded-xl">
-                  <p className="text-xs text-blue-600">Paid</p>
-                  <p className="text-lg font-bold text-blue-900">{formatCurrency(viewOrder.paidAmount)}</p>
+                <div className="bg-accent-soft p-3 rounded-xl">
+                  <p className="text-xs text-accent">Paid</p>
+                  <p className="text-lg font-bold text-text">{formatCurrency(viewOrder.paidAmount)}</p>
                 </div>
-                <div className={viewOrder.total - viewOrder.paidAmount > 0 ? 'bg-red-50 p-3 rounded-xl' : 'bg-gray-50 p-3 rounded-xl'}>
-                  <p className="text-xs text-gray-500">Balance</p>
-                  <p className={`text-lg font-bold ${viewOrder.total - viewOrder.paidAmount > 0 ? 'text-red-700' : 'text-gray-700'}`}>
+                <div className={viewOrder.total - viewOrder.paidAmount > 0 ? 'bg-red-50 p-3 rounded-xl' : 'bg-surface-2 p-3 rounded-xl'}>
+                  <p className="text-xs text-text-muted">Balance</p>
+                  <p className={`text-lg font-bold ${viewOrder.total - viewOrder.paidAmount > 0 ? 'text-red-700' : 'text-text-muted'}`}>
                     {formatCurrency(Math.max(0, viewOrder.total - viewOrder.paidAmount))}
                   </p>
                 </div>
-                <div className="bg-purple-50 p-3 rounded-xl">
-                  <p className="text-xs text-purple-600">Refunded</p>
-                  <p className="text-lg font-bold text-purple-900">{formatCurrency(viewOrder.refundAmount || 0)}</p>
+                <div className="bg-accent-soft p-3 rounded-xl">
+                  <p className="text-xs text-accent">Refunded</p>
+                  <p className="text-lg font-bold text-text">{formatCurrency(viewOrder.refundAmount || 0)}</p>
                 </div>
               </div>
 
@@ -828,46 +828,46 @@ export const Orders: React.FC = () => {
               <div>
                 {viewOrder.items.length > 1 && (
                   <div className="relative mb-3">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-subtle" />
                     <input
                       type="text"
-                      placeholder="Search items…"
+                      placeholder="Search items..."
                       value={itemSearch}
                       onChange={e => setItemSearch(e.target.value)}
                       className="input pl-9 py-2 text-sm"
                     />
                   </div>
                 )}
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <div className="border border-border rounded-xl overflow-hidden">
                   <table className="w-full">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-surface-2">
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Item</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Price</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase w-16">Qty</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase w-28">Total</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase">Item</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-text-muted uppercase">Price</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold text-text-muted uppercase w-16">Qty</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-text-muted uppercase w-28">Total</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-border">
                       {filteredViewItems.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-400">No matching items</td>
+                          <td colSpan={4} className="px-4 py-8 text-center text-sm text-text-subtle">No matching items</td>
                         </tr>
                       ) : (
                         filteredViewItems.map((item, i) => (
-                          <tr key={i} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">{item.productName}</td>
-                            <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(item.unitPrice)}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantity}</td>
-                            <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{formatCurrency(item.total)}</td>
+                          <tr key={i} className="hover:bg-surface-2">
+                            <td className="px-4 py-3 text-sm text-text font-medium">{item.productName}</td>
+                            <td className="px-4 py-3 text-sm text-text-muted text-right">{formatCurrency(item.unitPrice)}</td>
+                            <td className="px-4 py-3 text-sm text-text text-center">{item.quantity}</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-text text-right">{formatCurrency(item.total)}</td>
                           </tr>
                         ))
                       )}
                     </tbody>
-                    <tfoot className="bg-gray-50 border-t-2 border-gray-200">
+                    <tfoot className="bg-surface-2 border-t-2 border-border">
                       <tr>
-                        <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">Total</td>
-                        <td className="px-4 py-3 text-lg font-bold text-gray-900 text-right">{formatCurrency(viewOrder.total)}</td>
+                        <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-text text-right">Total</td>
+                        <td className="px-4 py-3 text-lg font-bold text-text text-right">{formatCurrency(viewOrder.total)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -876,8 +876,8 @@ export const Orders: React.FC = () => {
 
               {/* ── Notes ──────────────────────────────────────────── */}
               {viewOrder.notes && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                  <p className="text-xs text-yellow-700 font-medium mb-1">Notes</p>
+                <div className="bg-accent-soft border border-yellow-200 rounded-xl p-4">
+                  <p className="text-xs text-accent font-medium mb-1">Notes</p>
                   <p className="text-sm text-yellow-800">{viewOrder.notes}</p>
                 </div>
               )}
@@ -916,7 +916,7 @@ export const Orders: React.FC = () => {
                         setRefundType('partial');
                         setRefundReason('');
                       }}
-                      className="px-4 py-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors flex items-center gap-2"
+                      className="px-4 py-2 text-accent hover:bg-accent-soft rounded-lg transition-colors flex items-center gap-2"
                     >
                       <RotateCcw className="w-4 h-4" /> Refund
                     </button>
@@ -931,12 +931,12 @@ export const Orders: React.FC = () => {
                 </div>
               )}
 
-              {/* Completed — show view only */}
+              {/* Completed - show view only */}
               {viewOrder.orderStatus === 'completed' && (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                <div className="bg-[var(--success-soft)] border border-green-200 rounded-xl p-4 text-center">
                   <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
-                  <p className="font-semibold text-green-700">Order Completed</p>
-                  <p className="text-sm text-green-600">Delivered on {formatDate(viewOrder.date)}</p>
+                  <p className="font-semibold text-[var(--success)]">Order Completed</p>
+                  <p className="text-sm text-[var(--success)]">Delivered on {formatDate(viewOrder.date)}</p>
                 </div>
               )}
             </div>
@@ -951,8 +951,8 @@ export const Orders: React.FC = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-slideIn text-center">
             <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Cancel Order?</h3>
-            <p className="text-sm text-gray-500 mb-6">This action cannot be undone.</p>
+            <h3 className="text-lg font-semibold text-text mb-2">Cancel Order?</h3>
+            <p className="text-sm text-text-muted mb-6">This action cannot be undone.</p>
             <div className="flex gap-3">
               <button onClick={() => setConfirmCancel(null)} className="flex-1 btn-secondary">Keep Order</button>
               <button onClick={() => handleDelete(confirmCancel)} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-semibold">Yes, Cancel</button>
@@ -967,9 +967,9 @@ export const Orders: React.FC = () => {
       {payModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-slideIn">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Process Payment</h3>
-            <p className="text-sm text-gray-500 mb-1">Order: {payModal.referenceNumber}</p>
-            <p className="text-sm text-gray-500 mb-4">Balance: {formatCurrency(payModal.total - payModal.paidAmount)}</p>
+            <h3 className="text-lg font-semibold text-text mb-2">Process Payment</h3>
+            <p className="text-sm text-text-muted mb-1">Order: {payModal.referenceNumber}</p>
+            <p className="text-sm text-text-muted mb-4">Balance: {formatCurrency(payModal.total - payModal.paidAmount)}</p>
             <div className="mb-4">
               <label className="label">Payment Amount</label>
               <input type="number" value={payAmount}
@@ -995,9 +995,9 @@ export const Orders: React.FC = () => {
       {refundModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-slideIn">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Process Refund</h3>
-            <p className="text-sm text-gray-500 mb-1">Order: {refundModal.referenceNumber}</p>
-            <p className="text-sm text-gray-500 mb-4">Paid Amount: {formatCurrency(refundModal.paidAmount)}</p>
+            <h3 className="text-lg font-semibold text-text mb-2">Process Refund</h3>
+            <p className="text-sm text-text-muted mb-1">Order: {refundModal.referenceNumber}</p>
+            <p className="text-sm text-text-muted mb-4">Paid Amount: {formatCurrency(refundModal.paidAmount)}</p>
             <div className="space-y-4">
               <div>
                 <label className="label">Refund Amount</label>
@@ -1010,7 +1010,7 @@ export const Orders: React.FC = () => {
                 <select value={refundReason}
                   onChange={e => setRefundReason(e.target.value)}
                   className="input">
-                  <option value="">Select reason…</option>
+                  <option value="">Select reason...</option>
                   <option value="Customer request">Customer request</option>
                   <option value="Damaged items">Damaged items</option>
                   <option value="Wrong items">Wrong items</option>

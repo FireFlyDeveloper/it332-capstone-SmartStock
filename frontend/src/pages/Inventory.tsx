@@ -174,7 +174,7 @@ export const Inventory: React.FC = () => {
           <div className="flex flex-col sm:flex-row gap-3">
             {/* Search */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-subtle" />
               <input
                 type="text"
                 placeholder="Search products..."
@@ -212,7 +212,7 @@ export const Inventory: React.FC = () => {
               type="button"
               onClick={handleExportCSV}
               disabled={filteredProducts.length === 0}
-              className="inline-flex items-center gap-2 self-start rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
+              className="btn-secondary gap-2 self-start disabled:opacity-50 sm:self-auto"
             >
               <Download className="h-4 w-4" /> Export CSV
             </button>
@@ -235,8 +235,8 @@ export const Inventory: React.FC = () => {
               onClick={() => setStockFilter(pill.key)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                 stockFilter === pill.key
-                  ? 'bg-amber-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-accent text-accent-fg'
+                  : 'bg-surface-2 text-text-muted hover:bg-[var(--surface-3)]'
               }`}
             >
               {pill.label}
@@ -246,71 +246,71 @@ export const Inventory: React.FC = () => {
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Total Products</p>
-            <p className="text-2xl font-bold text-gray-900">{products.length}</p>
+          <div className="metric-card p-4">
+            <p className="text-sm text-text-muted">Total Products</p>
+            <p className="text-2xl font-bold text-text">{products.length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Glass Products</p>
-            <p className="text-2xl font-bold text-blue-600">{products.filter(p => p.category === 'glass').length}</p>
+          <div className="metric-card p-4">
+            <p className="text-sm text-text-muted">Glass Products</p>
+            <p className="text-2xl font-bold text-accent">{products.filter(p => p.category === 'glass').length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Aluminum Products</p>
-            <p className="text-2xl font-bold text-green-600">{products.filter(p => p.category === 'aluminum').length}</p>
+          <div className="metric-card p-4">
+            <p className="text-sm text-text-muted">Aluminum Products</p>
+            <p className="text-2xl font-bold text-[var(--success)]">{products.filter(p => p.category === 'aluminum').length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Low Stock</p>
-            <p className="text-2xl font-bold text-yellow-600">{products.filter(p => checkStockStatus(p.stock, p.threshold) !== 'healthy').length}</p>
+          <div className="metric-card p-4">
+            <p className="text-sm text-text-muted">Low Stock</p>
+            <p className="text-2xl font-bold text-accent">{products.filter(p => checkStockStatus(p.stock, p.threshold) !== 'healthy').length}</p>
           </div>
         </div>
 
         {/* Products Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="panel overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-surface-2 border-b border-border">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">SKU</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Product Name</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Price</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">SKU</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">Product Name</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">Category</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">Stock</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">Price</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-border">
                 {filteredProducts.map((product) => {
                   const stockStatus = checkStockStatus(product.stock, product.threshold);
                   const movements = movementsByProduct[product.id] ?? [];
                   return (
                     <React.Fragment key={product.id}>
-                      <tr className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 text-sm text-gray-500 font-medium">{product.sku}</td>
+                      <tr className="hover:bg-surface-2 transition-colors">
+                        <td className="px-6 py-4 text-sm text-text-muted font-medium">{product.sku}</td>
                         <td className="px-6 py-4">
                           <div>
-                            <p className="font-medium text-gray-900">{product.name}</p>
-                            <p className="text-xs text-gray-500">{product.unit}</p>
+                            <p className="font-medium text-text">{product.name}</p>
+                            <p className="text-xs text-text-muted">{product.unit}</p>
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${
-                            product.category === 'glass' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                            product.category === 'glass' ? 'bg-accent-soft text-accent' : 'bg-[var(--success-soft)] text-[var(--success)]'
                           }`}>
                             {product.category}
                           </span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-gray-900">{product.stock}</span>
-                            <span className="text-gray-500 text-xs">{product.unit}</span>
+                            <span className="font-semibold text-text">{product.stock}</span>
+                            <span className="text-text-muted text-xs">{product.unit}</span>
                             <span className={`w-2 h-2 rounded-full ${
-                              stockStatus === 'healthy' ? 'bg-green-500' :
-                              stockStatus === 'low' ? 'bg-yellow-500' : 'bg-red-500'
+                              stockStatus === 'healthy' ? 'bg-[var(--success-soft)]0' :
+                              stockStatus === 'low' ? 'bg-accent-soft0' : 'bg-red-500'
                             }`} />
                           </div>
                         </td>
-                        <td className="px-6 py-4 font-medium text-gray-900">{formatCurrency(product.price)}</td>
+                        <td className="px-6 py-4 font-medium text-text">{formatCurrency(product.price)}</td>
                         <td className="px-6 py-4">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(product.status)}`}>
                             {product.status}
@@ -320,21 +320,21 @@ export const Inventory: React.FC = () => {
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => handleToggleMovements(product.id)}
-                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              className="p-2 text-text-muted hover:bg-surface-2 rounded-lg transition-colors"
                               title="Movement history"
                             >
                               <History className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleRestock(product.id)}
-                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              className="p-2 text-[var(--success)] hover:bg-[var(--success-soft)] rounded-lg transition-colors"
                               title="Restock"
                             >
                               <RefreshCw className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleOpenModal(product)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              className="p-2 text-accent hover:bg-accent-soft rounded-lg transition-colors"
                               title="Edit"
                             >
                               <Edit2 className="w-4 h-4" />
@@ -350,29 +350,29 @@ export const Inventory: React.FC = () => {
                         </td>
                       </tr>
                       {expandedProductId === product.id && (
-                        <tr className="bg-gray-50">
+                        <tr className="bg-surface-2">
                           <td colSpan={7} className="px-6 py-4">
-                            <div className="rounded-lg border border-gray-200 bg-white p-4">
+                            <div className="rounded-lg border border-border bg-white p-4">
                               <div className="mb-3 flex items-center justify-between">
-                                <h4 className="text-sm font-semibold text-gray-900">Movement history</h4>
-                                <span className="text-xs text-gray-500">{movements.length} movement(s)</span>
+                                <h4 className="text-sm font-semibold text-text">Movement history</h4>
+                                <span className="text-xs text-text-muted">{movements.length} movement(s)</span>
                               </div>
                               {movementsLoading === product.id ? (
-                                <p className="text-sm text-gray-500">Loading movements…</p>
+                                <p className="text-sm text-text-muted">Loading movements...</p>
                               ) : movements.length === 0 ? (
-                                <p className="text-sm text-gray-500">No movements recorded yet.</p>
+                                <p className="text-sm text-text-muted">No movements recorded yet.</p>
                               ) : (
                                 <div className="space-y-2">
                                   {movements.map((movement) => (
-                                    <div key={movement.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-gray-50 px-3 py-2 text-sm">
+                                    <div key={movement.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-surface-2 px-3 py-2 text-sm">
                                       <div>
-                                        <span className={movement.type === 'inbound' ? 'font-semibold text-green-700' : 'font-semibold text-red-700'}>
+                                        <span className={movement.type === 'inbound' ? 'font-semibold text-[var(--success)]' : 'font-semibold text-red-700'}>
                                           {movement.type === 'inbound' ? '+' : '-'}{movement.quantity}
                                         </span>
-                                        <span className="ml-2 text-gray-700">{movement.referenceNo}</span>
-                                        {movement.supplier && <span className="ml-2 text-gray-500">• {movement.supplier}</span>}
+                                        <span className="ml-2 text-text-muted">{movement.referenceNo}</span>
+                                        {movement.supplier && <span className="ml-2 text-text-muted">- {movement.supplier}</span>}
                                       </div>
-                                      <span className="text-xs text-gray-500">{new Date(movement.occurredAt).toLocaleString()}</span>
+                                      <span className="text-xs text-text-muted">{new Date(movement.occurredAt).toLocaleString()}</span>
                                     </div>
                                   ))}
                                 </div>
@@ -390,8 +390,8 @@ export const Inventory: React.FC = () => {
           
           {filteredProducts.length === 0 && !isEmpty && (
             <div className="p-12 text-center">
-              <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No products match the current filters.</p>
+              <Search className="w-12 h-12 text-text-subtle mx-auto mb-4" />
+              <p className="text-text-muted">No products match the current filters.</p>
             </div>
           )}
 
@@ -400,14 +400,14 @@ export const Inventory: React.FC = () => {
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
                 <PackagePlus className="h-8 w-8 text-amber-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900">No products yet</h3>
-              <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
+              <h3 className="text-lg font-semibold text-text">No products yet</h3>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-text-muted">
                 Demo data will appear once the backend is connected. In the meantime, you can
                 add a demo product below.
               </p>
               <button
                 type="button"
-                onClick={() => toast.info('Demo build — this would open the create form.')}
+                onClick={() => toast.info('Demo build - this would open the create form.')}
                 className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700"
               >
                 <Plus className="h-4 w-4" /> Add your first product
@@ -420,11 +420,11 @@ export const Inventory: React.FC = () => {
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slideIn">
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h3 className="text-xl font-semibold text-gray-900">
+              <div className="flex items-center justify-between p-6 border-b border-border">
+                <h3 className="text-xl font-semibold text-text">
                   {editingProduct ? 'Edit Product' : 'Add New Product'}
                 </h3>
-                <button onClick={handleCloseModal} className="p-2 hover:bg-gray-100 rounded-lg">
+                <button onClick={handleCloseModal} className="p-2 hover:bg-surface-2 rounded-lg">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -555,9 +555,9 @@ export const Inventory: React.FC = () => {
         {isRestockModalOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl w-full max-w-md animate-slideIn">
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h3 className="text-xl font-semibold text-gray-900">Restock Product</h3>
-                <button onClick={() => setIsRestockModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+              <div className="flex items-center justify-between p-6 border-b border-border">
+                <h3 className="text-xl font-semibold text-text">Restock Product</h3>
+                <button onClick={() => setIsRestockModalOpen(false)} className="p-2 hover:bg-surface-2 rounded-lg">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -596,8 +596,8 @@ export const Inventory: React.FC = () => {
                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Trash2 className="w-8 h-8 text-red-600" />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">Delete Product?</h3>
-                <p className="text-gray-500">This action cannot be undone. The product will be permanently removed.</p>
+                <h3 className="text-xl font-semibold text-text mb-2">Delete Product?</h3>
+                <p className="text-text-muted">This action cannot be undone. The product will be permanently removed.</p>
               </div>
               
               <div className="flex gap-3 p-6 pt-0">

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-// Last touched: 2026-07-17 (Phase 8 — backend analytics wiring)
+// Last touched: 2026-07-17 (Phase 8 - backend analytics wiring)
 import {
   TrendingUp,
   Package,
@@ -99,7 +99,7 @@ function inferCategory(materialType: string): string {
 function toTopItemData(purchases: AnalyticsPurchaseMetric[]): TopItemChartPoint[] {
   return purchases
     .map((purchase) => ({
-      name: purchase.supplier ? `${purchase.materialType} • ${purchase.supplier}` : purchase.materialType,
+      name: purchase.supplier ? `${purchase.materialType} - ${purchase.supplier}` : purchase.materialType,
       quantity: purchase.totalQuantity,
       category: inferCategory(purchase.materialType),
     }))
@@ -237,7 +237,7 @@ export const Analytics: React.FC = () => {
   const isBackendAnalytics = salesTrends.length > 0 || purchaseMetrics.length > 0 || movementMetrics.length > 0 || forecastResult || insights;
 
   const forecastDateRange = salesChartData.length > 0
-    ? `${salesChartData[0].month} – ${salesChartData[salesChartData.length - 1].month}`
+    ? `${salesChartData[0].month} - ${salesChartData[salesChartData.length - 1].month}`
     : 'No source period available';
 
   const fallbackForecastValue = salesChartData.length > 0
@@ -282,26 +282,26 @@ export const Analytics: React.FC = () => {
 
   const handleDatePill = (key: DateRange) => {
     setDateRange(key);
-    toast.info(isBackendAnalytics ? 'Analytics data comes from backend metrics; use backend report filters for exact periods.' : 'Backend unavailable — showing demo analytics fallback.');
+    toast.info(isBackendAnalytics ? 'Analytics data comes from backend metrics; use backend report filters for exact periods.' : 'Backend unavailable - showing demo analytics fallback.');
   };
 
   const renderMovingItems = (items: MovementDisplayItem[], tone: 'green' | 'yellow') => (
     <div className="space-y-3">
       {items.map((item, index) => (
-        <div key={`${item.name}-${index}`} className={`flex items-center justify-between p-3 ${tone === 'green' ? 'bg-green-50' : 'bg-yellow-50'} rounded-lg`}>
+        <div key={`${item.name}-${index}`} className={`flex items-center justify-between p-3 ${tone === 'green' ? 'bg-[var(--success-soft)]' : 'bg-accent-soft'} rounded-lg`}>
           <div className="flex items-center gap-3">
-            <span className={`w-8 h-8 ${tone === 'green' ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'} rounded-full flex items-center justify-center font-semibold text-sm`}>
+            <span className={`w-8 h-8 ${tone === 'green' ? 'bg-[var(--success-soft)] text-[var(--success)]' : 'bg-accent-soft text-accent'} rounded-full flex items-center justify-center font-semibold text-sm`}>
               {index + 1}
             </span>
-            <span className="font-medium text-gray-900">{item.name}</span>
+            <span className="font-medium text-text">{item.name}</span>
           </div>
           <div className="text-right">
-            <span className="text-sm text-gray-500">{item.stock} units</span>
+            <span className="text-sm text-text-muted">{item.stock} units</span>
             <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${
               item.status === 'backend'
-                ? 'bg-blue-100 text-blue-700'
+                ? 'bg-accent-soft text-accent'
                 : item.status === 'healthy'
-                  ? 'bg-green-100 text-green-700'
+                  ? 'bg-[var(--success-soft)] text-[var(--success)]'
                   : 'bg-red-100 text-red-700'
             }`}>
               {item.status === 'backend' ? 'backend' : item.status}
@@ -309,7 +309,7 @@ export const Analytics: React.FC = () => {
           </div>
         </div>
       ))}
-      {items.length === 0 && <p className="text-sm text-gray-500">No movement records available.</p>}
+      {items.length === 0 && <p className="text-sm text-text-muted">No movement records available.</p>}
     </div>
   );
 
@@ -318,11 +318,11 @@ export const Analytics: React.FC = () => {
         {/* Date range pills + page title */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-            <p className="text-sm text-gray-500 mt-1">Backend-assisted insights across inventory, sales, and demand.</p>
+            <h1 className="text-2xl font-bold text-text">Analytics</h1>
+            <p className="text-sm text-text-muted mt-1">Backend-assisted insights across inventory, sales, and demand.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2" aria-label="Date range">
-            <Calendar className="w-4 h-4 text-gray-400" aria-hidden="true" />
+            <Calendar className="w-4 h-4 text-text-subtle" aria-hidden="true" />
             {DATE_PILLS.map((pill) => (
               <button
                 key={pill.key}
@@ -330,8 +330,8 @@ export const Analytics: React.FC = () => {
                 onClick={() => handleDatePill(pill.key)}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                   dateRange === pill.key
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-accent text-accent-fg'
+                    : 'bg-surface-2 text-text-muted hover:bg-[var(--surface-3)]'
                 }`}
               >
                 {pill.label}
@@ -341,11 +341,11 @@ export const Analytics: React.FC = () => {
         </div>
 
         {(analyticsLoading || analyticsError) && (
-          <div className={`rounded-xl border p-4 ${analyticsError ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-blue-200 bg-blue-50 text-blue-800'}`}>
+          <div className={`rounded-xl border p-4 ${analyticsError ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-blue-200 bg-accent-soft text-blue-800'}`}>
             <div className="flex items-start gap-3">
               {analyticsLoading ? <RefreshCw className="mt-0.5 h-5 w-5 animate-spin" /> : <AlertTriangle className="mt-0.5 h-5 w-5" />}
               <div>
-                <p className="font-semibold">{analyticsLoading ? 'Loading backend analytics…' : 'Analytics fallback active'}</p>
+                <p className="font-semibold">{analyticsLoading ? 'Loading backend analytics...' : 'Analytics fallback active'}</p>
                 <p className="text-sm">{analyticsLoading ? 'Fetching sales trends, purchases, movement classifications, forecast, and recommendations.' : analyticsError}</p>
               </div>
             </div>
@@ -354,69 +354,69 @@ export const Analytics: React.FC = () => {
 
         {/* Key Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="panel p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Inventory Value</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(totalInventoryValue)}</p>
+                <p className="text-sm text-text-muted">Total Inventory Value</p>
+                <p className="text-2xl font-bold text-text mt-1">{formatCurrency(totalInventoryValue)}</p>
               </div>
               <div className="p-3 bg-green-100 rounded-xl">
-                <TrendingUp className="w-6 h-6 text-green-600" />
+                <TrendingUp className="w-6 h-6 text-[var(--success)]" />
               </div>
             </div>
-            <div className="flex items-center gap-1 mt-2 text-sm text-green-600">
+            <div className="flex items-center gap-1 mt-2 text-sm text-[var(--success)]">
               <ArrowUpRight className="w-4 h-4" />
               <span>Live inventory valuation</span>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="panel p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Sales Transactions</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{salesChartData.reduce((sum, point) => sum + point.orders, 0)}</p>
+                <p className="text-sm text-text-muted">Sales Transactions</p>
+                <p className="text-2xl font-bold text-text mt-1">{salesChartData.reduce((sum, point) => sum + point.orders, 0)}</p>
               </div>
               <div className="p-3 bg-blue-100 rounded-xl">
-                <Package className="w-6 h-6 text-blue-600" />
+                <Package className="w-6 h-6 text-accent" />
               </div>
             </div>
-            <div className="flex items-center gap-1 mt-2 text-sm text-blue-600">
+            <div className="flex items-center gap-1 mt-2 text-sm text-accent">
               <ArrowUpRight className="w-4 h-4" />
               <span>{salesTrends.length > 0 ? 'From backend sales trends' : 'Demo fallback'}</span>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="panel p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Gross Sales</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
+                <p className="text-sm text-text-muted">Gross Sales</p>
+                <p className="text-2xl font-bold text-text mt-1">
                   {formatCurrency(salesChartData.reduce((sum, point) => sum + point.sales, 0))}
                 </p>
               </div>
               <div className="p-3 bg-purple-100 rounded-xl">
-                <PieChart className="w-6 h-6 text-purple-600" />
+                <PieChart className="w-6 h-6 text-accent" />
               </div>
             </div>
-            <div className="flex items-center gap-1 mt-2 text-sm text-green-600">
+            <div className="flex items-center gap-1 mt-2 text-sm text-[var(--success)]">
               <ArrowUpRight className="w-4 h-4" />
               <span>{forecastDateRange}</span>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="panel p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Low Stock Items</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
+                <p className="text-sm text-text-muted">Low Stock Items</p>
+                <p className="text-2xl font-bold text-text mt-1">
                   {products.filter(p => checkStockStatus(p.stock, p.threshold) !== 'healthy').length}
                 </p>
               </div>
               <div className="p-3 bg-yellow-100 rounded-xl">
-                <AlertTriangle className="w-6 h-6 text-yellow-600" />
+                <AlertTriangle className="w-6 h-6 text-accent" />
               </div>
             </div>
-            <div className="flex items-center gap-1 mt-2 text-sm text-yellow-600">
+            <div className="flex items-center gap-1 mt-2 text-sm text-accent">
               <Clock className="w-4 h-4" />
               <span>Needs attention</span>
             </div>
@@ -426,13 +426,13 @@ export const Analytics: React.FC = () => {
         {/* Charts Row 1 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Monthly Sales Trend */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="panel p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Monthly Sales Trend</h3>
-                <p className="text-sm text-gray-500">Revenue over time {salesTrends.length > 0 ? 'from backend' : '(demo fallback)'}</p>
+                <h3 className="text-lg font-semibold text-text">Monthly Sales Trend</h3>
+                <p className="text-sm text-text-muted">Revenue over time {salesTrends.length > 0 ? 'from backend' : '(demo fallback)'}</p>
               </div>
-              <TrendingUp className="w-5 h-5 text-green-600" />
+              <TrendingUp className="w-5 h-5 text-[var(--success)]" />
             </div>
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={salesChartData}>
@@ -455,13 +455,13 @@ export const Analytics: React.FC = () => {
           </div>
 
           {/* Orders per Month */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="panel p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Transactions per Month</h3>
-                <p className="text-sm text-gray-500">Sales count tracking</p>
+                <h3 className="text-lg font-semibold text-text">Transactions per Month</h3>
+                <p className="text-sm text-text-muted">Sales count tracking</p>
               </div>
-              <Package className="w-5 h-5 text-primary-600" />
+              <Package className="w-5 h-5 text-accent" />
             </div>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={salesChartData}>
@@ -481,13 +481,13 @@ export const Analytics: React.FC = () => {
         {/* Charts Row 2 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Top Selling Items */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="panel p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Top Purchased Materials</h3>
-                <p className="text-sm text-gray-500">Annual material purchases {purchaseMetrics.length > 0 ? 'from backend' : '(demo fallback)'}</p>
+                <h3 className="text-lg font-semibold text-text">Top Purchased Materials</h3>
+                <p className="text-sm text-text-muted">Annual material purchases {purchaseMetrics.length > 0 ? 'from backend' : '(demo fallback)'}</p>
               </div>
-              <Package className="w-5 h-5 text-primary-600" />
+              <Package className="w-5 h-5 text-accent" />
             </div>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={topItems} layout="vertical">
@@ -505,13 +505,13 @@ export const Analytics: React.FC = () => {
           </div>
 
           {/* Stock Status Distribution */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="panel p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Stock Status</h3>
-                <p className="text-sm text-gray-500">Inventory health overview</p>
+                <h3 className="text-lg font-semibold text-text">Stock Status</h3>
+                <p className="text-sm text-text-muted">Inventory health overview</p>
               </div>
-              <AlertTriangle className="w-5 h-5 text-yellow-600" />
+              <AlertTriangle className="w-5 h-5 text-accent" />
             </div>
             <ResponsiveContainer width="100%" height={250}>
               <RechartsPieChart>
@@ -536,38 +536,38 @@ export const Analytics: React.FC = () => {
           </div>
 
           {/* Category Value */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="panel p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Category Value</h3>
-                <p className="text-sm text-gray-500">Inventory by category</p>
+                <h3 className="text-lg font-semibold text-text">Category Value</h3>
+                <p className="text-sm text-text-muted">Inventory by category</p>
               </div>
-              <PieChart className="w-5 h-5 text-purple-600" />
+              <PieChart className="w-5 h-5 text-accent" />
             </div>
             <div className="space-y-4 mt-4">
               <div>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-600">Glass Products</span>
-                  <span className="font-semibold text-gray-900">{formatCurrency(glassValue)}</span>
+                  <span className="text-text-muted">Glass Products</span>
+                  <span className="font-semibold text-text">{formatCurrency(glassValue)}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${categoryTotalValue > 0 ? (glassValue / categoryTotalValue) * 100 : 0}%` }} />
+                  <div className="bg-accent-soft0 h-2 rounded-full" style={{ width: `${categoryTotalValue > 0 ? (glassValue / categoryTotalValue) * 100 : 0}%` }} />
                 </div>
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-600">Aluminum Products</span>
-                  <span className="font-semibold text-gray-900">{formatCurrency(aluminumValue)}</span>
+                  <span className="text-text-muted">Aluminum Products</span>
+                  <span className="font-semibold text-text">{formatCurrency(aluminumValue)}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-green-500 h-2 rounded-full" style={{ width: `${categoryTotalValue > 0 ? (aluminumValue / categoryTotalValue) * 100 : 0}%` }} />
+                  <div className="bg-[var(--success-soft)]0 h-2 rounded-full" style={{ width: `${categoryTotalValue > 0 ? (aluminumValue / categoryTotalValue) * 100 : 0}%` }} />
                 </div>
               </div>
             </div>
-            <div className="mt-6 pt-4 border-t border-gray-100">
+            <div className="mt-6 pt-4 border-t border-border">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Total Products</span>
-                <span className="font-semibold text-gray-900">{products.length}</span>
+                <span className="text-text-muted">Total Products</span>
+                <span className="font-semibold text-text">{products.length}</span>
               </div>
             </div>
           </div>
@@ -576,28 +576,28 @@ export const Analytics: React.FC = () => {
         {/* Fast & Slow Moving Items */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Fast Moving Items */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="panel p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-green-100 rounded-lg">
-                <ArrowUpRight className="w-5 h-5 text-green-600" />
+                <ArrowUpRight className="w-5 h-5 text-[var(--success)]" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Fast Moving Classification</h3>
-                <p className="text-sm text-gray-500">Backend movement threshold: {MOVEMENT_THRESHOLD}</p>
+                <h3 className="text-lg font-semibold text-text">Fast Moving Classification</h3>
+                <p className="text-sm text-text-muted">Backend movement threshold: {MOVEMENT_THRESHOLD}</p>
               </div>
             </div>
             {renderMovingItems(displayedFastMovingItems, 'green')}
           </div>
 
           {/* Slow Moving Items */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="panel p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-yellow-100 rounded-lg">
-                <Clock className="w-5 h-5 text-yellow-600" />
+                <Clock className="w-5 h-5 text-accent" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Slow Moving Classification</h3>
-                <p className="text-sm text-gray-500">Low turnover periods from backend when available</p>
+                <h3 className="text-lg font-semibold text-text">Slow Moving Classification</h3>
+                <p className="text-sm text-text-muted">Low turnover periods from backend when available</p>
               </div>
             </div>
             {renderMovingItems(displayedSlowMovingItems, 'yellow')}
@@ -605,41 +605,41 @@ export const Analytics: React.FC = () => {
         </div>
 
         {/* Inventory Movement Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="panel p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Inventory Movement Summary</h3>
-              <p className="text-sm text-gray-500">Deterministic stock activity from live orders/products</p>
+              <h3 className="text-lg font-semibold text-text">Inventory Movement Summary</h3>
+              <p className="text-sm text-text-muted">Deterministic stock activity from live orders/products</p>
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-surface-2 border-b border-border">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Product</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Category</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Estimated Inward</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Outward</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Balance</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase">Product</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase">Category</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-text-muted uppercase">Estimated Inward</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-text-muted uppercase">Outward</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-text-muted uppercase">Balance</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-border">
                 {inventoryMovements.map((item) => (
-                  <tr key={item.productId} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-900 font-medium">{item.productName}</td>
+                  <tr key={item.productId} className="hover:bg-surface-2">
+                    <td className="px-4 py-3 text-sm text-text font-medium">{item.productName}</td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded text-xs font-medium capitalize ${item.category === 'glass' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                      <span className={`px-2 py-1 rounded text-xs font-medium capitalize ${item.category === 'glass' ? 'bg-accent-soft text-accent' : 'bg-[var(--success-soft)] text-[var(--success)]'}`}>
                         {item.category}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right text-sm text-green-600 font-medium">{item.inward}</td>
+                    <td className="px-4 py-3 text-right text-sm text-[var(--success)] font-medium">{item.inward}</td>
                     <td className="px-4 py-3 text-right text-sm text-red-600 font-medium">{item.outward}</td>
-                    <td className="px-4 py-3 text-right text-sm font-medium text-gray-900">{item.balance}</td>
+                    <td className="px-4 py-3 text-right text-sm font-medium text-text">{item.balance}</td>
                   </tr>
                 ))}
                 {inventoryMovements.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">No live product movement data available.</td>
+                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-text-muted">No live product movement data available.</td>
                   </tr>
                 )}
               </tbody>
@@ -648,94 +648,94 @@ export const Analytics: React.FC = () => {
         </div>
 
         {/* AI-Powered Demand Forecasting */}
-        <div className="bg-gradient-to-r from-violet-50 to-indigo-50 rounded-xl border border-violet-100 p-6">
+        <div className="bg-gradient-to-r from-[var(--accent-softer)] to-[var(--surface)] rounded-xl border border-border p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-violet-100 rounded-lg">
-                <Brain className="w-6 h-6 text-violet-600" />
+                <Brain className="w-6 h-6 text-accent" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-text flex items-center gap-2">
                   SES Demand Forecast
                   <span className="px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">Planning Signal</span>
                 </h3>
-                <p className="text-sm text-gray-600">Forecast result from backend simple exponential smoothing when available.</p>
+                <p className="text-sm text-text-muted">Forecast result from backend simple exponential smoothing when available.</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
+            <div className="flex items-center gap-2 text-sm text-text-muted">
               <Sparkles className="w-4 h-4" />
               <span>{forecastResult ? 'Backend forecast' : 'Fallback estimate'}</span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-6">
-            <div className="rounded-lg bg-white p-4 border border-violet-100">
+            <div className="rounded-lg bg-white p-4 border border-border">
               <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Forecasted transactions</p>
-              <p className="mt-2 text-3xl font-bold text-gray-900">{Math.round(displayedForecast)}</p>
-              <p className="mt-1 text-xs text-gray-500">Next-period SES value</p>
+              <p className="mt-2 text-3xl font-bold text-text">{Math.round(displayedForecast)}</p>
+              <p className="mt-1 text-xs text-text-muted">Next-period SES value</p>
             </div>
-            <div className="rounded-lg bg-white p-4 border border-violet-100">
+            <div className="rounded-lg bg-white p-4 border border-border">
               <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Date range</p>
-              <p className="mt-2 text-lg font-semibold text-gray-900">{forecastDateRange}</p>
-              <p className="mt-1 text-xs text-gray-500">Source quantities: monthly transaction counts</p>
+              <p className="mt-2 text-lg font-semibold text-text">{forecastDateRange}</p>
+              <p className="mt-1 text-xs text-text-muted">Source quantities: monthly transaction counts</p>
             </div>
-            <div className="rounded-lg bg-white p-4 border border-violet-100">
+            <div className="rounded-lg bg-white p-4 border border-border">
               <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Smoothing alpha</p>
-              <p className="mt-2 text-3xl font-bold text-gray-900">{displayedAlpha.toFixed(2)}</p>
-              <p className="mt-1 text-xs text-gray-500">Recommendation only, not custom-trained ML</p>
+              <p className="mt-2 text-3xl font-bold text-text">{displayedAlpha.toFixed(2)}</p>
+              <p className="mt-1 text-xs text-text-muted">Recommendation only, not custom-trained ML</p>
             </div>
           </div>
 
           {/* AI Recommendations */}
           <div>
-            <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <h4 className="font-semibold text-text mb-3 flex items-center gap-2">
               <Zap className="w-4 h-4 text-yellow-500" />
-              AI Recommendations — recommendation only / planning signal
+              AI Recommendations - recommendation only / planning signal
             </h4>
-            <p className="mb-3 text-xs text-gray-600">
+            <p className="mb-3 text-xs text-text-muted">
               These notes are decision-support signals from backend analytics ({insights?.source ?? 'demo fallback'}), not a custom-trained machine-learning model.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {insights ? (
                 <>
-                  <div className="bg-white rounded-lg p-3 border border-violet-100 md:col-span-2">
+                  <div className="bg-white rounded-lg p-3 border border-border md:col-span-2">
                     <div className="flex items-start justify-between mb-1">
-                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">{insights.confidence} confidence</span>
-                      <span className="text-xs text-gray-500">{insights.source}</span>
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-accent-soft text-accent">{insights.confidence} confidence</span>
+                      <span className="text-xs text-text-muted">{insights.source}</span>
                     </div>
-                    <p className="text-sm font-medium text-gray-900">Analytics Summary</p>
-                    <p className="text-xs text-gray-600 mt-1">{insights.summary}</p>
+                    <p className="text-sm font-medium text-text">Analytics Summary</p>
+                    <p className="text-xs text-text-muted mt-1">{insights.summary}</p>
                   </div>
                   {insights.recommendations.slice(0, 3).map((recommendation, index) => (
-                    <div key={`recommendation-${index}`} className="bg-white rounded-lg p-3 border border-violet-100">
+                    <div key={`recommendation-${index}`} className="bg-white rounded-lg p-3 border border-border">
                       <span className="px-2 py-0.5 rounded text-xs font-medium bg-violet-100 text-violet-700">recommendation only</span>
-                      <p className="text-sm font-medium text-gray-900 mt-2">Planning recommendation {index + 1}</p>
-                      <p className="text-xs text-gray-600 mt-1">{recommendation}</p>
+                      <p className="text-sm font-medium text-text mt-2">Planning recommendation {index + 1}</p>
+                      <p className="text-xs text-text-muted mt-1">{recommendation}</p>
                     </div>
                   ))}
                   {insights.risks.slice(0, 2).map((risk, index) => (
                     <div key={`risk-${index}`} className="bg-white rounded-lg p-3 border border-amber-100">
                       <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">risk signal</span>
-                      <p className="text-sm font-medium text-gray-900 mt-2">Risk {index + 1}</p>
-                      <p className="text-xs text-gray-600 mt-1">{risk}</p>
+                      <p className="text-sm font-medium text-text mt-2">Risk {index + 1}</p>
+                      <p className="text-xs text-text-muted mt-1">{risk}</p>
                     </div>
                   ))}
                 </>
               ) : (
                 mockAIRecommendations.slice(0, 4).map((rec) => (
-                  <div key={rec.id} className="bg-white rounded-lg p-3 border border-violet-100">
+                  <div key={rec.id} className="bg-white rounded-lg p-3 border border-border">
                     <div className="flex items-start justify-between mb-1">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                         rec.priority === 'high' ? 'bg-red-100 text-red-700' :
-                        rec.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-blue-100 text-blue-700'
+                        rec.priority === 'medium' ? 'bg-accent-soft text-accent' :
+                        'bg-accent-soft text-accent'
                       }`}>
                         {rec.priority} priority
                       </span>
-                      <span className="text-xs text-gray-500">recommendation only</span>
+                      <span className="text-xs text-text-muted">recommendation only</span>
                     </div>
-                    <p className="text-sm font-medium text-gray-900">{rec.title}</p>
-                    <p className="text-xs text-gray-600 mt-1">{rec.description}</p>
+                    <p className="text-sm font-medium text-text">{rec.title}</p>
+                    <p className="text-xs text-text-muted mt-1">{rec.description}</p>
                   </div>
                 ))
               )}

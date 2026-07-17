@@ -82,35 +82,35 @@ const TrackingPage: React.FC = () => {
 
   const getPaymentStatusColor = (status: string) => {
     switch (status) {
-      case 'paid': return 'bg-green-100 text-green-700';
-      case 'partial': return 'bg-yellow-100 text-yellow-700';
-      case 'unpaid': return 'bg-gray-100 text-gray-700';
+      case 'paid': return 'bg-[var(--success-soft)] text-[var(--success)]';
+      case 'partial': return 'bg-accent-soft text-accent';
+      case 'unpaid': return 'bg-gray-100 text-text-muted';
       case 'refunded': return 'bg-red-100 text-red-700';
-      default: return 'bg-gray-100 text-gray-700';
+      default: return 'bg-gray-100 text-text-muted';
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-12 px-4">
+    <div className="min-min-h-[100dvh] bg-gradient-to-br from-slate-50 to-blue-50 py-12 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
             <Package className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Track Your Order</h1>
-          <p className="text-gray-600">Enter your reference number to track your order status</p>
+          <h1 className="text-3xl font-bold text-text mb-2">Track Your Order</h1>
+          <p className="text-text-muted">Enter your reference number to track your order status</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-subtle" />
               <input
                 type="text"
                 value={referenceNumber}
                 onChange={(e) => setReferenceNumber(e.target.value)}
                 placeholder="Enter reference number (e.g., SS-2026-00001)"
-                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                className="w-full pl-12 pr-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
             </div>
@@ -130,8 +130,8 @@ const TrackingPage: React.FC = () => {
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">Order Details</h2>
-                  <p className="text-sm text-gray-500">Reference: {order.referenceNumber}</p>
+                  <h2 className="text-xl font-bold text-text">Order Details</h2>
+                  <p className="text-sm text-text-muted">Reference: {order.referenceNumber}</p>
                 </div>
                 <span className={`px-4 py-2 rounded-full font-medium ${getPaymentStatusColor(order.paymentStatus)}`}>
                   {order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1)}
@@ -139,51 +139,51 @@ const TrackingPage: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-                  <User className="w-5 h-5 text-blue-600" />
+                <div className="flex items-center gap-3 p-4 bg-surface-2 rounded-xl">
+                  <User className="w-5 h-5 text-accent" />
                   <div>
-                    <p className="text-xs text-gray-500">Customer</p>
-                    <p className="font-medium text-gray-900">{order.customerName}</p>
+                    <p className="text-xs text-text-muted">Customer</p>
+                    <p className="font-medium text-text">{order.customerName}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-                  <Clock className="w-5 h-5 text-blue-600" />
+                <div className="flex items-center gap-3 p-4 bg-surface-2 rounded-xl">
+                  <Clock className="w-5 h-5 text-accent" />
                   <div>
-                    <p className="text-xs text-gray-500">Delivery Date</p>
-                    <p className="font-medium text-gray-900">{order.deliveryDate}</p>
+                    <p className="text-xs text-text-muted">Delivery Date</p>
+                    <p className="font-medium text-text">{order.deliveryDate}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl md:col-span-2">
-                  <Home className="w-5 h-5 text-blue-600" />
+                <div className="flex items-center gap-3 p-4 bg-surface-2 rounded-xl md:col-span-2">
+                  <Home className="w-5 h-5 text-accent" />
                   <div>
-                    <p className="text-xs text-gray-500">Delivery Area</p>
-                    <p className="font-medium text-gray-900">{order.deliveryAddress}</p>
+                    <p className="text-xs text-text-muted">Delivery Area</p>
+                    <p className="font-medium text-text">{order.deliveryAddress}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="border-t border-gray-100 pt-4">
-                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <div className="border-t border-border pt-4">
+                <h3 className="font-semibold text-text mb-3 flex items-center gap-2">
                   <ShoppingBag className="w-4 h-4" />
                   Order Items
                 </h3>
                 <div className="space-y-2">
                   {order.items.map((item, index) => (
-                    <div key={`${item.name}-${index}`} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <div key={`${item.name}-${index}`} className="flex justify-between items-center p-3 bg-surface-2 rounded-lg">
                       <div>
-                        <p className="font-medium text-gray-900">{item.name}</p>
-                        <p className="text-sm text-gray-500">Qty: {item.quantity} × {formatCurrency(item.unitPrice)}</p>
+                        <p className="font-medium text-text">{item.name}</p>
+                        <p className="text-sm text-text-muted">Qty: {item.quantity} × {formatCurrency(item.unitPrice)}</p>
                       </div>
-                      <span className="font-semibold text-gray-900">{formatCurrency(item.lineTotal)}</span>
+                      <span className="font-semibold text-text">{formatCurrency(item.lineTotal)}</span>
                     </div>
                   ))}
                 </div>
-                <div className="flex justify-between items-center mt-4 p-4 bg-blue-50 rounded-xl">
-                  <span className="font-semibold text-gray-900">Total Amount</span>
-                  <span className="text-xl font-bold text-blue-600">{formatCurrency(order.total)}</span>
+                <div className="flex justify-between items-center mt-4 p-4 bg-accent-soft rounded-xl">
+                  <span className="font-semibold text-text">Total Amount</span>
+                  <span className="text-xl font-bold text-accent">{formatCurrency(order.total)}</span>
                 </div>
                 {order.paymentStatus !== 'paid' && (
-                  <div className="mt-3 p-3 bg-yellow-50 rounded-lg flex justify-between items-center">
+                  <div className="mt-3 p-3 bg-accent-soft rounded-lg flex justify-between items-center">
                     <span className="text-sm text-yellow-800">Paid Amount</span>
                     <span className="font-semibold text-yellow-800">{formatCurrency(order.paidAmount)}</span>
                   </div>
@@ -192,7 +192,7 @@ const TrackingPage: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-2xl shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Order Progress</h3>
+              <h3 className="text-lg font-semibold text-text mb-6">Order Progress</h3>
               <div className="flex items-center justify-between relative">
                 <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-200 -translate-y-1/2" />
                 <div
@@ -207,12 +207,12 @@ const TrackingPage: React.FC = () => {
                   return (
                     <div key={step.key} className="relative flex flex-col items-center z-10">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
-                        isCompleted ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-400'
+                        isCompleted ? 'bg-blue-600 text-white' : 'bg-gray-200 text-text-subtle'
                       }`}>
                         {isCompleted ? <CheckCircle className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
                       </div>
                       <p className={`mt-2 text-xs font-medium text-center ${
-                        isCurrent ? 'text-blue-600' : isCompleted ? 'text-gray-900' : 'text-gray-400'
+                        isCurrent ? 'text-accent' : isCompleted ? 'text-text' : 'text-text-subtle'
                       }`}>
                         {step.label}
                       </p>
@@ -221,9 +221,9 @@ const TrackingPage: React.FC = () => {
                 })}
               </div>
 
-              <div className="mt-8 p-4 bg-blue-50 rounded-xl text-center">
-                <p className="text-sm text-blue-600 mb-1">Current Status</p>
-                <p className="text-lg font-bold text-blue-900">{statusText[order.orderStatus]}</p>
+              <div className="mt-8 p-4 bg-accent-soft rounded-xl text-center">
+                <p className="text-sm text-accent mb-1">Current Status</p>
+                <p className="text-lg font-bold text-text">{statusText[order.orderStatus]}</p>
               </div>
             </div>
           </div>
@@ -231,12 +231,12 @@ const TrackingPage: React.FC = () => {
 
         {!order && !loading && (
           <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-            <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">How to Track Your Order</h3>
-            <p className="text-gray-600 mb-4">
+            <Search className="w-12 h-12 text-text-subtle mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-text mb-2">How to Track Your Order</h3>
+            <p className="text-text-muted mb-4">
               Enter the reference number from your order confirmation. You can find it in:
             </p>
-            <ul className="text-left text-gray-600 space-y-2 max-w-md mx-auto">
+            <ul className="text-left text-text-muted space-y-2 max-w-md mx-auto">
               <li className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-green-500" />
                 Your order confirmation email
