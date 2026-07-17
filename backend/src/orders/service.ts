@@ -5,6 +5,7 @@
  * Last touched: 2026-07-17
  */
 
+import { sendNotificationEvent } from '../notifications/webhook.js';
 import {
   applyPayment,
   applyRefund,
@@ -177,8 +178,25 @@ export function addOrderRecord(body: unknown): ServiceResult<Order> {
 export function editOrderRecord(id: string, body: unknown): ServiceResult<Order> {
   const parsed = parseUpdate(body);
   if (!parsed.ok) return parsed;
+  const current = findOrderById(id);
+  if (!current) return { ok: false, status: 404, error: 'order not found' };
   const order = updateOrder(id, parsed.data);
   if (!order) return { ok: false, status: 404, error: 'order not found' };
+  if (parsed.data.orderStatus !== undefined && current.orderStatus !== order.orderStatus) {
+    void sendNotificationEvent({
+      type: 'order.status_changed',
+      occurredAt: new Date().toISOString(),
+      data: {
+        orderId: order.id,
+        referenceNumber: order.referenceNumber,
+        previousStatus: current.orderStatus,
+        status: order.orderStatus,
+      },
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : 'unknown notification error';
+      console.warn(`[notifications] order status event failed: ${message}`);
+    });
+  }
   return { ok: true, data: order };
 }
 

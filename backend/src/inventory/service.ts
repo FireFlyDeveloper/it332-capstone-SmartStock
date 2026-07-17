@@ -5,6 +5,7 @@
  * Last touched: 2026-07-07
  */
 
+import { sendNotificationEvent } from '../notifications/webhook.js';
 import {
   createProduct,
   deleteProduct,
@@ -248,6 +249,24 @@ export function addInboundStockRecord(id: string, body: unknown): ServiceResult<
   if (!parsed.ok) return parsed;
   try {
     const result = recordInboundStock(id, parsed.data);
+    if (result && result.product.stock <= result.product.threshold) {
+      void sendNotificationEvent({
+        type: 'inventory.low_stock',
+        occurredAt: new Date().toISOString(),
+        data: {
+          productId: result.product.id,
+          sku: result.product.sku,
+          name: result.product.name,
+          stock: result.product.stock,
+          threshold: result.product.threshold,
+          movementId: result.movement.id,
+          movementType: result.movement.type,
+        },
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : 'unknown notification error';
+        console.warn(`[notifications] low-stock event failed: ${message}`);
+      });
+    }
     return result ? { ok: true, data: result } : { ok: false, status: 404, error: 'product not found' };
   } catch (error) {
     return { ok: false, status: 409, error: error instanceof Error ? error.message : 'stock movement conflict' };
@@ -259,6 +278,24 @@ export function addOutboundStockRecord(id: string, body: unknown): ServiceResult
   if (!parsed.ok) return parsed;
   try {
     const result = recordOutboundStock(id, parsed.data);
+    if (result && result.product.stock <= result.product.threshold) {
+      void sendNotificationEvent({
+        type: 'inventory.low_stock',
+        occurredAt: new Date().toISOString(),
+        data: {
+          productId: result.product.id,
+          sku: result.product.sku,
+          name: result.product.name,
+          stock: result.product.stock,
+          threshold: result.product.threshold,
+          movementId: result.movement.id,
+          movementType: result.movement.type,
+        },
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : 'unknown notification error';
+        console.warn(`[notifications] low-stock event failed: ${message}`);
+      });
+    }
     return result ? { ok: true, data: result } : { ok: false, status: 404, error: 'product not found' };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'stock movement conflict';
