@@ -4,6 +4,7 @@ import { authRoutes } from './auth/routes.js'
 import { inventoryRoutes } from './inventory/routes.js'
 import { deliveryRoutes } from './delivery/routes.js'
 import { orderRoutes } from './orders/routes.js'
+import { trackingRoutes } from './tracking/routes.js'
 import { getDatabaseHealth } from './db/health.js'
 
 export const app = new Hono()
@@ -16,6 +17,7 @@ app.route('/products', inventoryRoutes)
 app.route('/inventory', inventoryRoutes)
 app.route('/deliveries', deliveryRoutes)
 app.route('/orders', orderRoutes)
+app.route('/tracking', trackingRoutes)
 
 const port = Number(process.env.PORT) || 3000
 console.log(`Server running on http://localhost:${port}`)

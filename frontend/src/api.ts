@@ -28,17 +28,22 @@ export interface ApiError extends Error {
   status: number
 }
 
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+export interface ApiFetchInit extends RequestInit {
+  auth?: boolean
+}
+
+export async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promise<T> {
+  const { auth = true, ...requestInit } = init
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(init.headers as Record<string, string> | undefined),
+    ...(requestInit.headers as Record<string, string> | undefined),
   }
-  if (authToken && !headers['Authorization']) {
+  if (auth && authToken && !headers['Authorization']) {
     headers['Authorization'] = `Bearer ${authToken}`
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
+    ...requestInit,
     headers,
   })
   if (!res.ok) {
