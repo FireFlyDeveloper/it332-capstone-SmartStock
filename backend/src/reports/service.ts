@@ -93,3 +93,9 @@ export function buildSpendingReport(year = currentUtcYear()) {
     rows,
   };
 }
+
+export type ReportDto =
+  | ReturnType<typeof buildMonthlySalesReport>
+  | ReturnType<typeof buildAnnualPurchasesReport>
+  | ReturnType<typeof buildInventoryEvaluationReport>
+  | ReturnType<typeof buildSpendingReport>;

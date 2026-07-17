@@ -181,4 +181,37 @@ describe('reports routes', () => {
       ],
     });
   });
+
+  it('exports PDF reports for admin with download headers and a PDF signature', async () => {
+    const res = await authedRequest(app, '/reports/export?type=sales&format=pdf', ADMIN);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/pdf');
+    expect(res.headers.get('content-disposition')).toBe('attachment; filename="smartstock-sales-report.pdf"');
+
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(bytes.length).toBeGreaterThan(100);
+    expect(Buffer.from(bytes.subarray(0, 4)).toString('utf8')).toBe('%PDF');
+  });
+
+  it('exports XLSX reports for admin with download headers and a non-empty workbook', async () => {
+    const res = await authedRequest(app, '/reports/export?type=inventory&format=xlsx', ADMIN);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    expect(res.headers.get('content-disposition')).toBe('attachment; filename="smartstock-inventory-report.xlsx"');
+
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(bytes.length).toBeGreaterThan(100);
+    expect(Buffer.from(bytes.subarray(0, 2)).toString('utf8')).toBe('PK');
+  });
+
+  it('blocks staff from PDF and XLSX exports while preserving JSON report access', async () => {
+    const json = await authedRequest(app, '/reports/sales/monthly', STAFF);
+    expect(json.status).toBe(200);
+
+    const pdf = await authedRequest(app, '/reports/export?type=sales&format=pdf', STAFF);
+    expect(pdf.status).toBe(403);
+
+    const xlsx = await authedRequest(app, '/reports/export?type=sales&format=xlsx', STAFF);
+    expect(xlsx.status).toBe(403);
+  });
 });

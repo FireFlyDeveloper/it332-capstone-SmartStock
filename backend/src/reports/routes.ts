@@ -6,13 +6,16 @@
  */
 
 import { Hono } from 'hono';
-import { requireAuth } from '../auth/middleware.js';
+import { requireAuth, requireRole } from '../auth/middleware.js';
 import {
   buildAnnualPurchasesReport,
   buildInventoryEvaluationReport,
   buildMonthlySalesReport,
   buildSpendingReport,
+  type ReportDto,
 } from './service.js';
+import { exportReportPdf } from './exporters/pdf.js';
+import { exportReportXlsx } from './exporters/xlsx.js';
 
 export const reportsRoutes = new Hono();
 
@@ -26,6 +29,44 @@ function parseYear(rawYear: string | undefined): { ok: true; year: number | unde
   }
   return { ok: true, year };
 }
+
+type ExportType = 'sales' | 'purchases' | 'inventory' | 'spending';
+type ExportFormat = 'pdf' | 'xlsx';
+
+function filenameFor(type: ExportType, format: ExportFormat): string {
+  return `smartstock-${type}-report.${format}`;
+}
+
+function buildReportForType(type: ExportType): ReportDto {
+  switch (type) {
+    case 'sales': return buildMonthlySalesReport();
+    case 'purchases': return buildAnnualPurchasesReport();
+    case 'inventory': return buildInventoryEvaluationReport();
+    case 'spending': return buildSpendingReport();
+  }
+}
+
+reportsRoutes.get('/export', requireRole('admin'), async (c) => {
+  const type = c.req.query('type');
+  const format = c.req.query('format');
+  if (type !== 'sales' && type !== 'purchases' && type !== 'inventory' && type !== 'spending') {
+    return c.json({ error: 'type must be one of sales, purchases, inventory, spending' }, 400);
+  }
+  if (format !== 'pdf' && format !== 'xlsx') return c.json({ error: 'format must be pdf or xlsx' }, 400);
+
+  const buffer = format === 'pdf'
+    ? await exportReportPdf(buildReportForType(type))
+    : await exportReportXlsx(buildReportForType(type));
+  const contentType = format === 'pdf'
+    ? 'application/pdf'
+    : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  return new Response(new Uint8Array(buffer), {
+    headers: {
+      'content-type': contentType,
+      'content-disposition': `attachment; filename="${filenameFor(type, format)}"`,
+    },
+  });
+});
 
 reportsRoutes.get('/sales/monthly', (c) => c.json(buildMonthlySalesReport()));
 

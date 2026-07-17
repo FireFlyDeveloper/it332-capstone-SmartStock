@@ -32,33 +32,53 @@ export interface ApiFetchInit extends RequestInit {
   auth?: boolean
 }
 
-export async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promise<T> {
-  const { auth = true, ...requestInit } = init
+function buildAuthHeaders(initHeaders: HeadersInit | undefined, includeJson: boolean): Record<string, string> {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(requestInit.headers as Record<string, string> | undefined),
+    ...(includeJson ? { 'Content-Type': 'application/json' } : {}),
+    ...(initHeaders as Record<string, string> | undefined),
   }
-  if (auth && authToken && !headers['Authorization']) {
+  if (authToken && !headers['Authorization']) {
     headers['Authorization'] = `Bearer ${authToken}`
   }
+  return headers
+}
+
+async function raiseApiError(res: Response): Promise<never> {
+  let message = `Request failed: ${res.status}`
+  try {
+    const body = (await res.json()) as { error?: string }
+    if (body.error) message = body.error
+  } catch {
+    /* ignore parse failure */
+  }
+  const err = new Error(message) as ApiError
+  err.status = res.status
+  throw err
+}
+
+export async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promise<T> {
+  const { auth = true, ...requestInit } = init
+  const headers = auth
+    ? buildAuthHeaders(requestInit.headers, true)
+    : { 'Content-Type': 'application/json', ...(requestInit.headers as Record<string, string> | undefined) }
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...requestInit,
     headers,
   })
-  if (!res.ok) {
-    let message = `Request failed: ${res.status}`
-    try {
-      const body = (await res.json()) as { error?: string }
-      if (body.error) message = body.error
-    } catch {
-      /* ignore parse failure */
-    }
-    const err = new Error(message) as ApiError
-    err.status = res.status
-    throw err
-  }
+  if (!res.ok) await raiseApiError(res)
   return res.json() as Promise<T>
+}
+
+export async function apiFetchBlob(path: string, init: ApiFetchInit = {}): Promise<Response> {
+  const { auth = true, ...requestInit } = init
+  const headers = auth ? buildAuthHeaders(requestInit.headers, false) : requestInit.headers
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...requestInit,
+    headers,
+  })
+  if (!res.ok) await raiseApiError(res)
+  return res
 }
 
 export interface AnalyticsSalesTrend {

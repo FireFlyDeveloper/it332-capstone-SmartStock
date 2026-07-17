@@ -15,6 +15,7 @@ import {
 import { useData } from '../components/DataContext';
 import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
 import { toast } from 'sonner';
+import { apiFetchBlob, type ApiError } from '../api';
 
 // Last touched: 2026-07-07 (round 2 — demo polish)
 type DateRange = '7d' | '30d' | 'all';
@@ -92,8 +93,32 @@ export const Reports: React.FC = () => {
     window.print();
   };
 
-  const handleExport = () => {
-    toast.info('Export functionality - would download CSV/PDF');
+  const handleExport = async (format: 'pdf' | 'xlsx') => {
+    const label = format.toUpperCase();
+    toast.info(`Preparing ${label} export…`);
+    try {
+      const response = await apiFetchBlob(`/reports/export?type=sales&format=${format}`);
+      const blob = await response.blob();
+      const fallbackName = `smartstock-sales-report.${format}`;
+      const disposition = response.headers.get('content-disposition') ?? '';
+      const filename = disposition.match(/filename="?([^";]+)"?/)?.[1] ?? fallbackName;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`${label} report downloaded.`);
+    } catch (error) {
+      const apiError = error as ApiError;
+      if (apiError.status === 403) {
+        toast.error('Only admins can export PDF/XLSX reports.');
+      } else {
+        toast.error(apiError.message || `Failed to export ${label} report.`);
+      }
+    }
   };
 
   const handleDatePill = (key: DateRange) => {
@@ -167,11 +192,18 @@ export const Reports: React.FC = () => {
 
           <div className="flex gap-3">
             <button
-              onClick={handleExport}
+              onClick={() => void handleExport('pdf')}
               className="btn-secondary flex items-center gap-2"
             >
               <Download className="w-5 h-5" />
-              Export
+              PDF
+            </button>
+            <button
+              onClick={() => void handleExport('xlsx')}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Download className="w-5 h-5" />
+              XLSX
             </button>
             <button
               onClick={handlePrint}
