@@ -7,6 +7,7 @@
 
 import { Hono } from 'hono';
 import { requireAuth } from '../auth/middleware.js';
+import { getAnalyticsInsight } from '../ai/insights.js';
 import {
   getAnnualPurchases,
   getForecast,
@@ -36,6 +37,20 @@ analyticsRoutes.get('/movement', (c) => {
     return c.json({ error: 'threshold must be a non-negative number' }, 400);
   }
   return c.json(getMovementClassification(threshold));
+});
+
+analyticsRoutes.get('/insights', async (c) => {
+  const rawYear = c.req.query('year');
+  const rawThreshold = c.req.query('threshold');
+  const year = rawYear === undefined ? undefined : Number(rawYear);
+  const threshold = rawThreshold === undefined ? undefined : Number(rawThreshold);
+  if (year !== undefined && (!Number.isInteger(year) || year < 1900 || year > 3000)) {
+    return c.json({ error: 'year must be an integer between 1900 and 3000' }, 400);
+  }
+  if (threshold !== undefined && (!Number.isFinite(threshold) || threshold < 0)) {
+    return c.json({ error: 'threshold must be a non-negative number' }, 400);
+  }
+  return c.json(await getAnalyticsInsight({ year, threshold }));
 });
 
 analyticsRoutes.post('/forecast', async (c) => {
