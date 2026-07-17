@@ -20,7 +20,7 @@ import {
 } from 'react'
 import { apiFetch } from '../api'
 import { generateId } from '../utils/helpers'
-import type { Delivery, Order, Product } from '../types'
+import type { Delivery, Order, Product, StockMovement } from '../types'
 
 interface DataContextValue {
   // Data
@@ -41,6 +41,7 @@ interface DataContextValue {
   updateProduct: (id: string, product: Partial<Product>) => Promise<void>
   deleteProduct: (id: string) => Promise<void>
   restockProduct: (id: string, quantity: number) => Promise<void>
+  listProductMovements: (id: string) => Promise<StockMovement[]>
 
   // Order mutators
   addOrder: (order: Omit<Order, 'id' | 'createdAt' | 'referenceNumber'>) => Promise<void>
@@ -165,21 +166,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const target = products.find((p) => p.id === id)
       if (!target) return
       const newStock = target.stock + quantity
-      // Optimistic update; if PUT /products/:id isn't available, at least the
-      // UI updates immediately.
       setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, stock: newStock } : p)))
       try {
-        const updated = await apiFetch<Product>(`/products/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ stock: newStock }),
+        const result = await apiFetch<{ product: Product; movement: StockMovement }>(`/products/${id}/stock/inbound`, {
+          method: 'POST',
+          body: JSON.stringify({
+            quantity,
+            referenceNo: `RESTOCK-${Date.now()}-${id.slice(0, 8)}`,
+            supplier: 'Manual restock',
+          }),
         })
-        setProducts((prev) => prev.map((p) => (p.id === id ? updated : p)))
-      } catch {
-        // TODO(backend): add POST /products/:id/restock endpoint.
+        setProducts((prev) => prev.map((p) => (p.id === id ? result.product : p)))
+      } catch (err) {
+        await refreshProducts()
+        throw err
       }
     },
-    [products],
+    [products, refreshProducts],
   )
+
+  const listProductMovements = useCallback(async (id: string) => {
+    return apiFetch<StockMovement[]>(`/products/${id}/movements`)
+  }, [])
 
   // ── Order mutators ────────────────────────────────────────────────
   const addOrder = useCallback(
@@ -287,6 +295,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       updateProduct,
       deleteProduct,
       restockProduct,
+      listProductMovements,
       addOrder,
       updateOrder,
       processPayment,
@@ -307,6 +316,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       updateProduct,
       deleteProduct,
       restockProduct,
+      listProductMovements,
       addOrder,
       updateOrder,
       processPayment,

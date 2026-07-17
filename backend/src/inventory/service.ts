@@ -9,13 +9,19 @@ import {
   createProduct,
   deleteProduct,
   findProductById,
+  listLowStockProducts,
+  listProductMovements,
   listProducts,
+  recordInboundStock,
+  recordOutboundStock,
   updateProduct,
   type Product,
   type ProductCategory,
   type ProductCreateInput,
   type ProductStatus,
   type ProductUpdateInput,
+  type StockMovement,
+  type StockMovementInput,
 } from './store.js';
 
 type ServiceResult<T> = { ok: true; data: T } | { ok: false; status: 400 | 404 | 409; error: string };
@@ -42,6 +48,13 @@ function readNumber(value: unknown, field: string, required = true): ServiceResu
   }
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
     return { ok: false, status: 400, error: `${field} must be a non-negative number` };
+  }
+  return { ok: true, data: value };
+}
+
+function readPositiveNumber(value: unknown, field: string): ServiceResult<number> {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return { ok: false, status: 400, error: `${field} must be greater than zero` };
   }
   return { ok: true, data: value };
 }
@@ -151,6 +164,41 @@ function parseUpdate(body: unknown): ServiceResult<ProductUpdateInput> {
   return { ok: true, data };
 }
 
+function parseDate(value: unknown): ServiceResult<string | undefined> {
+  if (value === undefined || value === null) return { ok: true, data: undefined };
+  if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) {
+    return { ok: false, status: 400, error: 'occurredAt must be a valid date' };
+  }
+  return { ok: true, data: new Date(value).toISOString() };
+}
+
+function parseStockMovement(body: unknown, type: 'inbound' | 'outbound'): ServiceResult<StockMovementInput> {
+  if (typeof body !== 'object' || body === null) return { ok: false, status: 400, error: 'invalid body' };
+  const input = body as Record<string, unknown>;
+  const quantity = readPositiveNumber(input.quantity, 'quantity');
+  if (!quantity.ok) return quantity;
+  const referenceNo = readString(input.referenceNo, 'referenceNo');
+  if (!referenceNo.ok) return referenceNo;
+  const occurredAt = parseDate(input.occurredAt);
+  if (!occurredAt.ok) return occurredAt;
+  const createdBy = readString(input.createdBy, 'createdBy', false);
+  if (!createdBy.ok) return createdBy;
+  const supplier = readString(input.supplier, 'supplier', type === 'inbound');
+  if (!supplier.ok) return supplier;
+
+  if (referenceNo.data === undefined) return { ok: false, status: 400, error: 'referenceNo is required' };
+  return {
+    ok: true,
+    data: {
+      quantity: quantity.data,
+      referenceNo: referenceNo.data,
+      supplier: supplier.data,
+      occurredAt: occurredAt.data,
+      createdBy: createdBy.data,
+    },
+  };
+}
+
 export function listProductRecords(filters: ProductFilters = {}): Product[] {
   const q = filters.q?.trim().toLowerCase();
   return listProducts().filter((product) => {
@@ -193,4 +241,36 @@ export function removeProductRecord(id: string): ServiceResult<{ ok: true }> {
   return deleteProduct(id)
     ? { ok: true, data: { ok: true } }
     : { ok: false, status: 404, error: 'product not found' };
+}
+
+export function addInboundStockRecord(id: string, body: unknown): ServiceResult<{ product: Product; movement: StockMovement }> {
+  const parsed = parseStockMovement(body, 'inbound');
+  if (!parsed.ok) return parsed;
+  try {
+    const result = recordInboundStock(id, parsed.data);
+    return result ? { ok: true, data: result } : { ok: false, status: 404, error: 'product not found' };
+  } catch (error) {
+    return { ok: false, status: 409, error: error instanceof Error ? error.message : 'stock movement conflict' };
+  }
+}
+
+export function addOutboundStockRecord(id: string, body: unknown): ServiceResult<{ product: Product; movement: StockMovement }> {
+  const parsed = parseStockMovement(body, 'outbound');
+  if (!parsed.ok) return parsed;
+  try {
+    const result = recordOutboundStock(id, parsed.data);
+    return result ? { ok: true, data: result } : { ok: false, status: 404, error: 'product not found' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'stock movement conflict';
+    return { ok: false, status: message === 'insufficient stock' ? 400 : 409, error: message };
+  }
+}
+
+export function getProductMovementRecords(id: string): ServiceResult<StockMovement[]> {
+  const movements = listProductMovements(id);
+  return movements ? { ok: true, data: movements } : { ok: false, status: 404, error: 'product not found' };
+}
+
+export function listLowStockProductRecords(): Product[] {
+  return listLowStockProducts();
 }

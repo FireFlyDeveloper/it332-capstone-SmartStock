@@ -8,9 +8,10 @@ import {
   X,
   Download,
   PackagePlus,
+  History,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
-import type { Product } from '../types';
+import type { Product, StockMovement } from '../types';
 import { formatCurrency, getStatusColor, checkStockStatus } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
@@ -28,7 +29,7 @@ const initialProductForm: Omit<Product, 'id'> = {
 };
 
 export const Inventory: React.FC = () => {
-  const { products, addProduct, updateProduct, deleteProduct, restockProduct, loading } = useData();
+  const { products, addProduct, updateProduct, deleteProduct, restockProduct, listProductMovements, loading } = useData();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'glass' | 'aluminum'>('all');
@@ -41,6 +42,9 @@ export const Inventory: React.FC = () => {
   const [formData, setFormData] = useState<Omit<Product, 'id'>>(initialProductForm);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+  const [movementsByProduct, setMovementsByProduct] = useState<Record<string, StockMovement[]>>({});
+  const [movementsLoading, setMovementsLoading] = useState<string | null>(null);
 
   // Filter products
   const filteredProducts = useMemo(() => {
@@ -89,12 +93,41 @@ export const Inventory: React.FC = () => {
     setIsRestockModalOpen(true);
   };
 
-  const handleRestockSubmit = (e: React.FormEvent) => {
+  const handleRestockSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (restockProductId && restockQuantity > 0) {
-      restockProduct(restockProductId, restockQuantity);
-      toast.success(`Restocked ${restockQuantity} units successfully`);
-      setIsRestockModalOpen(false);
+      try {
+        await restockProduct(restockProductId, restockQuantity);
+        setMovementsByProduct((prev) => {
+          const next = { ...prev };
+          delete next[restockProductId];
+          return next;
+        });
+        toast.success(`Restocked ${restockQuantity} units successfully`);
+        setIsRestockModalOpen(false);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to restock product');
+      }
+    }
+  };
+
+  const handleToggleMovements = async (productId: string) => {
+    if (expandedProductId === productId) {
+      setExpandedProductId(null);
+      return;
+    }
+
+    setExpandedProductId(productId);
+    if (movementsByProduct[productId]) return;
+
+    setMovementsLoading(productId);
+    try {
+      const movements = await listProductMovements(productId);
+      setMovementsByProduct((prev) => ({ ...prev, [productId]: movements }));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load movement history');
+    } finally {
+      setMovementsLoading(null);
     }
   };
 
@@ -249,64 +282,106 @@ export const Inventory: React.FC = () => {
               <tbody className="divide-y divide-gray-100">
                 {filteredProducts.map((product) => {
                   const stockStatus = checkStockStatus(product.stock, product.threshold);
+                  const movements = movementsByProduct[product.id] ?? [];
                   return (
-                    <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 text-sm text-gray-500 font-medium">{product.sku}</td>
-                      <td className="px-6 py-4">
-                        <div>
-                          <p className="font-medium text-gray-900">{product.name}</p>
-                          <p className="text-xs text-gray-500">{product.unit}</p>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${
-                          product.category === 'glass' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
-                        }`}>
-                          {product.category}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-gray-900">{product.stock}</span>
-                          <span className="text-gray-500 text-xs">{product.unit}</span>
-                          <span className={`w-2 h-2 rounded-full ${
-                            stockStatus === 'healthy' ? 'bg-green-500' :
-                            stockStatus === 'low' ? 'bg-yellow-500' : 'bg-red-500'
-                          }`} />
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 font-medium text-gray-900">{formatCurrency(product.price)}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(product.status)}`}>
-                          {product.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleRestock(product.id)}
-                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                            title="Restock"
-                          >
-                            <RefreshCw className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleOpenModal(product)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(product.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                    <React.Fragment key={product.id}>
+                      <tr className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 text-sm text-gray-500 font-medium">{product.sku}</td>
+                        <td className="px-6 py-4">
+                          <div>
+                            <p className="font-medium text-gray-900">{product.name}</p>
+                            <p className="text-xs text-gray-500">{product.unit}</p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${
+                            product.category === 'glass' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                          }`}>
+                            {product.category}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-900">{product.stock}</span>
+                            <span className="text-gray-500 text-xs">{product.unit}</span>
+                            <span className={`w-2 h-2 rounded-full ${
+                              stockStatus === 'healthy' ? 'bg-green-500' :
+                              stockStatus === 'low' ? 'bg-yellow-500' : 'bg-red-500'
+                            }`} />
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 font-medium text-gray-900">{formatCurrency(product.price)}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(product.status)}`}>
+                            {product.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleToggleMovements(product.id)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Movement history"
+                            >
+                              <History className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleRestock(product.id)}
+                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Restock"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleOpenModal(product)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Edit"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(product.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {expandedProductId === product.id && (
+                        <tr className="bg-gray-50">
+                          <td colSpan={7} className="px-6 py-4">
+                            <div className="rounded-lg border border-gray-200 bg-white p-4">
+                              <div className="mb-3 flex items-center justify-between">
+                                <h4 className="text-sm font-semibold text-gray-900">Movement history</h4>
+                                <span className="text-xs text-gray-500">{movements.length} movement(s)</span>
+                              </div>
+                              {movementsLoading === product.id ? (
+                                <p className="text-sm text-gray-500">Loading movements…</p>
+                              ) : movements.length === 0 ? (
+                                <p className="text-sm text-gray-500">No movements recorded yet.</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {movements.map((movement) => (
+                                    <div key={movement.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-gray-50 px-3 py-2 text-sm">
+                                      <div>
+                                        <span className={movement.type === 'inbound' ? 'font-semibold text-green-700' : 'font-semibold text-red-700'}>
+                                          {movement.type === 'inbound' ? '+' : '-'}{movement.quantity}
+                                        </span>
+                                        <span className="ml-2 text-gray-700">{movement.referenceNo}</span>
+                                        {movement.supplier && <span className="ml-2 text-gray-500">• {movement.supplier}</span>}
+                                      </div>
+                                      <span className="text-xs text-gray-500">{new Date(movement.occurredAt).toLocaleString()}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
