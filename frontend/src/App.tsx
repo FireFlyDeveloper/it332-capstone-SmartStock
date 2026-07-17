@@ -15,25 +15,33 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import './App.css'
 /*
  * App — SmartStock frontend root.
- * Demo-only build: AuthBootstrap skips /auth/me validation. Any stored auth
- * in localStorage is trusted at face value so the demo works with no backend.
- * Production would call /auth/me here via apiFetch.
+ * Stored auth is validated against /auth/me before protected routes render.
  *
  * Team: Kim Eduard Saludes (infra/shell), Luraine Villaranda (features),
  *       Hazel (auth/visual story)
- * Last touched: 2026-07-07 (round 2 — demo polish, pure-frontend auth)
+ * Last touched: 2026-07-17 (production auth validation)
  */
 
 function AuthBootstrap({ children }: { children: React.ReactNode }) {
-  const { token } = useAuth()
+  const { token, validateSession } = useAuth()
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    // Demo-only: no /auth/me validation. If a token exists in localStorage
-    // (set by a prior LoginForm login), trust it. If not, we're logged out.
-    // Production would call apiFetch<{user:User}>('/auth/me') here.
-    setReady(true)
-  }, [token])
+    let cancelled = false
+
+    async function bootstrap() {
+      setReady(false)
+      if (token) {
+        await validateSession()
+      }
+      if (!cancelled) setReady(true)
+    }
+
+    void bootstrap()
+    return () => {
+      cancelled = true
+    }
+  }, [token, validateSession])
 
   if (!ready) {
     return (
@@ -110,7 +118,7 @@ function AppRoutes() {
       <Route
         path="/analytics"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['admin', 'staff']}>
             <DataProvider>
               <Layout>
                 <Analytics />
@@ -122,7 +130,7 @@ function AppRoutes() {
       <Route
         path="/reports"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['admin', 'staff']}>
             <DataProvider>
               <Layout>
                 <Reports />

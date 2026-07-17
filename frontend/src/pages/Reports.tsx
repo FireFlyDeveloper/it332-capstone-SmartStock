@@ -16,6 +16,7 @@ import { useData } from '../components/DataContext';
 import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
 import { toast } from 'sonner';
 import { apiFetchBlob, type ApiError } from '../api';
+import { useAuth } from '../components/AuthContext';
 
 // Last touched: 2026-07-07 (round 2 — demo polish)
 type DateRange = '7d' | '30d' | 'all';
@@ -49,6 +50,7 @@ const ReportCard: React.FC<{
 
 export const Reports: React.FC = () => {
   const { products, orders } = useData();
+  const { canExportReports } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState<DateRange>('30d');
   const [generatedAt] = useState(() => new Date().toLocaleString());
@@ -191,20 +193,28 @@ export const Reports: React.FC = () => {
           </div>
 
           <div className="flex gap-3">
-            <button
-              onClick={() => void handleExport('pdf')}
-              className="btn-secondary flex items-center gap-2"
-            >
-              <Download className="w-5 h-5" />
-              PDF
-            </button>
-            <button
-              onClick={() => void handleExport('xlsx')}
-              className="btn-secondary flex items-center gap-2"
-            >
-              <Download className="w-5 h-5" />
-              XLSX
-            </button>
+            {canExportReports ? (
+              <>
+                <button
+                  onClick={() => void handleExport('pdf')}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  <Download className="w-5 h-5" />
+                  PDF
+                </button>
+                <button
+                  onClick={() => void handleExport('xlsx')}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  <Download className="w-5 h-5" />
+                  XLSX
+                </button>
+              </>
+            ) : (
+              <span className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+                Exports are admin-only
+              </span>
+            )}
             <button
               onClick={handlePrint}
               className="btn-primary flex items-center gap-2"

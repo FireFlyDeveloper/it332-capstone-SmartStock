@@ -7,7 +7,7 @@
  * auth headers.
  *
  * Author: Kim Eduard Saludes (original), adapted for the multi-team project
- * Last touched: 2026-07-07
+ * Last touched: 2026-07-17
  */
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:3000'
@@ -79,6 +79,40 @@ export async function apiFetchBlob(path: string, init: ApiFetchInit = {}): Promi
   })
   if (!res.ok) await raiseApiError(res)
   return res
+}
+
+export type ApiRole = 'admin' | 'staff'
+
+export interface ApiUser {
+  id: string
+  email: string
+  name: string
+  role: ApiRole
+}
+
+export interface LoginResponse {
+  token: string
+  user: ApiUser
+}
+
+export interface MeResponse {
+  user: ApiUser
+}
+
+export function loginRequest(email: string, password: string): Promise<LoginResponse> {
+  return apiFetch<LoginResponse>('/auth/login', {
+    method: 'POST',
+    auth: false,
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+export function getMe(): Promise<MeResponse> {
+  return apiFetch<MeResponse>('/auth/me')
+}
+
+export async function logoutRequest(): Promise<void> {
+  await apiFetch<{ ok: boolean }>('/auth/logout', { method: 'POST' })
 }
 
 export interface AnalyticsSalesTrend {

@@ -29,14 +29,15 @@ const menuItems = [
   { icon: Package, label: 'Inventory', path: '/inventory' },
   { icon: ShoppingCart, label: 'Orders', path: '/orders' },
   { icon: Truck, label: 'Delivery', path: '/delivery' },
-  { icon: BarChart3, label: 'Analytics', path: '/analytics' },
+  { icon: BarChart3, label: 'Analytics', path: '/analytics', requiresAnalytics: true },
   { icon: FileText, label: 'Reports', path: '/reports' },
 ]
 
 export function Layout({ children }: LayoutProps) {
-  const { user, logout } = useAuth()
+  const { user, logout, canViewAnalytics } = useAuth()
   const navigate = useNavigate()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const visibleMenuItems = menuItems.filter((item) => !item.requiresAnalytics || canViewAnalytics)
 
   const handleLogout = () => {
     logout()
@@ -76,7 +77,7 @@ export function Layout({ children }: LayoutProps) {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-            {menuItems.map((item) => (
+            {visibleMenuItems.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
