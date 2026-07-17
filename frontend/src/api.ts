@@ -60,3 +60,61 @@ export async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promis
   }
   return res.json() as Promise<T>
 }
+
+export interface AnalyticsSalesTrend {
+  month: string
+  transactionCount: number
+  grossSales: number
+}
+
+export interface AnalyticsPurchaseMetric {
+  materialType: string
+  supplier: string
+  transactionCount: number
+  totalQuantity: number
+  totalCost: number
+}
+
+export interface AnalyticsMovementMetric {
+  month: string
+  quantity: number
+  classification: 'fast_moving' | 'slow_moving'
+}
+
+export interface AnalyticsForecastResponse {
+  alpha: number
+  forecast: number
+}
+
+export interface AnalyticsInsightsResponse {
+  summary: string
+  recommendations: string[]
+  risks: string[]
+  confidence: 'low' | 'medium' | 'high'
+  source: 'deepseek' | 'fallback'
+}
+
+export function getAnalyticsSalesTrends(): Promise<AnalyticsSalesTrend[]> {
+  return apiFetch<AnalyticsSalesTrend[]>('/analytics/sales-trends')
+}
+
+export function getAnalyticsPurchases(year: number): Promise<AnalyticsPurchaseMetric[]> {
+  return apiFetch<AnalyticsPurchaseMetric[]>(`/analytics/purchases?year=${encodeURIComponent(String(year))}`)
+}
+
+export function getAnalyticsMovement(threshold: number): Promise<AnalyticsMovementMetric[]> {
+  return apiFetch<AnalyticsMovementMetric[]>(`/analytics/movement?threshold=${encodeURIComponent(String(threshold))}`)
+}
+
+export function getAnalyticsForecast(quantities: number[], alpha = 0.35): Promise<AnalyticsForecastResponse> {
+  return apiFetch<AnalyticsForecastResponse>('/analytics/forecast', {
+    method: 'POST',
+    body: JSON.stringify({ quantities, alpha }),
+  })
+}
+
+export function getAnalyticsInsights(year: number, threshold: number): Promise<AnalyticsInsightsResponse> {
+  return apiFetch<AnalyticsInsightsResponse>(
+    `/analytics/insights?year=${encodeURIComponent(String(year))}&threshold=${encodeURIComponent(String(threshold))}`,
+  )
+}
