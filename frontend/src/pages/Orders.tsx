@@ -128,9 +128,13 @@ export const Orders: React.FC = () => {
     return flow[order.orderStatus];
   };
 
-  const advanceOrder = (orderId: string, newStatus: Order['orderStatus']) => {
-    updateOrder(orderId, { orderStatus: newStatus });
-    toast.success(`Order → ${newStatus.replace(/_/g, ' ')}`);
+  const advanceOrder = async (orderId: string, newStatus: Order['orderStatus']) => {
+    try {
+      await updateOrder(orderId, { orderStatus: newStatus });
+      toast.success(`Order → ${newStatus.replace(/_/g, ' ')}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update order status');
+    }
   };
 
   // ── Modal handlers ───────────────────────────────────────────────
@@ -226,28 +230,30 @@ export const Orders: React.FC = () => {
   };
 
   // ── Submit ───────────────────────────────────────────────────────
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (form.items.length === 0) { toast.error('Add at least one item'); return; }
     if (!form.customerName.trim()) { toast.error('Enter customer name'); return; }
     if (!form.contact.trim()) { toast.error('Enter contact number'); return; }
 
     if (modalMode === 'edit' && editingOrderId) {
-      updateOrder(editingOrderId, {
-        customerName: form.customerName,
-        contact: form.contact,
-        address: form.address,
-        items: form.items,
-        total: form.total,
-        orderType: form.deliveryOption,
-        notes: form.notes,
-      });
-      toast.success('Order updated');
-      closeModal();
+      try {
+        await updateOrder(editingOrderId, {
+          customerName: form.customerName,
+          contact: form.contact,
+          address: form.address,
+          date: new Date().toISOString().split('T')[0],
+        });
+        toast.success('Order updated');
+        closeModal();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to update order');
+      }
       return;
     }
 
-    addOrder({
+    try {
+      await addOrder({
       customerName: form.customerName,
       contact: form.contact,
       address: form.address,
@@ -257,23 +263,31 @@ export const Orders: React.FC = () => {
         form.paymentStatus === 'paid' ? form.total :
         form.paymentStatus === 'partial' ? Math.round(form.total * 0.5) : 0,
       paymentStatus: form.paymentStatus,
-      orderStatus: form.deliveryOption === 'pickup' ? 'ready_for_pickup' : 'packed',
+      orderStatus: 'packed',
       deliveryStatus: form.deliveryOption === 'delivery' ? 'scheduled' : 'not_required',
       orderType: form.deliveryOption,
       date: new Date().toISOString().split('T')[0],
       refundAmount: 0,
       refundStatus: 'none',
       notes: form.notes,
-    });
-    toast.success('Order created!');
-    closeModal();
+      });
+      toast.success('Order created!');
+      closeModal();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create order');
+    }
   };
 
   // ── Delete order ─────────────────────────────────────────────────
-  const handleDelete = (orderId: string) => {
-    updateOrder(orderId, { orderStatus: 'cancelled' });
-    toast.success('Order cancelled');
-    setConfirmCancel(null);
+  const handleDelete = async (orderId: string) => {
+    try {
+      await updateOrder(orderId, { orderStatus: 'cancelled' });
+      toast.success('Order cancelled');
+      setConfirmCancel(null);
+      closeViewModal();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to cancel order');
+    }
   };
 
   const closeViewModal = () => {
@@ -779,20 +793,9 @@ export const Orders: React.FC = () => {
                 </div>
                 <div className="px-4 py-3 rounded-xl bg-surface-2">
                   <p className="text-xs text-text-muted mb-1">Payment</p>
-                  <select
-                    value={viewOrder.paymentStatus}
-                    onChange={e => {
-                      const v = e.target.value as 'pending' | 'paid' | 'partial' | 'refunded';
-                      updateOrder(viewOrder.id, { paymentStatus: v });
-                      setViewOrder({ ...viewOrder, paymentStatus: v });
-                    }}
-                    className="mt-1 px-3 py-1 rounded-full text-sm font-medium bg-white border border-gray-300 cursor-pointer"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="partial">Partial</option>
-                    <option value="paid">Paid</option>
-                    <option value="refunded">Refunded</option>
-                  </select>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(viewOrder.paymentStatus)}`}>
+                    {viewOrder.paymentStatus}
+                  </span>
                 </div>
                 <div className="px-4 py-3 rounded-xl bg-surface-2">
                   <p className="text-xs text-text-muted mb-1">Type</p>
@@ -889,7 +892,7 @@ export const Orders: React.FC = () => {
                   {getNextStatus(viewOrder) && (
                     <button
                       onClick={() => {
-                        advanceOrder(viewOrder.id, getNextStatus(viewOrder)!);
+                        void advanceOrder(viewOrder.id, getNextStatus(viewOrder)!);
                         closeViewModal();
                       }}
                       className="flex-1 btn-primary flex items-center justify-center gap-2"
@@ -979,10 +982,11 @@ export const Orders: React.FC = () => {
             <div className="flex gap-3">
               <button onClick={() => setPayModal(null)} className="flex-1 btn-secondary">Cancel</button>
               <button onClick={() => {
-                processPayment(payModal.id, payAmount);
-                closeViewModal();
-                setPayModal(null);
-                toast.success(`Payment of ${formatCurrency(payAmount)} recorded`);
+                void processPayment(payModal.id, payAmount).then(() => {
+                  closeViewModal();
+                  setPayModal(null);
+                  toast.success(`Payment of ${formatCurrency(payAmount)} recorded`);
+                }).catch((err) => toast.error(err instanceof Error ? err.message : 'Failed to process payment'));
               }} className="flex-1 btn-primary">Pay {formatCurrency(payAmount)}</button>
             </div>
           </div>
@@ -1030,10 +1034,11 @@ export const Orders: React.FC = () => {
             <div className="flex gap-3 mt-6">
               <button onClick={() => setRefundModal(null)} className="flex-1 btn-secondary">Cancel</button>
               <button onClick={() => {
-                processRefund(refundModal.id, refundAmount, refundReason || 'No reason specified', refundType);
-                closeViewModal();
-                setRefundModal(null);
-                toast.success(`Refund of ${formatCurrency(refundAmount)} processed`);
+                void processRefund(refundModal.id, refundAmount, refundReason || 'No reason specified', refundType).then(() => {
+                  closeViewModal();
+                  setRefundModal(null);
+                  toast.success(`Refund of ${formatCurrency(refundAmount)} processed`);
+                }).catch((err) => toast.error(err instanceof Error ? err.message : 'Failed to process refund'));
               }} className="flex-1 px-4 py-2.5 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-colors font-semibold">
                 Process Refund
               </button>

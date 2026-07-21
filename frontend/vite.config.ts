@@ -19,11 +19,11 @@ export default defineConfig({
       '192.168.100.99',        // LAN IP
       '100.83.235.28',         // public/NAT IP
     ],
-    proxy: {
-      '/auth': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      },
-    },
+    proxy: Object.fromEntries(
+      ['/auth', '/products', '/inventory', '/orders', '/deliveries', '/tracking', '/analytics', '/reports', '/health'].map((path) => [
+        path,
+        { target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:3000', changeOrigin: true },
+      ]),
+    ),
   },
 })

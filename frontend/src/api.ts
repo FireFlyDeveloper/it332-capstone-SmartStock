@@ -1,6 +1,6 @@
 /**
- * API client. Vite dev server proxies /auth to the Hono backend in
- * production builds, but for now we hit the backend port directly.
+ * API client. Defaults to same-origin requests so the Vite dev proxy can
+ * forward API calls to the Hono backend without browser CORS failures.
  *
  * The bearer token is set via `setAuthToken` (called from AuthContext on
  * login/load) so page code can call `apiFetch` without thinking about
@@ -10,7 +10,7 @@
  * Last touched: 2026-07-17
  */
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:3000'
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 
 // Token store. Updated via setAuthToken(). The apiFetch helper reads this
 // and adds the Authorization header automatically.

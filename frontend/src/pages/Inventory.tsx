@@ -75,16 +75,20 @@ export const Inventory: React.FC = () => {
     setFormData(initialProductForm);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingProduct) {
-      updateProduct(editingProduct.id, formData);
-      toast.success('Product updated successfully');
-    } else {
-      addProduct(formData);
-      toast.success('Product added successfully');
+    try {
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, formData);
+        toast.success('Product updated successfully');
+      } else {
+        await addProduct(formData);
+        toast.success('Product added successfully');
+      }
+      handleCloseModal();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save product');
     }
-    handleCloseModal();
   };
 
   const handleRestock = (productId: string) => {
@@ -136,11 +140,15 @@ export const Inventory: React.FC = () => {
     setIsDeleteConfirmOpen(true);
   };
 
-  const confirmDelete = () => {
-    if (deleteProductId) {
-      deleteProduct(deleteProductId);
+  const confirmDelete = async () => {
+    if (!deleteProductId) return;
+    try {
+      await deleteProduct(deleteProductId);
       toast.success('Product deleted successfully');
       setIsDeleteConfirmOpen(false);
+      setDeleteProductId(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete product');
     }
   };
 
