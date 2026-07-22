@@ -35,6 +35,21 @@ const chartAccent = 'var(--accent)';
 const chartGrid = 'var(--border)';
 const chartMuted = 'var(--text-subtle)';
 
+const shortenItemName = (name: string) => {
+  return name
+    .replace(/^Aluminum /, 'Alum. ')
+    .replace(/^Clear Float Glass /, 'Float Glass ')
+    .replace(/^Reflective Glass /, 'Reflective ')
+    .replace(/^Tempered Glass /, 'Tempered ')
+    .replace(/^Laminated Glass /, 'Laminated ')
+    .replace(/ - Bronze Finish$/, ' · Bronze')
+    .replace(/ - Matte Black$/, ' · Black')
+    .replace(/ - White Powder Coat$/, ' · White')
+    .replace(/Nylon Bearing/, 'Bearing')
+    .replace(/Angle Bar/, 'Angle')
+    .replace(/Profile /, 'Profile ');
+};
+
 const StatCard: React.FC<{
   title: string;
   value: string | number;
@@ -103,6 +118,13 @@ export const Dashboard: React.FC = () => {
   const todayDeliveries = deliveries.filter(d =>
     d.status !== 'delivered' && d.status !== 'failed'
   );
+
+  const topSellingChartData = useMemo(() => (
+    topItemsData.slice(0, 8).map((item) => ({
+      ...item,
+      shortName: shortenItemName(item.name),
+    }))
+  ), []);
 
   const aiForecasts = useMemo(() => generateDemandForecast(products, orders), [products, orders]);
   const aiRecommendations = useMemo(() => generateAIRecommendations(aiForecasts), [aiForecasts]);
@@ -226,17 +248,41 @@ export const Dashboard: React.FC = () => {
 
         <div className="panel p-5">
           <PanelHeading title="Top Selling Items" subtitle="Most purchased products" icon={Package} />
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={topItemsData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
-              <XAxis type="number" stroke={chartMuted} fontSize={12} />
-              <YAxis dataKey="name" type="category" stroke={chartMuted} fontSize={11} width={120} />
+          <ResponsiveContainer width="100%" height={360}>
+            <BarChart
+              data={topSellingChartData}
+              layout="vertical"
+              margin={{ top: 4, right: 22, bottom: 10, left: 16 }}
+              barCategoryGap={14}
+            >
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={chartGrid} />
+              <XAxis
+                type="number"
+                stroke={chartMuted}
+                fontSize={12}
+                tickLine={false}
+                axisLine={{ stroke: 'var(--border)' }}
+                domain={[0, 'dataMax + 20']}
+              />
+              <YAxis
+                dataKey="shortName"
+                type="category"
+                stroke="var(--text-muted)"
+                fontSize={12}
+                width={178}
+                interval={0}
+                tickLine={false}
+                axisLine={false}
+                tick={{ fill: 'var(--text-muted)' }}
+              />
               <Tooltip
                 formatter={(value: number) => [value, 'Units Sold']}
+                labelFormatter={(_, payload) => payload?.[0]?.payload?.name ?? ''}
                 contentStyle={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', color: 'var(--text)' }}
+                labelStyle={{ color: 'var(--text)' }}
               />
-              <Bar dataKey="quantity" fill={chartAccent} radius={[0, 4, 4, 0]}>
-                {topItemsData.map((entry, index) => (
+              <Bar dataKey="quantity" fill={chartAccent} radius={[0, 6, 6, 0]} barSize={18}>
+                {topSellingChartData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.category === 'glass' ? 'var(--accent)' : 'var(--border-strong)'} />
                 ))}
               </Bar>
@@ -277,8 +323,8 @@ export const Dashboard: React.FC = () => {
               return (
                 <div key={delivery.id} className="panel-muted flex items-center justify-between gap-3 p-3">
                   <div>
-                    <p className="text-sm font-semibold text-text">{order?.customerName || 'Unknown'}</p>
-                    <p className="text-xs text-text-muted">{delivery.truckNumber} - {delivery.driver}</p>
+                    <p className="text-sm font-semibold text-text">{order?.customerName || 'Unassigned delivery'}</p>
+                    <p className="text-xs text-text-muted">{delivery.truckNumber} / {delivery.driver}</p>
                   </div>
                   <span className={`rounded-[var(--radius-input)] px-2 py-1 text-xs font-semibold ${getStatusColor(delivery.status)}`}>
                     {delivery.status.replace('_', ' ')}
@@ -348,8 +394,8 @@ export const Dashboard: React.FC = () => {
               <h3 className="section-title flex flex-wrap items-center gap-2 text-lg">
                 Assisted Insights
                 <span className={`rounded-[var(--radius-pill)] px-2 py-0.5 text-xs font-semibold ${
-                  aiInsights.alertLevel === 'high' ? 'bg-red-100 text-red-700' :
-                  aiInsights.alertLevel === 'medium' ? 'bg-amber-100 text-amber-800' :
+                  aiInsights.alertLevel === 'high' ? 'bg-danger-soft text-danger' :
+                  aiInsights.alertLevel === 'medium' ? 'bg-accent-soft text-accent' :
                   'bg-[var(--success-soft)] text-[var(--success)]'
                 }`}>
                   {aiInsights.alertLevel === 'high' ? 'Urgent' : aiInsights.alertLevel === 'medium' ? 'Action needed' : 'Normal'}
@@ -370,8 +416,8 @@ export const Dashboard: React.FC = () => {
                   {rec.type === 'pricing' && <Zap className="h-4 w-4" />}
                 </div>
                 <span className={`rounded-[var(--radius-input)] px-2 py-0.5 text-xs font-semibold ${
-                  rec.priority === 'high' ? 'bg-red-100 text-red-700' :
-                  rec.priority === 'medium' ? 'bg-amber-100 text-amber-800' :
+                  rec.priority === 'high' ? 'bg-danger-soft text-danger' :
+                  rec.priority === 'medium' ? 'bg-accent-soft text-accent' :
                   'bg-surface text-text-muted'
                 }`}>
                   {rec.priority}

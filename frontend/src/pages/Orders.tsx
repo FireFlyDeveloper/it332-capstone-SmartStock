@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus,
   Search,
@@ -25,6 +25,8 @@ import type { Order, OrderItem } from '../types';
 import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
+
+const PAGE_SIZE = 24;
 
 // ── Order progress steps ──────────────────────────────────────────
 const pickupSteps = [
@@ -78,6 +80,8 @@ export const Orders: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [productSearch, setProductSearch] = useState('');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   // ── Cancel confirmation ──────────────────────────────────────────
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
@@ -103,6 +107,25 @@ export const Orders: React.FC = () => {
       return matchesSearch && matchesStatus;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [orders, searchTerm, statusFilter]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [searchTerm, statusFilter]);
+
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisibleCount((count) => Math.min(count + PAGE_SIZE, filteredOrders.length));
+      }
+    }, { rootMargin: '420px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [filteredOrders.length]);
+
+  const visibleOrders = filteredOrders.slice(0, visibleCount);
+  const hasMoreOrders = visibleOrders.length < filteredOrders.length;
 
   // ── Order status transitions ─────────────────────────────────────
   const getNextStatus = (order: Order): Order['orderStatus'] | null => {
@@ -271,7 +294,7 @@ export const Orders: React.FC = () => {
       refundStatus: 'none',
       notes: form.notes,
       });
-      toast.success('Order created!');
+      toast.success('Order created');
       closeModal();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create order');
@@ -347,7 +370,7 @@ export const Orders: React.FC = () => {
 
   return (
     <>
-      <div className="space-y-6 animate-fadeIn">
+      <div className="page-stack animate-fadeIn">
         {/* ── Header ────────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row gap-4 justify-between">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -355,7 +378,7 @@ export const Orders: React.FC = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-subtle" />
               <input
                 type="text"
-                placeholder="Search by name, ID, or reference..."
+                placeholder="Search name, ID, or reference"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="input pl-10 w-full sm:w-72"
@@ -397,7 +420,7 @@ export const Orders: React.FC = () => {
               key={pill.key}
               type="button"
               onClick={() => setStatusFilter(pill.key)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-[var(--radius-pill)] px-3 py-1 text-xs font-medium transition-colors ${
                 statusFilter === pill.key
                   ? 'bg-accent text-accent-fg'
                   : 'bg-surface-2 text-text-muted hover:bg-[var(--surface-3)]'
@@ -429,13 +452,13 @@ export const Orders: React.FC = () => {
         </div>
 
         {/* ── Order cards ────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredOrders.map(order => {
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {visibleOrders.map(order => {
             const remaining = order.total - order.paidAmount;
             return (
               <div
                 key={order.id}
-                className="metric-card cursor-pointer"
+                className="metric-card cursor-pointer overflow-hidden"
                 onClick={() => setViewOrder(order)}
               >
                 {/* Card header */}
@@ -445,7 +468,7 @@ export const Orders: React.FC = () => {
                       <h4 className="font-semibold text-text truncate">{order.customerName}</h4>
                       <p className="text-xs text-text-subtle mt-0.5">{order.referenceNumber}</p>
                     </div>
-                    <span className={`ml-2 px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatusColor(order.orderStatus)}`}>
+                    <span className={`ml-2 px-3 py-1 rounded-[var(--radius-pill)] text-xs font-medium whitespace-nowrap ${getStatusColor(order.orderStatus)}`}>
                       {order.orderStatus.replace(/_/g, ' ')}
                     </span>
                   </div>
@@ -470,15 +493,27 @@ export const Orders: React.FC = () => {
                       {order.paymentStatus}
                     </span>
                     {remaining > 0 && order.paymentStatus !== 'pending' && (
-                      <p className="text-xs text-red-500 mt-1">₱{remaining.toLocaleString()} remaining</p>
+                      <p className="text-xs text-danger mt-1">₱{remaining.toLocaleString()} remaining</p>
                     )}
                   </div>
                 </div>
               </div>
             );
           })}
+          {hasMoreOrders && (
+            <div ref={loadMoreRef} className="empty-state col-span-full py-5 text-sm">
+              Loading more orders · {visibleOrders.length} of {filteredOrders.length}
+            </div>
+          )}
+
+          {!hasMoreOrders && filteredOrders.length > PAGE_SIZE && (
+            <div className="col-span-full py-4 text-center text-xs text-text-subtle">
+              Showing all {filteredOrders.length} orders
+            </div>
+          )}
+
           {filteredOrders.length === 0 && !isEmpty && (
-            <div className="col-span-full p-12 text-center">
+            <div className="empty-state col-span-full">
               <Search className="w-12 h-12 text-text-subtle mx-auto mb-4" />
               <p className="text-text-muted">No orders match the current filters.</p>
               {searchTerm && <button onClick={() => setSearchTerm('')} className="text-accent text-sm mt-1 hover:underline">Clear search</button>}
@@ -486,9 +521,9 @@ export const Orders: React.FC = () => {
           )}
 
           {isEmpty && (
-            <div className="col-span-full p-12 text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
-                <ShoppingBag className="h-8 w-8 text-amber-600" />
+            <div className="empty-state col-span-full">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[var(--radius-pill)] bg-surface-2">
+                <ShoppingBag className="h-8 w-8 text-accent" />
               </div>
               <h3 className="text-lg font-semibold text-text">No orders yet</h3>
               <p className="mx-auto mt-1 max-w-sm text-sm text-text-muted">
@@ -498,7 +533,7 @@ export const Orders: React.FC = () => {
               <button
                 type="button"
                 onClick={() => toast.info('Demo build - this would open the create form.')}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700"
+                className="mt-4 inline-flex items-center gap-2 rounded-[var(--radius-input)] bg-accent px-4 py-2 text-sm font-medium text-accent-fg shadow-[var(--shadow-card)] hover:bg-accent-hover"
               >
                 <Plus className="h-4 w-4" /> Create your first order
               </button>
@@ -512,15 +547,15 @@ export const Orders: React.FC = () => {
          ═══════════════════════════════════════════════════════════════ */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideIn">
-            <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-white z-10">
+          <div className="bg-surface rounded-[var(--radius-card)] w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideIn">
+            <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-surface z-10">
               <div>
                 <h3 className="text-xl font-semibold text-text">
                   {modalMode === 'create' ? 'Create New Order' : 'Edit Order'}
                 </h3>
                 {modalMode === 'edit' && <p className="text-sm text-text-muted">{editingOrderId}</p>}
               </div>
-              <button onClick={closeModal} className="p-2 hover:bg-surface-2 rounded-lg"><X className="w-5 h-5" /></button>
+              <button onClick={closeModal} className="p-2 hover:bg-surface-2 rounded-[var(--radius-input)]"><X className="w-5 h-5" /></button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
@@ -574,7 +609,7 @@ export const Orders: React.FC = () => {
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-subtle" />
                       <input
                         type="text"
-                        placeholder="Search products..."
+                        placeholder="Search products"
                         value={productSearch}
                         onChange={e => setProductSearch(e.target.value)}
                         className="input pl-9"
@@ -611,9 +646,9 @@ export const Orders: React.FC = () => {
                 </div>
 
                 {form.items.length > 0 && (
-                  <div className="bg-surface-2 rounded-lg overflow-hidden border border-border">
-                    <table className="w-full">
-                      <thead className="bg-gray-100">
+                  <div className="bg-surface-2 rounded-[var(--radius-input)] overflow-hidden border border-border">
+                    <table className="data-table">
+                      <thead className="bg-surface-2">
                         <tr>
                           <th className="px-3 py-2 text-left text-xs font-semibold text-text-muted">Item</th>
                           <th className="px-3 py-2 text-right text-xs font-semibold text-text-muted">Price</th>
@@ -622,13 +657,13 @@ export const Orders: React.FC = () => {
                           <th className="px-3 py-2 w-10"></th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200 bg-white">
+                      <tbody className="divide-y divide-gray-200 bg-surface">
                         {form.items.map((item, i) => (
                           <tr key={i} className="hover:bg-surface-2">
                             <td className="px-3 py-2 text-sm font-medium text-text">{item.productName}</td>
                             <td className="px-3 py-2 text-sm text-text-muted text-right">{formatCurrency(item.unitPrice)}</td>
                             <td className="px-3 py-2 text-center">
-                              <div className="inline-flex items-center border border-gray-300 rounded-lg">
+                              <div className="inline-flex items-center border border-gray-300 rounded-[var(--radius-input)]">
                                 <button type="button"
                                   onClick={() => updateItemQty(i, item.quantity - 1)}
                                   className="px-2 py-0.5 text-text-muted hover:bg-surface-2 text-sm leading-none"
@@ -642,7 +677,7 @@ export const Orders: React.FC = () => {
                             <td className="px-3 py-2 text-sm font-medium text-text text-right">{formatCurrency(item.total)}</td>
                             <td className="px-3 py-2">
                               <button type="button" onClick={() => removeItem(i)}
-                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded">
+                                className="p-1 text-red-400 hover:text-danger hover:bg-danger-soft rounded">
                                 <X className="w-3.5 h-3.5" />
                               </button>
                             </td>
@@ -676,7 +711,7 @@ export const Orders: React.FC = () => {
                 </div>
               )}
 
-              <div className="flex items-center justify-between bg-primary-50 p-4 rounded-xl">
+              <div className="flex items-center justify-between bg-primary-50 p-4 rounded-[var(--radius-card)]">
                 <span className="text-sm text-accent font-medium">Total Amount</span>
                 <span className="text-2xl font-bold text-primary-900">{formatCurrency(form.total)}</span>
               </div>
@@ -698,34 +733,34 @@ export const Orders: React.FC = () => {
          ═══════════════════════════════════════════════════════════════ */}
       {viewOrder && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideIn">
-            <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-white z-10">
+          <div className="bg-surface rounded-[var(--radius-card)] w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideIn">
+            <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-surface z-10">
               <div>
                 <h3 className="text-xl font-semibold text-text">Order Details</h3>
                 <p className="text-sm text-text-muted">{viewOrder.referenceNumber} · {viewOrder.id}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => openEdit(viewOrder)} className="p-2 hover:bg-surface-2 rounded-lg text-text-muted hover:text-accent" title="Edit Order">
+                <button onClick={() => openEdit(viewOrder)} className="p-2 hover:bg-surface-2 rounded-[var(--radius-input)] text-text-muted hover:text-accent" title="Edit Order">
                   <Edit3 className="w-5 h-5" />
                 </button>
-                <button onClick={() => { closeViewModal(); window.print(); }} className="p-2 hover:bg-surface-2 rounded-lg text-text-muted hover:text-text-muted" title="Print Receipt">
+                <button onClick={() => { closeViewModal(); window.print(); }} className="p-2 hover:bg-surface-2 rounded-[var(--radius-input)] text-text-muted hover:text-text-muted" title="Print Receipt">
                   <Printer className="w-5 h-5" />
                 </button>
-                <button onClick={() => closeViewModal()} className="p-2 hover:bg-surface-2 rounded-lg"><X className="w-5 h-5" /></button>
+                <button onClick={() => closeViewModal()} className="p-2 hover:bg-surface-2 rounded-[var(--radius-input)]"><X className="w-5 h-5" /></button>
               </div>
             </div>
 
             <div className="p-6 space-y-6">
               {/* ── Progress Timeline ──────────────────────────────── */}
               {(viewOrder.orderStatus !== 'cancelled') && (
-                <div className="bg-surface-2 rounded-xl p-4 sm:p-6">
+                <div className="bg-surface-2 rounded-[var(--radius-card)] p-4 sm:p-6">
                   <h4 className="font-medium text-text mb-4 flex items-center gap-2">
                     <Clock className="w-4 h-4 text-text-subtle" /> Order Progress
                   </h4>
                   <div className="flex items-center justify-between relative">
-                    <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-gray-200 -translate-y-1/2" />
+                    <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-surface-2 -translate-y-1/2" />
                     <div
-                      className="absolute top-1/2 left-4 h-0.5 bg-blue-600 -translate-y-1/2 transition-all duration-500"
+                      className="absolute top-1/2 left-4 h-0.5 bg-accent -translate-y-1/2 transition-all duration-500"
                       style={{
                         width: `${(getCurrentStep(viewOrder.orderStatus, viewOrder.orderType) / Math.max(getSteps(viewOrder.orderType).length - 1, 1)) * 100}%`,
                       }}
@@ -736,8 +771,8 @@ export const Orders: React.FC = () => {
                       const isCurrent = i === current;
                       return (
                         <div key={step.key} className="relative flex flex-col items-center z-10">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                            done ? 'bg-blue-600 text-white' : 'bg-gray-200 text-text-subtle'
+                          <div className={`w-8 h-8 rounded-[var(--radius-pill)] flex items-center justify-center transition-all ${
+                            done ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-text-subtle'
                           } ${isCurrent ? 'ring-4 ring-blue-100' : ''}`}>
                             {done ? <CheckCircle className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
                           </div>
@@ -754,27 +789,27 @@ export const Orders: React.FC = () => {
               )}
 
               {viewOrder.orderStatus === 'cancelled' && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                <div className="bg-danger-soft border border-red-200 rounded-[var(--radius-card)] p-4 text-center">
                   <X className="w-8 h-8 text-red-400 mx-auto mb-2" />
-                  <p className="font-semibold text-red-700">Order Cancelled</p>
-                  <p className="text-sm text-red-500">This order has been cancelled</p>
+                  <p className="font-semibold text-danger">Order Cancelled</p>
+                  <p className="text-sm text-danger">This order has been cancelled</p>
                 </div>
               )}
 
               {/* ── Customer Info ──────────────────────────────────── */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-surface-2 p-4 rounded-xl">
+                <div className="bg-surface-2 p-4 rounded-[var(--radius-card)]">
                   <p className="text-xs text-text-muted mb-1">Customer</p>
                   <p className="font-semibold text-text">{viewOrder.customerName}</p>
                 </div>
-                <div className="bg-surface-2 p-4 rounded-xl">
+                <div className="bg-surface-2 p-4 rounded-[var(--radius-card)]">
                   <p className="text-xs text-text-muted mb-1">Contact</p>
                   <p className="font-semibold text-text flex items-center gap-1.5">
                     <Phone className="w-3.5 h-3.5 text-text-subtle" /> {viewOrder.contact}
                   </p>
                 </div>
                 {viewOrder.address && (
-                  <div className="sm:col-span-2 bg-surface-2 p-4 rounded-xl">
+                  <div className="sm:col-span-2 bg-surface-2 p-4 rounded-[var(--radius-card)]">
                     <p className="text-xs text-text-muted mb-1">Delivery Address</p>
                     <p className="font-semibold text-text flex items-center gap-1.5">
                       <MapPin className="w-3.5 h-3.5 text-text-subtle" /> {viewOrder.address}
@@ -785,21 +820,21 @@ export const Orders: React.FC = () => {
 
               {/* ── Status badges ──────────────────────────────────── */}
               <div className="flex flex-wrap gap-3">
-                <div className="px-4 py-3 rounded-xl bg-surface-2">
+                <div className="px-4 py-3 rounded-[var(--radius-card)] bg-surface-2">
                   <p className="text-xs text-text-muted mb-1">Order Status</p>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(viewOrder.orderStatus)}`}>
+                  <span className={`px-3 py-1 rounded-[var(--radius-pill)] text-sm font-medium ${getStatusColor(viewOrder.orderStatus)}`}>
                     {viewOrder.orderStatus.replace(/_/g, ' ')}
                   </span>
                 </div>
-                <div className="px-4 py-3 rounded-xl bg-surface-2">
+                <div className="px-4 py-3 rounded-[var(--radius-card)] bg-surface-2">
                   <p className="text-xs text-text-muted mb-1">Payment</p>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(viewOrder.paymentStatus)}`}>
+                  <span className={`px-3 py-1 rounded-[var(--radius-pill)] text-sm font-medium ${getStatusColor(viewOrder.paymentStatus)}`}>
                     {viewOrder.paymentStatus}
                   </span>
                 </div>
-                <div className="px-4 py-3 rounded-xl bg-surface-2">
+                <div className="px-4 py-3 rounded-[var(--radius-card)] bg-surface-2">
                   <p className="text-xs text-text-muted mb-1">Type</p>
-                  <span className="capitalize px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-text-muted">
+                  <span className="capitalize px-3 py-1 rounded-[var(--radius-pill)] text-sm font-medium bg-surface-2 text-text-muted">
                     {viewOrder.orderType}
                   </span>
                 </div>
@@ -807,21 +842,21 @@ export const Orders: React.FC = () => {
 
               {/* ── Payment Summary ────────────────────────────────── */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-[var(--success-soft)] p-3 rounded-xl">
+                <div className="bg-[var(--success-soft)] p-3 rounded-[var(--radius-card)]">
                   <p className="text-xs text-[var(--success)]">Total</p>
                   <p className="text-lg font-bold text-text">{formatCurrency(viewOrder.total)}</p>
                 </div>
-                <div className="bg-accent-soft p-3 rounded-xl">
+                <div className="bg-accent-soft p-3 rounded-[var(--radius-card)]">
                   <p className="text-xs text-accent">Paid</p>
                   <p className="text-lg font-bold text-text">{formatCurrency(viewOrder.paidAmount)}</p>
                 </div>
-                <div className={viewOrder.total - viewOrder.paidAmount > 0 ? 'bg-red-50 p-3 rounded-xl' : 'bg-surface-2 p-3 rounded-xl'}>
+                <div className={viewOrder.total - viewOrder.paidAmount > 0 ? 'bg-danger-soft p-3 rounded-[var(--radius-card)]' : 'bg-surface-2 p-3 rounded-[var(--radius-card)]'}>
                   <p className="text-xs text-text-muted">Balance</p>
-                  <p className={`text-lg font-bold ${viewOrder.total - viewOrder.paidAmount > 0 ? 'text-red-700' : 'text-text-muted'}`}>
+                  <p className={`text-lg font-bold ${viewOrder.total - viewOrder.paidAmount > 0 ? 'text-danger' : 'text-text-muted'}`}>
                     {formatCurrency(Math.max(0, viewOrder.total - viewOrder.paidAmount))}
                   </p>
                 </div>
-                <div className="bg-accent-soft p-3 rounded-xl">
+                <div className="bg-accent-soft p-3 rounded-[var(--radius-card)]">
                   <p className="text-xs text-accent">Refunded</p>
                   <p className="text-lg font-bold text-text">{formatCurrency(viewOrder.refundAmount || 0)}</p>
                 </div>
@@ -841,8 +876,8 @@ export const Orders: React.FC = () => {
                     />
                   </div>
                 )}
-                <div className="border border-border rounded-xl overflow-hidden">
-                  <table className="w-full">
+                <div className="border border-border rounded-[var(--radius-card)] overflow-hidden">
+                  <table className="data-table">
                     <thead className="bg-surface-2">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase">Item</th>
@@ -879,9 +914,9 @@ export const Orders: React.FC = () => {
 
               {/* ── Notes ──────────────────────────────────────────── */}
               {viewOrder.notes && (
-                <div className="bg-accent-soft border border-yellow-200 rounded-xl p-4">
+                <div className="bg-accent-soft border border-yellow-200 rounded-[var(--radius-card)] p-4">
                   <p className="text-xs text-accent font-medium mb-1">Notes</p>
-                  <p className="text-sm text-yellow-800">{viewOrder.notes}</p>
+                  <p className="text-sm text-accent">{viewOrder.notes}</p>
                 </div>
               )}
 
@@ -919,7 +954,7 @@ export const Orders: React.FC = () => {
                         setRefundType('partial');
                         setRefundReason('');
                       }}
-                      className="px-4 py-2 text-accent hover:bg-accent-soft rounded-lg transition-colors flex items-center gap-2"
+                      className="px-4 py-2 text-accent hover:bg-accent-soft rounded-[var(--radius-input)] transition-colors flex items-center gap-2"
                     >
                       <RotateCcw className="w-4 h-4" /> Refund
                     </button>
@@ -927,7 +962,7 @@ export const Orders: React.FC = () => {
                   {/* Cancel */}
                   <button
                     onClick={() => setConfirmCancel(viewOrder.id)}
-                    className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
+                    className="px-4 py-2 text-danger hover:bg-danger-soft rounded-[var(--radius-input)] transition-colors flex items-center gap-2"
                   >
                     <X className="w-4 h-4" /> Cancel Order
                   </button>
@@ -936,8 +971,8 @@ export const Orders: React.FC = () => {
 
               {/* Completed - show view only */}
               {viewOrder.orderStatus === 'completed' && (
-                <div className="bg-[var(--success-soft)] border border-green-200 rounded-xl p-4 text-center">
-                  <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                <div className="bg-[var(--success-soft)] border border-green-200 rounded-[var(--radius-card)] p-4 text-center">
+                  <CheckCircle className="w-8 h-8 text-[var(--success)] mx-auto mb-2" />
                   <p className="font-semibold text-[var(--success)]">Order Completed</p>
                   <p className="text-sm text-[var(--success)]">Delivered on {formatDate(viewOrder.date)}</p>
                 </div>
@@ -952,13 +987,13 @@ export const Orders: React.FC = () => {
          ═══════════════════════════════════════════════════════════════ */}
       {confirmCancel && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-slideIn text-center">
+          <div className="bg-surface rounded-[var(--radius-card)] w-full max-w-sm p-6 animate-slideIn text-center">
             <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-text mb-2">Cancel Order?</h3>
             <p className="text-sm text-text-muted mb-6">This action cannot be undone.</p>
             <div className="flex gap-3">
               <button onClick={() => setConfirmCancel(null)} className="flex-1 btn-secondary">Keep Order</button>
-              <button onClick={() => handleDelete(confirmCancel)} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-semibold">Yes, Cancel</button>
+              <button onClick={() => handleDelete(confirmCancel)} className="flex-1 px-4 py-2.5 bg-red-600 text-accent-fg rounded-[var(--radius-card)] hover:bg-red-700 transition-colors font-semibold">Yes, Cancel</button>
             </div>
           </div>
         </div>
@@ -969,7 +1004,7 @@ export const Orders: React.FC = () => {
          ═══════════════════════════════════════════════════════════════ */}
       {payModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-slideIn">
+          <div className="bg-surface rounded-[var(--radius-card)] w-full max-w-sm p-6 animate-slideIn">
             <h3 className="text-lg font-semibold text-text mb-2">Process Payment</h3>
             <p className="text-sm text-text-muted mb-1">Order: {payModal.referenceNumber}</p>
             <p className="text-sm text-text-muted mb-4">Balance: {formatCurrency(payModal.total - payModal.paidAmount)}</p>
@@ -998,7 +1033,7 @@ export const Orders: React.FC = () => {
          ═══════════════════════════════════════════════════════════════ */}
       {refundModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-slideIn">
+          <div className="bg-surface rounded-[var(--radius-card)] w-full max-w-sm p-6 animate-slideIn">
             <h3 className="text-lg font-semibold text-text mb-2">Process Refund</h3>
             <p className="text-sm text-text-muted mb-1">Order: {refundModal.referenceNumber}</p>
             <p className="text-sm text-text-muted mb-4">Paid Amount: {formatCurrency(refundModal.paidAmount)}</p>
@@ -1039,7 +1074,7 @@ export const Orders: React.FC = () => {
                   setRefundModal(null);
                   toast.success(`Refund of ${formatCurrency(refundAmount)} processed`);
                 }).catch((err) => toast.error(err instanceof Error ? err.message : 'Failed to process refund'));
-              }} className="flex-1 px-4 py-2.5 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-colors font-semibold">
+              }} className="flex-1 px-4 py-2.5 bg-orange-600 text-accent-fg rounded-[var(--radius-card)] hover:bg-orange-700 transition-colors font-semibold">
                 Process Refund
               </button>
             </div>

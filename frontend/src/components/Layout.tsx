@@ -15,7 +15,6 @@ import {
   FileText,
   LogOut,
   Menu,
-  User as UserIcon,
   Database,
 } from 'lucide-react'
 import { useAuth } from './AuthContext'
@@ -94,29 +93,11 @@ export function Layout({ children }: LayoutProps) {
             ))}
           </nav>
 
-          <div className="border-t border-border p-4">
-            <div className="mb-3 flex items-center gap-3 rounded-[var(--radius-card)] bg-surface-2 p-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface">
-                <UserIcon className="h-5 w-5 text-text-muted" strokeWidth={1.8} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold text-text">{user?.name || 'Guest'}</p>
-                <p className="text-xs capitalize text-text-muted">{user?.role || 'Not logged in'}</p>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="btn-secondary w-full gap-2 text-danger hover:bg-danger-soft"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Logout</span>
-            </button>
-          </div>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="app-topbar flex min-h-16 items-center justify-between border-b px-4 py-3 lg:px-7">
+        <header className="app-topbar sticky top-0 z-30 flex min-h-16 items-center justify-between border-b px-4 py-3 lg:px-7">
           <div className="flex min-w-0 items-center gap-3">
             <button
               onClick={() => setIsSidebarOpen(true)}
@@ -140,11 +121,20 @@ export function Layout({ children }: LayoutProps) {
             </div>
           </div>
 
-          <div className="hidden items-center gap-3 sm:flex">
-            <div className="text-right">
+          <div className="flex items-center gap-3">
+            <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold text-text">{user?.name || 'Guest'}</p>
               <p className="text-xs capitalize text-text-muted">{user?.role || ''}</p>
             </div>
+            <button
+              onClick={handleLogout}
+              className="btn-secondary h-10 gap-2 border-danger-border px-3 text-danger hover:bg-danger-soft"
+              aria-label="Logout"
+              title="Logout"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
           </div>
         </header>
 

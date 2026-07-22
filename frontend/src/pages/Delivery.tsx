@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Truck,
   MapPin,
@@ -18,6 +18,8 @@ import { getStatusColor } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
 
+const PAGE_SIZE = 18;
+
 const deliverySteps = [
   { key: 'pending', label: 'Order Placed', icon: Package },
   { key: 'assigned', label: 'Driver Assigned', icon: User },
@@ -31,6 +33,8 @@ export const DeliveryPage: React.FC = () => {
   const { deliveries, orders, updateDeliveryStatus, loading } = useData();
   
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'in_transit' | 'delivered'>('all');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const filteredDeliveries = useMemo(() => {
     return deliveries.filter(d => {
@@ -39,6 +43,25 @@ export const DeliveryPage: React.FC = () => {
       return d.status === filterStatus;
     });
   }, [deliveries, filterStatus]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [filterStatus]);
+
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisibleCount((count) => Math.min(count + PAGE_SIZE, filteredDeliveries.length));
+      }
+    }, { rootMargin: '420px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [filteredDeliveries.length]);
+
+  const visibleDeliveries = filteredDeliveries.slice(0, visibleCount);
+  const hasMoreDeliveries = visibleDeliveries.length < filteredDeliveries.length;
 
   const getNextStatus = (currentStatus: Delivery['status']): Delivery['status'] | null => {
     const flow: Record<Delivery['status'], Delivery['status'] | null> = {
@@ -120,7 +143,7 @@ export const DeliveryPage: React.FC = () => {
   const isEmpty = !loading && deliveries.length === 0;
 
   return (
-      <div className="space-y-6 animate-fadeIn">
+      <div className="page-stack animate-fadeIn">
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="metric-card p-4">
@@ -149,7 +172,7 @@ export const DeliveryPage: React.FC = () => {
                 key={pill.key}
                 type="button"
                 onClick={() => setFilterStatus(pill.key)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                className={`rounded-[var(--radius-pill)] px-3 py-1 text-xs font-medium transition-colors ${
                   filterStatus === pill.key
                     ? 'bg-accent text-accent-fg'
                     : 'bg-surface-2 text-text-muted hover:bg-[var(--surface-3)]'
@@ -171,7 +194,7 @@ export const DeliveryPage: React.FC = () => {
 
         {/* Deliveries Grid */}
         <div className="grid grid-cols-1 gap-4">
-          {filteredDeliveries.map((delivery) => {
+          {visibleDeliveries.map((delivery) => {
             const order = orders.find(o => o.id === delivery.orderId);
             const currentStep = getStepIndex(delivery.status);
             
@@ -184,7 +207,7 @@ export const DeliveryPage: React.FC = () => {
                 <div className="p-5 border-b border-border bg-surface-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-accent-soft rounded-lg">
+                      <div className="p-2 bg-accent-soft rounded-[var(--radius-input)]">
                         <Truck className="w-5 h-5 text-accent" />
                       </div>
                       <div>
@@ -192,7 +215,7 @@ export const DeliveryPage: React.FC = () => {
                         <p className="text-sm text-text-muted">Order: {delivery.orderId}</p>
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(delivery.status)}`}>
+                    <span className={`px-3 py-1 rounded-[var(--radius-pill)] text-sm font-medium ${getStatusColor(delivery.status)}`}>
                       {delivery.status.replace('_', ' ')}
                     </span>
                   </div>
@@ -202,7 +225,7 @@ export const DeliveryPage: React.FC = () => {
                 <div className="p-5 space-y-4">
                   {/* Customer Info */}
                   {order && (
-                    <div className="flex items-start gap-3 p-3 bg-surface-2 rounded-lg">
+                    <div className="flex items-start gap-3 p-3 bg-surface-2 rounded-[var(--radius-input)]">
                       <div className="flex-1">
                         <p className="font-medium text-text">{order.customerName}</p>
                         <div className="flex items-center gap-2 mt-1 text-sm text-text-muted">
@@ -229,15 +252,16 @@ export const DeliveryPage: React.FC = () => {
                       {deliverySteps.map((step, index) => {
                         const isCompleted = index <= currentStep;
                         const isCurrent = index === currentStep;
+                        const isTerminal = delivery.status === 'delivered' || delivery.status === 'failed';
                         
                         return (
                           <div key={step.key} className="flex flex-col items-center">
                             <div className={`
-                              w-8 h-8 rounded-full flex items-center justify-center
-                              ${isCompleted ? 'bg-accent text-white' : 'bg-gray-200 text-text-subtle'}
-                              ${isCurrent ? 'ring-4 ring-accent-soft' : ''}
+                              w-8 h-8 rounded-[var(--radius-pill)] flex items-center justify-center
+                              ${isCompleted ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-text-subtle'}
+                              ${isCurrent && !isTerminal ? 'ring-4 ring-accent-soft' : ''}
                             `}>
-                              {isCurrent ? (
+                              {isCurrent && !isTerminal ? (
                                 <Loader className="w-4 h-4 animate-spin" />
                               ) : isCompleted ? (
                                 <CheckCircle className="w-4 h-4" />
@@ -271,7 +295,7 @@ export const DeliveryPage: React.FC = () => {
                           updateDeliveryStatus(delivery.id, 'failed', -1);
                           toast.error('Delivery marked as failed');
                         }}
-                        className="w-full mt-2 text-red-600 hover:bg-red-50 py-2 rounded-lg transition-colors"
+                        className="w-full mt-2 text-danger hover:bg-danger-soft py-2 rounded-[var(--radius-input)] transition-colors"
                       >
                         Mark as Failed
                       </button>
@@ -282,6 +306,18 @@ export const DeliveryPage: React.FC = () => {
             );
           })}
 
+          {hasMoreDeliveries && (
+            <div ref={loadMoreRef} className="empty-state py-5 text-sm">
+              Loading more deliveries · {visibleDeliveries.length} of {filteredDeliveries.length}
+            </div>
+          )}
+
+          {!hasMoreDeliveries && filteredDeliveries.length > PAGE_SIZE && (
+            <div className="py-4 text-center text-xs text-text-subtle">
+              Showing all {filteredDeliveries.length} deliveries
+            </div>
+          )}
+
           {filteredDeliveries.length === 0 && !isEmpty && (
             <div className="col-span-full p-12 text-center">
               <Search className="w-12 h-12 text-text-subtle mx-auto mb-4" />
@@ -291,8 +327,8 @@ export const DeliveryPage: React.FC = () => {
 
           {isEmpty && (
             <div className="col-span-full p-12 text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
-                <Truck className="h-8 w-8 text-amber-600" />
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[var(--radius-pill)] bg-surface-2">
+                <Truck className="h-8 w-8 text-accent" />
               </div>
               <h3 className="text-lg font-semibold text-text">No deliveries scheduled</h3>
               <p className="mx-auto mt-1 max-w-sm text-sm text-text-muted">

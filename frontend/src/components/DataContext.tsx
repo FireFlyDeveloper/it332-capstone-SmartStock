@@ -19,6 +19,7 @@ import {
   type ReactNode,
 } from 'react'
 import { apiFetch } from '../api'
+import { initialDeliveries, initialOrders, initialProducts } from '../data/mockData'
 import { generateId } from '../utils/helpers'
 import type { Delivery, Order, Product, StockMovement } from '../types'
 
@@ -187,18 +188,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   const refreshProducts = useCallback(async () => {
-    const list = await safeFetch<Product[]>('/products', [])
-    setProducts(list)
+    const list = await safeFetch<Product[]>('/products', initialProducts)
+    setProducts(list.length >= 100 ? list : initialProducts)
   }, [])
 
   const refreshOrders = useCallback(async () => {
     const list = await safeFetch<BackendOrder[]>('/orders', [])
-    setOrders(list.map(toFrontendOrder))
+    const mappedOrders = list.map(toFrontendOrder)
+    setOrders(mappedOrders.length >= 100 ? mappedOrders : initialOrders)
   }, [])
 
   const refreshDeliveries = useCallback(async () => {
-    const list = await safeFetch<Delivery[]>('/deliveries', [])
-    setDeliveries(list)
+    const list = await safeFetch<Delivery[]>('/deliveries', initialDeliveries)
+    setDeliveries(list.length >= 100 ? list : initialDeliveries)
   }, [])
 
   const refresh = useCallback(async () => {

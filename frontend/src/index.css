@@ -12,21 +12,21 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #f7f6f3;
-  --color-surface: #ffffff;
-  --color-surface-2: #f0eee9;
-  --color-border: #e3e0d8;
-  --color-border-strong: #c8c4b8;
-  --color-text: #1a1916;
-  --color-text-muted: #6b6759;
-  --color-text-subtle: #8a8576;
-  --color-accent: #b8732a;
-  --color-accent-hover: #9a5f1f;
-  --color-accent-fg: #ffffff;
+  --color-bg: #14130f;
+  --color-surface: #1d1c18;
+  --color-surface-2: #25231d;
+  --color-border: #2e2c25;
+  --color-border-strong: #443f33;
+  --color-text: #f8f4ea;
+  --color-text-muted: #e7dcc6;
+  --color-text-subtle: #cdbf9d;
+  --color-accent: #f2c176;
+  --color-accent-hover: #ffe1a3;
+  --color-accent-fg: #1a1916;
   --color-accent-soft: rgba(184, 115, 42, 0.10);
-  --color-danger: #b3261e;
-  --color-danger-soft: rgba(179, 38, 30, 0.08);
-  --color-danger-border: rgba(179, 38, 30, 0.30);
+  --color-danger: #ffc6bd;
+  --color-danger-soft: rgba(255, 198, 189, 0.12);
+  --color-danger-border: rgba(255, 198, 189, 0.32);
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --radius-input: 6px;
@@ -35,36 +35,36 @@
 }
 
 :root {
-  --bg: #f7f6f3;
-  --surface: #ffffff;
-  --surface-2: #f0eee9;
-  --surface-3: #ebe8df;
-  --border: #e3e0d8;
-  --border-strong: #c8c4b8;
-  --text: #1a1916;
-  --text-muted: #6b6759;
-  --text-subtle: #8a8576;
-  --accent: #b8732a;
-  --accent-hover: #9a5f1f;
-  --accent-fg: #ffffff;
-  --accent-soft: rgba(184, 115, 42, 0.10);
-  --accent-softer: rgba(184, 115, 42, 0.06);
-  --success: #4f7a38;
-  --success-soft: rgba(79, 122, 56, 0.10);
-  --warning: #b8732a;
-  --warning-soft: rgba(184, 115, 42, 0.12);
-  --danger: #b3261e;
-  --danger-soft: rgba(179, 38, 30, 0.08);
-  --danger-border: rgba(179, 38, 30, 0.30);
+  --bg: #14130f;
+  --surface: #1d1c18;
+  --surface-2: #25231d;
+  --surface-3: #2a281f;
+  --border: #2e2c25;
+  --border-strong: #443f33;
+  --text: #f8f4ea;
+  --text-muted: #e7dcc6;
+  --text-subtle: #cdbf9d;
+  --accent: #f2c176;
+  --accent-hover: #ffe1a3;
+  --accent-fg: #1a1916;
+  --accent-soft: rgba(242, 193, 118, 0.14);
+  --accent-softer: rgba(242, 193, 118, 0.08);
+  --success: #c8f2aa;
+  --success-soft: rgba(200, 242, 170, 0.13);
+  --warning: #f2c176;
+  --warning-soft: rgba(242, 193, 118, 0.14);
+  --danger: #ffc6bd;
+  --danger-soft: rgba(255, 198, 189, 0.12);
+  --danger-border: rgba(255, 198, 189, 0.32);
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --radius-input: 6px;
   --radius-card: 10px;
   --radius-pill: 999px;
-  --shadow-card: 0 1px 2px rgba(26, 25, 22, 0.05), 0 12px 30px rgba(83, 70, 48, 0.07);
-  --shadow-raised: 0 18px 50px rgba(83, 70, 48, 0.12);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 18px 48px rgba(0, 0, 0, 0.26);
+  --shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 24px 70px rgba(0, 0, 0, 0.36);
 
-  font: 15px/1.5 var(--sans);
+  font: 14px/1.5 var(--sans);
   color: var(--text);
   background: var(--bg);
   color-scheme: light dark;
@@ -81,19 +81,22 @@
     --surface-3: #2a281f;
     --border: #2e2c25;
     --border-strong: #443f33;
-    --text: #f0ede4;
-    --text-muted: #a8a292;
-    --text-subtle: #7a7567;
-    --accent: #d49154;
-    --accent-hover: #e0a468;
-    --accent-soft: rgba(212, 145, 84, 0.12);
-    --accent-softer: rgba(212, 145, 84, 0.07);
-    --success: #8fb978;
-    --success-soft: rgba(143, 185, 120, 0.13);
-    --warning: #d49154;
-    --warning-soft: rgba(212, 145, 84, 0.14);
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 14px 34px rgba(0, 0, 0, 0.28);
-    --shadow-raised: 0 18px 50px rgba(0, 0, 0, 0.38);
+    --text: #f8f4ea;
+    --text-muted: #e7dcc6;
+    --text-subtle: #cdbf9d;
+    --accent: #f2c176;
+    --accent-hover: #ffe1a3;
+    --accent-soft: rgba(242, 193, 118, 0.14);
+    --accent-softer: rgba(242, 193, 118, 0.08);
+    --success: #c8f2aa;
+    --success-soft: rgba(200, 242, 170, 0.13);
+    --warning: #f2c176;
+    --warning-soft: rgba(242, 193, 118, 0.14);
+    --danger: #ffc6bd;
+    --danger-soft: rgba(255, 198, 189, 0.12);
+    --danger-border: rgba(255, 198, 189, 0.32);
+    --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 18px 48px rgba(0, 0, 0, 0.26);
+    --shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 24px 70px rgba(0, 0, 0, 0.36);
   }
 }
 
@@ -147,42 +150,57 @@ button:disabled {
   .app-shell {
     min-height: 100dvh;
     background:
-      radial-gradient(circle at top left, var(--accent-softer), transparent 34rem),
-      linear-gradient(180deg, var(--bg), var(--surface-2));
+      linear-gradient(rgba(242, 193, 118, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(242, 193, 118, 0.026) 1px, transparent 1px),
+      radial-gradient(circle at 18% -10%, var(--accent-softer), transparent 30rem),
+      linear-gradient(180deg, var(--bg), #171510 52%, var(--surface-2));
+    background-size: 42px 42px, 42px 42px, auto, auto;
     color: var(--text);
   }
 
   .app-sidebar {
-    background: color-mix(in srgb, var(--surface) 94%, var(--surface-2));
+    background: color-mix(in srgb, var(--surface) 90%, #0e0d0a);
     border-color: var(--border);
-    box-shadow: 1px 0 0 var(--border), 16px 0 38px rgba(83, 70, 48, 0.06);
+    box-shadow: 1px 0 0 var(--border), 18px 0 58px rgba(0, 0, 0, 0.24);
   }
 
   .app-topbar {
-    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
     border-color: var(--border);
-    backdrop-filter: blur(16px);
+    backdrop-filter: blur(18px) saturate(128%);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset;
   }
 
   .panel {
-    background: var(--surface);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, white), var(--surface));
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(180deg, rgba(255,255,255,0.045), transparent 34%);
   }
 
   .panel-muted {
-    background: var(--surface-2);
+    background: color-mix(in srgb, var(--surface-2) 88%, var(--surface));
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
   }
 
   .metric-card {
-    background: linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--surface) 86%, var(--surface-2)));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 95%, white), color-mix(in srgb, var(--surface) 78%, var(--surface-2)));
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card);
-    transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease, background-color 160ms ease;
   }
 
   .metric-card:hover {
@@ -272,8 +290,8 @@ button:disabled {
     color: var(--accent-hover);
   }
 
-  .page-stack { display: grid; gap: 1.5rem; }
-  .section-title { color: var(--text); font-weight: 750; letter-spacing: -0.015em; }
+  .page-stack { display: grid; gap: 1.15rem; }
+  .section-title { color: var(--text); font-weight: 760; letter-spacing: -0.025em; text-wrap: balance; }
   .section-subtitle { color: var(--text-muted); }
   .icon-tile {
     display: inline-flex;
@@ -306,5 +324,120 @@ button:disabled {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 1ms !important;
+  }
+}
+
+
+@layer components {
+  .ops-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--border);
+  }
+
+  .ops-strip > * {
+    background: color-mix(in srgb, var(--surface-2) 86%, var(--surface));
+    padding: 0.8rem 0.95rem;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .data-table thead {
+    background: color-mix(in srgb, var(--surface-2) 86%, var(--surface));
+  }
+
+  .data-table tbody tr {
+    transition: background-color 140ms ease, transform 140ms ease;
+  }
+
+  .data-table tbody tr:hover {
+    background: color-mix(in srgb, var(--surface-2) 76%, var(--accent-soft));
+  }
+
+  .empty-state {
+    display: grid;
+    place-items: center;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-card);
+    background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+    padding: 2rem;
+    text-align: center;
+  }
+}
+
+@layer base {
+  table {
+    color: var(--text);
+  }
+
+  th {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+  }
+
+  td {
+    color: var(--text);
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border: 2px solid var(--surface); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+}
+
+
+/* Contrast repair: keep SmartStock on a dark surface system so light typography never lands on pale UI. */
+@layer utilities {
+  #root :where(.bg-white, .bg-gray-50, .bg-gray-100, .bg-slate-50, .bg-blue-50, .from-slate-50, .to-blue-50) {
+    background: var(--surface) !important;
+  }
+
+  #root :where(.bg-gray-200, .bg-slate-100, .bg-amber-50, .bg-amber-100, .bg-yellow-100, .bg-blue-100, .bg-green-100, .bg-red-50, .bg-red-100, .bg-purple-100, .bg-orange-100) {
+    background: var(--surface-2) !important;
+  }
+
+  #root :where(.panel, .metric-card, .login-form__input, .input, input, textarea, select, [class*="bg-surface"]) {
+    color: var(--text) !important;
+  }
+
+  #root :where(h1, h2, h3, h4, h5, h6, p, span, small, label, li, dt, dd, th, td, a, button, strong, em, code, figcaption) {
+    color: inherit;
+  }
+
+  #root :where(.text-text, [class*="text-stone"], [class*="text-slate"], [class*="text-gray"], [class*="text-zinc"], [class*="text-neutral"], [class*="text-black"], [class*="text-white"]) {
+    color: var(--text) !important;
+  }
+
+  #root :where(.text-text-muted, .section-subtitle, .label, .chip, .status-chip, [class*="text-muted"], [class*="text-subtle"]) {
+    color: var(--text-muted) !important;
+  }
+
+  #root :where(.text-accent, [class*="text-amber"], [class*="text-orange"], [class*="text-yellow"], [class*="text-blue"], [class*="text-purple"], [class*="text-cyan"], [class*="text-sky"]) {
+    color: var(--accent) !important;
+  }
+
+  #root :where([class*="text-green"], [class*="text-emerald"], .text-\[var\(--success\)\]) {
+    color: var(--success) !important;
+  }
+
+  #root :where([class*="text-red"], [class*="text-rose"], .text-\[var\(--danger\)\]) {
+    color: var(--danger) !important;
+  }
+
+  #root :where(.btn-primary, .bg-accent, .bg-blue-600, .bg-amber-600) {
+    color: #1a1916 !important;
+  }
+
+  #root :where(input::placeholder, textarea::placeholder) {
+    color: var(--text-subtle) !important;
   }
 }

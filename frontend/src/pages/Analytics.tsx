@@ -288,9 +288,9 @@ export const Analytics: React.FC = () => {
   const renderMovingItems = (items: MovementDisplayItem[], tone: 'green' | 'yellow') => (
     <div className="space-y-3">
       {items.map((item, index) => (
-        <div key={`${item.name}-${index}`} className={`flex items-center justify-between p-3 ${tone === 'green' ? 'bg-[var(--success-soft)]' : 'bg-accent-soft'} rounded-lg`}>
+        <div key={`${item.name}-${index}`} className={`flex items-center justify-between p-3 ${tone === 'green' ? 'bg-[var(--success-soft)]' : 'bg-accent-soft'} rounded-[var(--radius-input)]`}>
           <div className="flex items-center gap-3">
-            <span className={`w-8 h-8 ${tone === 'green' ? 'bg-[var(--success-soft)] text-[var(--success)]' : 'bg-accent-soft text-accent'} rounded-full flex items-center justify-center font-semibold text-sm`}>
+            <span className={`w-8 h-8 ${tone === 'green' ? 'bg-[var(--success-soft)] text-[var(--success)]' : 'bg-accent-soft text-accent'} rounded-[var(--radius-pill)] flex items-center justify-center font-semibold text-sm`}>
               {index + 1}
             </span>
             <span className="font-medium text-text">{item.name}</span>
@@ -302,7 +302,7 @@ export const Analytics: React.FC = () => {
                 ? 'bg-accent-soft text-accent'
                 : item.status === 'healthy'
                   ? 'bg-[var(--success-soft)] text-[var(--success)]'
-                  : 'bg-red-100 text-red-700'
+                  : 'bg-danger-soft text-danger'
             }`}>
               {item.status === 'backend' ? 'backend' : item.status}
             </span>
@@ -328,7 +328,7 @@ export const Analytics: React.FC = () => {
                 key={pill.key}
                 type="button"
                 onClick={() => handleDatePill(pill.key)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                className={`rounded-[var(--radius-pill)] px-3 py-1 text-xs font-medium transition-colors ${
                   dateRange === pill.key
                     ? 'bg-accent text-accent-fg'
                     : 'bg-surface-2 text-text-muted hover:bg-[var(--surface-3)]'
@@ -341,7 +341,7 @@ export const Analytics: React.FC = () => {
         </div>
 
         {(analyticsLoading || analyticsError) && (
-          <div className={`rounded-xl border p-4 ${analyticsError ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-blue-200 bg-accent-soft text-blue-800'}`}>
+          <div className={`rounded-[var(--radius-card)] border p-4 ${analyticsError ? 'border-border bg-surface-2 text-accent' : 'border-border bg-accent-soft text-accent'}`}>
             <div className="flex items-start gap-3">
               {analyticsLoading ? <RefreshCw className="mt-0.5 h-5 w-5 animate-spin" /> : <AlertTriangle className="mt-0.5 h-5 w-5" />}
               <div>
@@ -360,7 +360,7 @@ export const Analytics: React.FC = () => {
                 <p className="text-sm text-text-muted">Total Inventory Value</p>
                 <p className="text-2xl font-bold text-text mt-1">{formatCurrency(totalInventoryValue)}</p>
               </div>
-              <div className="p-3 bg-green-100 rounded-xl">
+              <div className="p-3 bg-surface-2 rounded-[var(--radius-card)]">
                 <TrendingUp className="w-6 h-6 text-[var(--success)]" />
               </div>
             </div>
@@ -376,7 +376,7 @@ export const Analytics: React.FC = () => {
                 <p className="text-sm text-text-muted">Sales Transactions</p>
                 <p className="text-2xl font-bold text-text mt-1">{salesChartData.reduce((sum, point) => sum + point.orders, 0)}</p>
               </div>
-              <div className="p-3 bg-blue-100 rounded-xl">
+              <div className="p-3 bg-surface-2 rounded-[var(--radius-card)]">
                 <Package className="w-6 h-6 text-accent" />
               </div>
             </div>
@@ -394,7 +394,7 @@ export const Analytics: React.FC = () => {
                   {formatCurrency(salesChartData.reduce((sum, point) => sum + point.sales, 0))}
                 </p>
               </div>
-              <div className="p-3 bg-purple-100 rounded-xl">
+              <div className="p-3 bg-surface-2 rounded-[var(--radius-card)]">
                 <PieChart className="w-6 h-6 text-accent" />
               </div>
             </div>
@@ -412,7 +412,7 @@ export const Analytics: React.FC = () => {
                   {products.filter(p => checkStockStatus(p.stock, p.threshold) !== 'healthy').length}
                 </p>
               </div>
-              <div className="p-3 bg-yellow-100 rounded-xl">
+              <div className="p-3 bg-surface-2 rounded-[var(--radius-card)]">
                 <AlertTriangle className="w-6 h-6 text-accent" />
               </div>
             </div>
@@ -550,8 +550,8 @@ export const Analytics: React.FC = () => {
                   <span className="text-text-muted">Glass Products</span>
                   <span className="font-semibold text-text">{formatCurrency(glassValue)}</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-accent-soft0 h-2 rounded-full" style={{ width: `${categoryTotalValue > 0 ? (glassValue / categoryTotalValue) * 100 : 0}%` }} />
+                <div className="w-full bg-surface-2 rounded-[var(--radius-pill)] h-2">
+                  <div className="bg-accent h-2 rounded-[var(--radius-pill)]" style={{ width: `${categoryTotalValue > 0 ? (glassValue / categoryTotalValue) * 100 : 0}%` }} />
                 </div>
               </div>
               <div>
@@ -559,8 +559,8 @@ export const Analytics: React.FC = () => {
                   <span className="text-text-muted">Aluminum Products</span>
                   <span className="font-semibold text-text">{formatCurrency(aluminumValue)}</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-[var(--success-soft)]0 h-2 rounded-full" style={{ width: `${categoryTotalValue > 0 ? (aluminumValue / categoryTotalValue) * 100 : 0}%` }} />
+                <div className="w-full bg-surface-2 rounded-[var(--radius-pill)] h-2">
+                  <div className="bg-[var(--success)] h-2 rounded-[var(--radius-pill)]" style={{ width: `${categoryTotalValue > 0 ? (aluminumValue / categoryTotalValue) * 100 : 0}%` }} />
                 </div>
               </div>
             </div>
@@ -578,7 +578,7 @@ export const Analytics: React.FC = () => {
           {/* Fast Moving Items */}
           <div className="panel p-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-green-100 rounded-lg">
+              <div className="p-2 bg-surface-2 rounded-[var(--radius-input)]">
                 <ArrowUpRight className="w-5 h-5 text-[var(--success)]" />
               </div>
               <div>
@@ -592,7 +592,7 @@ export const Analytics: React.FC = () => {
           {/* Slow Moving Items */}
           <div className="panel p-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-yellow-100 rounded-lg">
+              <div className="p-2 bg-surface-2 rounded-[var(--radius-input)]">
                 <Clock className="w-5 h-5 text-accent" />
               </div>
               <div>
@@ -613,7 +613,7 @@ export const Analytics: React.FC = () => {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="data-table">
               <thead className="bg-surface-2 border-b border-border">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase">Product</th>
@@ -633,7 +633,7 @@ export const Analytics: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-[var(--success)] font-medium">{item.inward}</td>
-                    <td className="px-4 py-3 text-right text-sm text-red-600 font-medium">{item.outward}</td>
+                    <td className="px-4 py-3 text-right text-sm text-danger font-medium">{item.outward}</td>
                     <td className="px-4 py-3 text-right text-sm font-medium text-text">{item.balance}</td>
                   </tr>
                 ))}
@@ -648,16 +648,16 @@ export const Analytics: React.FC = () => {
         </div>
 
         {/* AI-Powered Demand Forecasting */}
-        <div className="bg-gradient-to-r from-[var(--accent-softer)] to-[var(--surface)] rounded-xl border border-border p-6">
+        <div className="bg-gradient-to-r from-[var(--accent-softer)] to-[var(--surface)] rounded-[var(--radius-card)] border border-border p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-violet-100 rounded-lg">
+              <div className="p-2 bg-accent-soft rounded-[var(--radius-input)]">
                 <Brain className="w-6 h-6 text-accent" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-text flex items-center gap-2">
                   SES Demand Forecast
-                  <span className="px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">Planning Signal</span>
+                  <span className="px-2 py-0.5 bg-accent-soft text-accent rounded-[var(--radius-pill)] text-xs font-semibold">Planning Signal</span>
                 </h3>
                 <p className="text-sm text-text-muted">Forecast result from backend simple exponential smoothing when available.</p>
               </div>
@@ -669,18 +669,18 @@ export const Analytics: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-6">
-            <div className="rounded-lg bg-white p-4 border border-border">
-              <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Forecasted transactions</p>
+            <div className="rounded-[var(--radius-input)] bg-surface p-4 border border-border">
+              <p className="text-xs font-semibold uppercase tracking-wide text-accent">Forecasted transactions</p>
               <p className="mt-2 text-3xl font-bold text-text">{Math.round(displayedForecast)}</p>
               <p className="mt-1 text-xs text-text-muted">Next-period SES value</p>
             </div>
-            <div className="rounded-lg bg-white p-4 border border-border">
-              <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Date range</p>
+            <div className="rounded-[var(--radius-input)] bg-surface p-4 border border-border">
+              <p className="text-xs font-semibold uppercase tracking-wide text-accent">Date range</p>
               <p className="mt-2 text-lg font-semibold text-text">{forecastDateRange}</p>
               <p className="mt-1 text-xs text-text-muted">Source quantities: monthly transaction counts</p>
             </div>
-            <div className="rounded-lg bg-white p-4 border border-border">
-              <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Smoothing alpha</p>
+            <div className="rounded-[var(--radius-input)] bg-surface p-4 border border-border">
+              <p className="text-xs font-semibold uppercase tracking-wide text-accent">Smoothing alpha</p>
               <p className="mt-2 text-3xl font-bold text-text">{displayedAlpha.toFixed(2)}</p>
               <p className="mt-1 text-xs text-text-muted">Recommendation only, not custom-trained ML</p>
             </div>
@@ -698,7 +698,7 @@ export const Analytics: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {insights ? (
                 <>
-                  <div className="bg-white rounded-lg p-3 border border-border md:col-span-2">
+                  <div className="bg-surface rounded-[var(--radius-input)] p-3 border border-border md:col-span-2">
                     <div className="flex items-start justify-between mb-1">
                       <span className="px-2 py-0.5 rounded text-xs font-medium bg-accent-soft text-accent">{insights.confidence} confidence</span>
                       <span className="text-xs text-text-muted">{insights.source}</span>
@@ -707,15 +707,15 @@ export const Analytics: React.FC = () => {
                     <p className="text-xs text-text-muted mt-1">{insights.summary}</p>
                   </div>
                   {insights.recommendations.slice(0, 3).map((recommendation, index) => (
-                    <div key={`recommendation-${index}`} className="bg-white rounded-lg p-3 border border-border">
-                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-violet-100 text-violet-700">recommendation only</span>
+                    <div key={`recommendation-${index}`} className="bg-surface rounded-[var(--radius-input)] p-3 border border-border">
+                      <span className="px-2 py-0.5 rounded-[var(--radius-pill)] text-xs font-semibold bg-accent-soft text-accent">recommendation only</span>
                       <p className="text-sm font-medium text-text mt-2">Planning recommendation {index + 1}</p>
                       <p className="text-xs text-text-muted mt-1">{recommendation}</p>
                     </div>
                   ))}
                   {insights.risks.slice(0, 2).map((risk, index) => (
-                    <div key={`risk-${index}`} className="bg-white rounded-lg p-3 border border-amber-100">
-                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">risk signal</span>
+                    <div key={`risk-${index}`} className="bg-surface rounded-[var(--radius-input)] p-3 border border-[var(--danger-border)]">
+                      <span className="px-2 py-0.5 rounded-[var(--radius-pill)] text-xs font-semibold bg-danger-soft text-danger">risk signal</span>
                       <p className="text-sm font-medium text-text mt-2">Risk {index + 1}</p>
                       <p className="text-xs text-text-muted mt-1">{risk}</p>
                     </div>
@@ -723,10 +723,10 @@ export const Analytics: React.FC = () => {
                 </>
               ) : (
                 mockAIRecommendations.slice(0, 4).map((rec) => (
-                  <div key={rec.id} className="bg-white rounded-lg p-3 border border-border">
+                  <div key={rec.id} className="bg-surface rounded-[var(--radius-input)] p-3 border border-border">
                     <div className="flex items-start justify-between mb-1">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        rec.priority === 'high' ? 'bg-red-100 text-red-700' :
+                        rec.priority === 'high' ? 'bg-danger-soft text-danger' :
                         rec.priority === 'medium' ? 'bg-accent-soft text-accent' :
                         'bg-accent-soft text-accent'
                       }`}>

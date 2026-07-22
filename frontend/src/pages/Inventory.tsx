@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus,
   Search,
@@ -15,6 +15,8 @@ import type { Product, StockMovement } from '../types';
 import { formatCurrency, getStatusColor, checkStockStatus } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
+
+const PAGE_SIZE = 30;
 
 const initialProductForm: Omit<Product, 'id'> = {
   name: '',
@@ -45,6 +47,8 @@ export const Inventory: React.FC = () => {
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
   const [movementsByProduct, setMovementsByProduct] = useState<Record<string, StockMovement[]>>({});
   const [movementsLoading, setMovementsLoading] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   // Filter products
   const filteredProducts = useMemo(() => {
@@ -57,6 +61,25 @@ export const Inventory: React.FC = () => {
       return matchesSearch && matchesCategory && matchesStock;
     });
   }, [products, searchTerm, categoryFilter, stockFilter]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [searchTerm, categoryFilter, stockFilter]);
+
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisibleCount((count) => Math.min(count + PAGE_SIZE, filteredProducts.length));
+      }
+    }, { rootMargin: '360px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [filteredProducts.length]);
+
+  const visibleProducts = filteredProducts.slice(0, visibleCount);
+  const hasMoreProducts = visibleProducts.length < filteredProducts.length;
 
   const handleOpenModal = (product?: Product) => {
     if (product) {
@@ -176,7 +199,7 @@ export const Inventory: React.FC = () => {
   const isEmpty = !loading && products.length === 0;
 
   return (
-      <div className="space-y-6 animate-fadeIn">
+      <div className="page-stack animate-fadeIn">
         {/* Header Actions */}
         <div className="flex flex-col sm:flex-row gap-4 justify-between">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -185,7 +208,7 @@ export const Inventory: React.FC = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-subtle" />
               <input
                 type="text"
-                placeholder="Search products..."
+                placeholder="Search products"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="input pl-10 w-full sm:w-64"
@@ -241,7 +264,7 @@ export const Inventory: React.FC = () => {
               key={pill.key}
               type="button"
               onClick={() => setStockFilter(pill.key)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-[var(--radius-pill)] px-3 py-1 text-xs font-medium transition-colors ${
                 stockFilter === pill.key
                   ? 'bg-accent text-accent-fg'
                   : 'bg-surface-2 text-text-muted hover:bg-[var(--surface-3)]'
@@ -275,7 +298,7 @@ export const Inventory: React.FC = () => {
         {/* Products Table */}
         <div className="panel overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="data-table">
               <thead className="bg-surface-2 border-b border-border">
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">SKU</th>
@@ -288,7 +311,7 @@ export const Inventory: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filteredProducts.map((product) => {
+                {visibleProducts.map((product) => {
                   const stockStatus = checkStockStatus(product.stock, product.threshold);
                   const movements = movementsByProduct[product.id] ?? [];
                   return (
@@ -302,7 +325,7 @@ export const Inventory: React.FC = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${
+                          <span className={`px-3 py-1 rounded-[var(--radius-pill)] text-xs font-medium capitalize ${
                             product.category === 'glass' ? 'bg-accent-soft text-accent' : 'bg-[var(--success-soft)] text-[var(--success)]'
                           }`}>
                             {product.category}
@@ -312,15 +335,15 @@ export const Inventory: React.FC = () => {
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-text">{product.stock}</span>
                             <span className="text-text-muted text-xs">{product.unit}</span>
-                            <span className={`w-2 h-2 rounded-full ${
-                              stockStatus === 'healthy' ? 'bg-[var(--success-soft)]0' :
-                              stockStatus === 'low' ? 'bg-accent-soft0' : 'bg-red-500'
+                            <span className={`w-2 h-2 rounded-[var(--radius-pill)] ${
+                              stockStatus === 'healthy' ? 'bg-[var(--success)]' :
+                              stockStatus === 'low' ? 'bg-accent' : 'bg-danger-soft0'
                             }`} />
                           </div>
                         </td>
                         <td className="px-6 py-4 font-medium text-text">{formatCurrency(product.price)}</td>
                         <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(product.status)}`}>
+                          <span className={`px-3 py-1 rounded-[var(--radius-pill)] text-xs font-medium ${getStatusColor(product.status)}`}>
                             {product.status}
                           </span>
                         </td>
@@ -328,28 +351,28 @@ export const Inventory: React.FC = () => {
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => handleToggleMovements(product.id)}
-                              className="p-2 text-text-muted hover:bg-surface-2 rounded-lg transition-colors"
+                              className="p-2 text-text-muted hover:bg-surface-2 rounded-[var(--radius-input)] transition-colors"
                               title="Movement history"
                             >
                               <History className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleRestock(product.id)}
-                              className="p-2 text-[var(--success)] hover:bg-[var(--success-soft)] rounded-lg transition-colors"
+                              className="p-2 text-[var(--success)] hover:bg-[var(--success-soft)] rounded-[var(--radius-input)] transition-colors"
                               title="Restock"
                             >
                               <RefreshCw className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleOpenModal(product)}
-                              className="p-2 text-accent hover:bg-accent-soft rounded-lg transition-colors"
+                              className="p-2 text-accent hover:bg-accent-soft rounded-[var(--radius-input)] transition-colors"
                               title="Edit"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDelete(product.id)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              className="p-2 text-danger hover:bg-danger-soft rounded-[var(--radius-input)] transition-colors"
                               title="Delete"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -360,7 +383,7 @@ export const Inventory: React.FC = () => {
                       {expandedProductId === product.id && (
                         <tr className="bg-surface-2">
                           <td colSpan={7} className="px-6 py-4">
-                            <div className="rounded-lg border border-border bg-white p-4">
+                            <div className="rounded-[var(--radius-input)] border border-border bg-surface p-4">
                               <div className="mb-3 flex items-center justify-between">
                                 <h4 className="text-sm font-semibold text-text">Movement history</h4>
                                 <span className="text-xs text-text-muted">{movements.length} movement(s)</span>
@@ -372,9 +395,9 @@ export const Inventory: React.FC = () => {
                               ) : (
                                 <div className="space-y-2">
                                   {movements.map((movement) => (
-                                    <div key={movement.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-surface-2 px-3 py-2 text-sm">
+                                    <div key={movement.id} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-input)] bg-surface-2 px-3 py-2 text-sm">
                                       <div>
-                                        <span className={movement.type === 'inbound' ? 'font-semibold text-[var(--success)]' : 'font-semibold text-red-700'}>
+                                        <span className={movement.type === 'inbound' ? 'font-semibold text-[var(--success)]' : 'font-semibold text-danger'}>
                                           {movement.type === 'inbound' ? '+' : '-'}{movement.quantity}
                                         </span>
                                         <span className="ml-2 text-text-muted">{movement.referenceNo}</span>
@@ -396,17 +419,30 @@ export const Inventory: React.FC = () => {
             </table>
           </div>
           
+          {hasMoreProducts && (
+            <div ref={loadMoreRef} className="border-t border-border px-6 py-4 text-center text-sm text-text-muted">
+              Loading more products · {visibleProducts.length} of {filteredProducts.length}
+            </div>
+          )}
+
+          {!hasMoreProducts && filteredProducts.length > PAGE_SIZE && (
+            <div className="border-t border-border px-6 py-4 text-center text-xs text-text-subtle">
+              Showing all {filteredProducts.length} products
+            </div>
+          )}
+
           {filteredProducts.length === 0 && !isEmpty && (
-            <div className="p-12 text-center">
-              <Search className="w-12 h-12 text-text-subtle mx-auto mb-4" />
-              <p className="text-text-muted">No products match the current filters.</p>
+            <div className="empty-state m-4">
+              <Search className="mb-3 h-10 w-10 text-text-subtle" />
+              <p className="font-semibold text-text">No matching products</p>
+              <p className="mt-1 text-sm text-text-muted">Adjust search or filter settings.</p>
             </div>
           )}
 
           {isEmpty && (
-            <div className="p-12 text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
-                <PackagePlus className="h-8 w-8 text-amber-600" />
+            <div className="empty-state m-4">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[var(--radius-card)] bg-surface-2">
+                <PackagePlus className="h-8 w-8 text-accent" />
               </div>
               <h3 className="text-lg font-semibold text-text">No products yet</h3>
               <p className="mx-auto mt-1 max-w-sm text-sm text-text-muted">
@@ -416,7 +452,7 @@ export const Inventory: React.FC = () => {
               <button
                 type="button"
                 onClick={() => toast.info('Demo build - this would open the create form.')}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700"
+                className="mt-4 inline-flex items-center gap-2 rounded-[var(--radius-input)] bg-accent px-4 py-2 text-sm font-medium text-accent-fg shadow-[var(--shadow-card)] hover:bg-accent-hover"
               >
                 <Plus className="h-4 w-4" /> Add your first product
               </button>
@@ -427,12 +463,12 @@ export const Inventory: React.FC = () => {
         {/* Add/Edit Modal */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slideIn">
+            <div className="bg-surface rounded-[var(--radius-card)] w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slideIn">
               <div className="flex items-center justify-between p-6 border-b border-border">
                 <h3 className="text-xl font-semibold text-text">
                   {editingProduct ? 'Edit Product' : 'Add New Product'}
                 </h3>
-                <button onClick={handleCloseModal} className="p-2 hover:bg-surface-2 rounded-lg">
+                <button onClick={handleCloseModal} className="p-2 hover:bg-surface-2 rounded-[var(--radius-input)]">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -562,10 +598,10 @@ export const Inventory: React.FC = () => {
         {/* Restock Modal */}
         {isRestockModalOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl w-full max-w-md animate-slideIn">
+            <div className="bg-surface rounded-[var(--radius-card)] w-full max-w-md animate-slideIn">
               <div className="flex items-center justify-between p-6 border-b border-border">
                 <h3 className="text-xl font-semibold text-text">Restock Product</h3>
-                <button onClick={() => setIsRestockModalOpen(false)} className="p-2 hover:bg-surface-2 rounded-lg">
+                <button onClick={() => setIsRestockModalOpen(false)} className="p-2 hover:bg-surface-2 rounded-[var(--radius-input)]">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -599,10 +635,10 @@ export const Inventory: React.FC = () => {
         {/* Delete Confirmation Modal */}
         {isDeleteConfirmOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl w-full max-w-md animate-slideIn">
+            <div className="bg-surface rounded-[var(--radius-card)] w-full max-w-md animate-slideIn">
               <div className="p-6 text-center">
-                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Trash2 className="w-8 h-8 text-red-600" />
+                <div className="w-16 h-16 bg-danger-soft rounded-[var(--radius-pill)] flex items-center justify-center mx-auto mb-4">
+                  <Trash2 className="w-8 h-8 text-danger" />
                 </div>
                 <h3 className="text-xl font-semibold text-text mb-2">Delete Product?</h3>
                 <p className="text-text-muted">This action cannot be undone. The product will be permanently removed.</p>
@@ -612,7 +648,7 @@ export const Inventory: React.FC = () => {
                 <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 btn-secondary">
                   Cancel
                 </button>
-                <button onClick={confirmDelete} className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors font-medium">
+                <button onClick={confirmDelete} className="flex-1 bg-red-600 text-accent-fg px-4 py-2 rounded-[var(--radius-input)] hover:bg-red-700 transition-colors font-medium">
                   Delete
                 </button>
               </div>
