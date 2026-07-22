@@ -239,10 +239,6 @@ const TrackingPage: React.FC = () => {
             <ul className="text-left text-text-muted space-y-2 max-w-md mx-auto">
               <li className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-[var(--success)]" />
-                Your order confirmation email
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-[var(--success)]" />
                 SMS notification sent to your phone
               </li>
               <li className="flex items-center gap-2">
