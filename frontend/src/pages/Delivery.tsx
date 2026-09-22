@@ -11,6 +11,7 @@ import {
   Loader,
   Download,
   Search,
+  X,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
 import type { Delivery } from '../types';
@@ -19,12 +20,12 @@ import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
 
 const deliverySteps = [
-  { key: 'pending', label: 'Order Placed', icon: Package },
-  { key: 'assigned', label: 'Driver Assigned', icon: User },
+  { key: 'pending', label: 'Placed', icon: Package },
+  { key: 'assigned', label: 'Assigned', icon: User },
   { key: 'picked_up', label: 'Picked Up', icon: Package },
   { key: 'in_transit', label: 'In Transit', icon: Truck },
   { key: 'arrived', label: 'Arrived', icon: MapPin },
-  { key: 'delivered', label: 'Delivered', icon: CheckCircle }
+  { key: 'delivered', label: 'Delivered', icon: CheckCircle },
 ];
 
 export const DeliveryPage: React.FC = () => {
@@ -170,123 +171,155 @@ export const DeliveryPage: React.FC = () => {
         </div>
 
         {/* Deliveries Grid */}
-        <div className="grid grid-cols-1 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredDeliveries.map((delivery) => {
             const order = orders.find(o => o.id === delivery.orderId);
             const currentStep = getStepIndex(delivery.status);
+            const isDelivered = delivery.status === 'delivered';
+            const isFailed = delivery.status === 'failed';
             
             return (
               <div 
                 key={delivery.id}
-                className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] overflow-hidden hover:shadow-md transition-all duration-300"
+                className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] overflow-hidden hover:shadow-md transition-all duration-300 flex flex-col justify-between"
               >
                 {/* Header */}
-                <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-indigo-50/50 via-white to-white">
+                <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-indigo-50/40 via-white to-white">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0">
                         <Truck className="w-5 h-5" />
                       </div>
-                      <div>
-                        <h3 className="font-extrabold text-slate-900">{delivery.id}</h3>
-                        <p className="text-xs text-slate-400">Order: {delivery.orderId}</p>
+                      <div className="min-w-0">
+                        <h3 className="font-extrabold text-slate-900 truncate">{delivery.id}</h3>
+                        <p className="text-xs text-slate-400 truncate">Order: {delivery.orderId}</p>
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(delivery.status)}`}>
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold shrink-0 ${getStatusColor(delivery.status)}`}>
                       {delivery.status.replace('_', ' ')}
                     </span>
                   </div>
                 </div>
 
                 {/* Content */}
-                <div className="p-5 space-y-4">
-                  {/* Customer Info */}
-                  {order && (
-                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{order.customerName}</p>
-                        <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
-                          <Phone className="w-4 h-4" />
-                          <span>{order.contact}</span>
+                <div className="p-5 space-y-4 flex-1 flex flex-col justify-between">
+                  <div className="space-y-3.5">
+                    {/* Customer Info */}
+                    {order && (
+                      <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100/80">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-xs text-slate-900 truncate">{order.customerName}</p>
+                          <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                            <Phone className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                            <span className="truncate">{order.contact}</span>
+                          </div>
                         </div>
                       </div>
+                    )}
+
+                    {/* Destination & Driver info */}
+                    <div className="space-y-2 text-xs">
+                      <div className="flex items-start gap-2.5">
+                        <MapPin className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Destination</p>
+                          <p className="font-semibold text-slate-800 truncate">{delivery.destination}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs text-slate-500">
+                        <span className="flex items-center gap-1.5 truncate">
+                          <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="truncate font-medium">{delivery.driver}</span>
+                        </span>
+                        <span className="font-bold text-slate-700 shrink-0 bg-slate-100 px-2 py-0.5 rounded-md text-[11px]">
+                          {delivery.truckNumber}
+                        </span>
+                      </div>
                     </div>
-                  )}
 
-                  {/* Destination */}
-                  <div className="flex items-start gap-3">
-                    <MapPin className="w-5 h-5 text-gray-400 mt-0.5" />
-                    <div>
-                      <p className="text-sm text-gray-500">Destination</p>
-                      <p className="font-medium text-gray-900">{delivery.destination}</p>
-                    </div>
-                  </div>
-
-                  {/* Progress Timeline */}
-                  <div className="pt-4 border-t border-gray-100">
-                    <p className="text-sm font-medium text-gray-700 mb-3">Delivery Progress</p>
-                    <div className="flex items-start w-full relative">
-                      {deliverySteps.map((step, index, arr) => {
-                        const isCompleted = index <= currentStep;
-                        const isCurrent = index === currentStep;
-                        
-                        return (
-                          <div key={step.key} className="relative flex-1 flex flex-col items-center">
-                            {/* Connecting line to next step */}
-                            {index < arr.length - 1 && (
-                              <div className="absolute top-4 left-1/2 w-full h-0.5 -translate-y-1/2 bg-gray-200 z-0">
-                                <div
-                                  className="h-full bg-[#4f46e5] transition-all duration-500"
-                                  style={{ width: index < currentStep ? '100%' : '0%' }}
-                                />
-                              </div>
-                            )}
-
-                            <div className={`
-                              relative z-10 w-8 h-8 rounded-full flex items-center justify-center
-                              ${isCompleted ? 'bg-[#4f46e5] text-white' : 'bg-gray-200 text-gray-400'}
-                              ${isCurrent ? 'ring-4 ring-indigo-100' : ''}
-                            `}>
-                              {isCurrent ? (
-                                <Loader className="w-4 h-4 animate-spin" />
-                              ) : isCompleted ? (
-                                <CheckCircle className="w-4 h-4" />
-                              ) : (
-                                <Circle className="w-4 h-4" />
+                    {/* Progress Timeline */}
+                    <div className="pt-3 border-t border-slate-100">
+                      <p className="text-xs font-bold text-slate-700 mb-3">Delivery Progress</p>
+                      <div className="flex items-start w-full relative">
+                        {deliverySteps.map((step, index, arr) => {
+                          const isCompleted = isDelivered || index <= currentStep;
+                          const isCurrent = !isDelivered && index === currentStep;
+                          
+                          return (
+                            <div key={step.key} className="relative flex-1 flex flex-col items-center">
+                              {/* Connecting line to next step */}
+                              {index < arr.length - 1 && (
+                                <div className="absolute top-3.5 left-1/2 w-full h-0.5 -translate-y-1/2 bg-slate-200 z-0">
+                                  <div
+                                    className="h-full bg-[#4f46e5] transition-all duration-500"
+                                    style={{ width: (isDelivered || index < currentStep) ? '100%' : '0%' }}
+                                  />
+                                </div>
                               )}
+
+                              <div className={`
+                                relative z-10 w-7 h-7 rounded-full flex items-center justify-center transition-all
+                                ${isCompleted ? 'bg-[#4f46e5] text-white shadow-2xs' : 'bg-slate-200 text-slate-400'}
+                                ${isCurrent ? 'ring-4 ring-indigo-100' : ''}
+                              `}>
+                                {isCurrent ? (
+                                  <Loader className="w-3.5 h-3.5 animate-spin" />
+                                ) : isCompleted ? (
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Circle className="w-3.5 h-3.5" />
+                                )}
+                              </div>
+                              <span className={`text-[10px] mt-1.5 text-center leading-tight px-0.5 ${
+                                isCurrent ? 'text-indigo-600 font-bold' : isCompleted ? 'text-slate-900 font-semibold' : 'text-slate-400'
+                              }`}>
+                                {step.label}
+                              </span>
                             </div>
-                            <span className={`text-xs mt-1 text-center px-1 hidden sm:block ${isCompleted ? 'text-gray-900 font-medium' : 'text-gray-400'}`}>
-                              {step.label}
-                            </span>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  {delivery.status !== 'delivered' && delivery.status !== 'failed' && (
-                    <div className="pt-4">
-                      {getNextStatus(delivery.status) && (
+                  {/* Actions / Status Footer */}
+                  <div className="pt-3 border-t border-slate-100 mt-2">
+                    {!isDelivered && !isFailed ? (
+                      <div className="space-y-2">
+                        {getNextStatus(delivery.status) && (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateStatus(delivery.id)}
+                            className="w-full btn-primary flex items-center justify-center gap-2 py-2.5 text-xs font-bold"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                            Mark as {getNextStatus(delivery.status)?.replace('_', ' ')}
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleUpdateStatus(delivery.id)}
-                          className="w-full btn-primary flex items-center justify-center gap-2"
+                          type="button"
+                          onClick={() => {
+                            updateDeliveryStatus(delivery.id, 'failed', -1);
+                            toast.error('Delivery marked as failed');
+                          }}
+                          className="w-full text-rose-600 hover:bg-rose-50 py-1.5 rounded-xl text-xs font-bold transition-colors"
                         >
-                          <ChevronRight className="w-5 h-5" />
-                          Mark as {getNextStatus(delivery.status)?.replace('_', ' ')}
+                          Mark as Failed
                         </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          updateDeliveryStatus(delivery.id, 'failed', -1);
-                          toast.error('Delivery marked as failed');
-                        }}
-                        className="w-full mt-2 text-red-600 hover:bg-red-50 py-2 rounded-lg transition-colors"
-                      >
-                        Mark as Failed
-                      </button>
-                    </div>
-                  )}
+                      </div>
+                    ) : isDelivered ? (
+                      <div className="py-2.5 px-3 bg-emerald-50 rounded-2xl flex items-center justify-center gap-2 text-xs font-extrabold text-emerald-700">
+                        <CheckCircle className="w-4 h-4 text-emerald-600" />
+                        <span>Successfully Delivered</span>
+                      </div>
+                    ) : (
+                      <div className="py-2.5 px-3 bg-rose-50 rounded-2xl flex items-center justify-center gap-2 text-xs font-extrabold text-rose-700">
+                        <X className="w-4 h-4 text-rose-600" />
+                        <span>Delivery Failed</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
