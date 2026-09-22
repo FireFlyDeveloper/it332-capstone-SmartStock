@@ -170,6 +170,12 @@ export const TrackingPage: React.FC = () => {
     return 0;
   }, [order, progressSteps]);
 
+  const isDelivered = useMemo(() => {
+    if (!order) return false;
+    const status = order.orderStatus.toLowerCase();
+    return status === 'completed' || status === 'delivered';
+  }, [order]);
+
   const getPaymentBadge = (status: string) => {
     const s = status.toLowerCase();
     if (s === 'paid') {
@@ -394,28 +400,28 @@ export const TrackingPage: React.FC = () => {
               </div>
 
               {/* Progress Line and Circles */}
-              <div className="w-full relative px-2 sm:px-6">
-                {/* Connecting background track */}
-                <div className="absolute top-5 left-8 right-8 h-1 -translate-y-1/2 bg-slate-100 z-0" />
-                {/* Active progress fill */}
-                <div 
-                  className="absolute top-5 left-8 h-1 -translate-y-1/2 bg-[#4f46e5] z-0 transition-all duration-700 ease-out"
-                  style={{ 
-                    width: progressSteps.length > 1 
-                      ? `calc(${Math.min(100, (currentStepIndex / (progressSteps.length - 1)) * 100)}% - 40px)` 
-                      : '0%' 
-                  }}
-                />
-
-                <div className="relative z-10 flex items-start justify-between w-full">
-                  {progressSteps.map((step, idx) => {
-                    const isCompleted = idx <= currentStepIndex;
-                    const isCurrent = idx === currentStepIndex;
+              <div className="w-full relative px-2 sm:px-4">
+                <div className="flex items-start w-full relative">
+                  {progressSteps.map((step, idx, arr) => {
+                    const isCompleted = isDelivered || idx <= currentStepIndex;
+                    const isCurrent = !isDelivered && idx === currentStepIndex;
 
                     return (
-                      <div key={step.key} className="flex flex-col items-center text-center flex-1">
+                      <div key={step.key} className="relative flex-1 flex flex-col items-center">
+                        {/* Connecting line to next step */}
+                        {idx < arr.length - 1 && (
+                          <div className="absolute top-5 left-1/2 w-full h-1 -translate-y-1/2 bg-slate-100 z-0">
+                            <div 
+                              className="h-full bg-[#4f46e5] transition-all duration-500"
+                              style={{ 
+                                width: (isDelivered || idx < currentStepIndex) ? '100%' : '0%' 
+                              }}
+                            />
+                          </div>
+                        )}
+
                         <div
-                          className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-2xs ${
+                          className={`relative z-10 w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-2xs ${
                             isCurrent
                               ? 'bg-[#4f46e5] text-white ring-4 ring-indigo-100 shadow-md shadow-indigo-900/20'
                               : isCompleted
@@ -430,7 +436,7 @@ export const TrackingPage: React.FC = () => {
                           )}
                         </div>
                         <p
-                          className={`mt-3 text-xs font-bold tracking-tight ${
+                          className={`mt-3 text-xs font-bold tracking-tight text-center px-1 leading-tight ${
                             isCurrent
                               ? 'text-[#4f46e5]'
                               : isCompleted
@@ -440,7 +446,7 @@ export const TrackingPage: React.FC = () => {
                         >
                           {step.label}
                         </p>
-                        <p className="text-[11px] text-slate-400 hidden sm:block mt-0.5 max-w-[120px]">
+                        <p className="text-[11px] text-slate-400 hidden sm:block mt-0.5 max-w-[130px] text-center">
                           {step.desc}
                         </p>
                       </div>
