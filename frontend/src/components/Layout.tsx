@@ -223,31 +223,6 @@ export function Layout({ children }: LayoutProps) {
                 </div>
               </div>
             </div>
-
-            {/* Quick user status & logout */}
-            <div className="mt-3 pt-3 flex items-center justify-between px-1">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
-                  {user?.name ? user.name[0].toUpperCase() : 'A'}
-                </div>
-                <div className="truncate">
-                  <p className="text-xs font-bold text-slate-300 truncate">
-                    {user?.name || 'Administrator'}
-                  </p>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">
-                    {user?.role || 'Admin'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleLogout}
-                title="Sign out"
-                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
           </div>
         </div>
       </aside>
