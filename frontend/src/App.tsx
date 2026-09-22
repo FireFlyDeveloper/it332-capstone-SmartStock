@@ -10,6 +10,7 @@ import { DeliveryPage as Delivery } from './pages/Delivery'
 import TrackingPage from './pages/Tracking'
 import { Analytics } from './pages/Analytics'
 import { Reports } from './pages/Reports'
+import ProfilePage from './pages/Profile'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import './App.css'
@@ -150,6 +151,30 @@ function AppRoutes() {
             <DataProvider>
               <Layout>
                 <Reports />
+              </Layout>
+            </DataProvider>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <DataProvider>
+              <Layout>
+                <ProfilePage />
+              </Layout>
+            </DataProvider>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <DataProvider>
+              <Layout>
+                <ProfilePage />
               </Layout>
             </DataProvider>
           </ProtectedRoute>

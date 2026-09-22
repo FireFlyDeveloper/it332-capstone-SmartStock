@@ -54,6 +54,14 @@ export function createUser(input: {
   return record;
 }
 
+export function updateUser(id: string, updates: { name?: string; passwordHash?: string }): UserRecord | null {
+  const user = users.get(id);
+  if (!user) return null;
+  if (updates.name !== undefined) user.name = updates.name.trim();
+  if (updates.passwordHash !== undefined) user.passwordHash = updates.passwordHash;
+  return user;
+}
+
 /**
  * Test-only helper — clears the in-memory user store between tests.
  * Exported with a leading underscore to signal "do not import in app code".

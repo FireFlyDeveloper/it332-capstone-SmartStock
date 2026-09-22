@@ -9,7 +9,7 @@ import { Hono } from 'hono';
 import { setCookie, deleteCookie } from 'hono/cookie';
 import { hashPassword, verifyPassword } from './hash.js';
 import { signToken } from './jwt.js';
-import { createUser, findByEmail, type Role } from './users.js';
+import { createUser, findByEmail, findById, updateUser, type Role } from './users.js';
 import { requireAuth } from './middleware.js';
 
 export const authRoutes = new Hono();
@@ -83,4 +83,33 @@ authRoutes.post('/logout', (c) => {
 authRoutes.get('/me', requireAuth, (c) => {
   const user = c.get('user');
   return c.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+});
+
+authRoutes.patch('/profile', requireAuth, async (c) => {
+  const authUser = c.get('user');
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object') return c.json({ error: 'invalid body' }, 400);
+  const name = typeof body.name === 'string' ? body.name.trim() : undefined;
+  if (name !== undefined && name.length === 0) return c.json({ error: 'name cannot be empty' }, 400);
+  const updated = updateUser(authUser.id, { name });
+  if (!updated) return c.json({ error: 'user not found' }, 404);
+  return c.json({ ok: true, user: { id: updated.id, email: updated.email, name: updated.name, role: updated.role } });
+});
+
+authRoutes.post('/change-password', requireAuth, async (c) => {
+  const authUser = c.get('user');
+  const user = findById(authUser.id);
+  if (!user) return c.json({ error: 'user not found' }, 404);
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object') return c.json({ error: 'invalid body' }, 400);
+  const { currentPassword, newPassword } = body as Record<string, unknown>;
+  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+    return c.json({ error: 'currentPassword and newPassword are required' }, 400);
+  }
+  const valid = await verifyPassword(currentPassword, user.passwordHash);
+  if (!valid) return c.json({ error: 'current password is incorrect' }, 400);
+  if (newPassword.length < 8) return c.json({ error: 'new password must be at least 8 characters' }, 400);
+  const newHash = await hashPassword(newPassword);
+  updateUser(user.id, { passwordHash: newHash });
+  return c.json({ ok: true, message: 'password changed successfully' });
 });

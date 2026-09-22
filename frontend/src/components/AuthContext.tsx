@@ -15,6 +15,8 @@ export interface User {
   email: string
   name: string
   role: Role
+  phone?: string
+  department?: string
 }
 
 export interface AuthState {
@@ -26,6 +28,7 @@ interface AuthContextValue extends AuthState {
   login: (token: string, user: User) => void
   logout: () => void
   setAuth: (state: AuthState) => void
+  updateUser: (updates: Partial<User>) => void
   validateSession: () => Promise<boolean>
   isAdmin: boolean
   isStaff: boolean
@@ -97,6 +100,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [setAuth, state.token])
 
+  const updateUser = useCallback((updates: Partial<User>) => {
+    setState((prev) => {
+      if (!prev.user) return prev;
+      const nextUser = { ...prev.user, ...updates };
+      const nextState = { ...prev, user: nextUser };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+      return nextState;
+    });
+  }, []);
+
   const isAdmin = state.user?.role === 'admin'
   const isStaff = state.user?.role === 'staff'
   const canExportReports = isAdmin
@@ -104,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ ...state, login, logout, setAuth, validateSession, isAdmin, isStaff, canExportReports, canViewAnalytics }}
+      value={{ ...state, login, logout, setAuth, updateUser, validateSession, isAdmin, isStaff, canExportReports, canViewAnalytics }}
     >
       {children}
     </AuthContext.Provider>

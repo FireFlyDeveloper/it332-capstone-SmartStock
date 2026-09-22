@@ -29,6 +29,10 @@ import {
   Menu,
   X,
   ChevronDown,
+  User,
+  Lock,
+  Bell,
+  Sliders,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { NotificationDropdown } from './NotificationDropdown';
@@ -63,6 +67,7 @@ const navGroups: NavGroup[] = [
       { icon: Compass, label: 'Live Tracking', path: '/tracking' },
       { icon: BarChart3, label: 'AI Analytics', path: '/analytics' },
       { icon: FileText, label: 'Reports & Sales', path: '/reports' },
+      { icon: Sliders, label: 'Settings', path: '/profile' },
     ],
   },
 ];
@@ -257,25 +262,61 @@ export function Layout({ children }: LayoutProps) {
                     <p className="text-xs font-bold text-slate-900">{user?.name || 'Kim Saludes'}</p>
                     <p className="text-[11px] text-slate-500 truncate">{user?.email || 'admin@smartstock.local'}</p>
                   </div>
-                  <div className="py-1">
+                  <div className="py-1 space-y-0.5">
                     <button
                       type="button"
                       onClick={() => {
                         setShowProfileMenu(false);
-                        navigate('/analytics');
+                        navigate('/profile');
                       }}
-                      className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 rounded-xl transition-colors flex items-center gap-2"
+                      className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors flex items-center gap-2.5"
                     >
-                      <BarChart3 className="w-3.5 h-3.5 text-slate-400" />
-                      General Analytics
+                      <User className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Profile &amp; Account</span>
                     </button>
                     <button
                       type="button"
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        navigate('/profile?tab=security');
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors flex items-center gap-2.5"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Change Password</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        navigate('/profile?tab=notifications');
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors flex items-center gap-2.5"
+                    >
+                      <Bell className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Push Notifications</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        navigate('/profile?tab=settings');
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors flex items-center gap-2.5"
+                    >
+                      <Sliders className="w-3.5 h-3.5 text-slate-400" />
+                      <span>System Settings</span>
+                    </button>
+
+                    <div className="my-1 border-t border-slate-100" />
+
+                    <button
+                      type="button"
                       onClick={handleLogout}
-                      className="w-full text-left px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors flex items-center gap-2"
+                      className="w-full text-left px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors flex items-center gap-2.5"
                     >
                       <LogOut className="w-3.5 h-3.5" />
-                      Sign out
+                      <span>Sign out</span>
                     </button>
                   </div>
                 </div>
