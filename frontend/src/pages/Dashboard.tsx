@@ -193,12 +193,6 @@ export const Dashboard: React.FC = () => {
       value: aluminumTotalStock || 360,
       color: '#4f46e5', // Indigo
     },
-    {
-      label: 'Hardware & Accessories',
-      shortLabel: 'Hardware',
-      value: 140,
-      color: '#f59e0b', // Amber
-    },
   ];
 
   // Custom tooltips
