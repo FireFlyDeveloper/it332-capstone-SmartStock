@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   FileText, 
   Download, 
@@ -13,8 +14,10 @@ import {
   Calendar,
   ArrowUpRight,
   X,
-  Filter
+  Filter,
+  Banknote
 } from 'lucide-react';
+
 import { useData } from '../components/DataContext';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
@@ -90,6 +93,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
 );
 
 export const Reports: React.FC = () => {
+  const navigate = useNavigate();
   const { products, orders } = useData();
   const { canExportReports } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -277,7 +281,7 @@ export const Reports: React.FC = () => {
 
   return (
       <div className="space-y-6 animate-fadeIn">
-        {/* Header — title + generated-at */}
+        {/* Header — title + generated-at + Daily Cash button */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
@@ -287,7 +291,16 @@ export const Reports: React.FC = () => {
               Generated on: <span className="font-mono text-slate-700">{generatedAt}</span>
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => navigate('/daily-sales')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-indigo-50 text-[#4f46e5] hover:bg-indigo-100/80 border border-indigo-100 text-xs font-bold transition-all shadow-2xs self-start sm:self-auto"
+          >
+            <Banknote className="w-4 h-4" />
+            <span>Daily Cash Reconciliation</span>
+          </button>
         </div>
+
 
         {/* Filter Toolbar Card: Date Range (presets + specific From/To) & Export Controls */}
         <div className="bg-white rounded-[28px] p-5 sm:p-6 border border-[#f1f5f9] shadow-sm space-y-4">

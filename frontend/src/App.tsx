@@ -10,6 +10,7 @@ import { DeliveryPage as Delivery } from './pages/Delivery'
 import TrackingPage from './pages/Tracking'
 import { Analytics } from './pages/Analytics'
 import { Reports } from './pages/Reports'
+import { DailySales } from './pages/DailySales'
 import ProfilePage from './pages/Profile'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
@@ -151,6 +152,18 @@ function AppRoutes() {
             <DataProvider>
               <Layout>
                 <Reports />
+              </Layout>
+            </DataProvider>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/daily-sales"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'staff']}>
+            <DataProvider>
+              <Layout>
+                <DailySales />
               </Layout>
             </DataProvider>
           </ProtectedRoute>

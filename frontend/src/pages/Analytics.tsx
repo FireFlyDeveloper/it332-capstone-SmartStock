@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 // Last touched: 2026-09-22 (interactive date filter toolbar matching Reports & Sales)
 import { 
   TrendingUp, 
@@ -13,8 +14,10 @@ import {
   Minus,
   Zap,
   Calendar,
-  X
+  X,
+  Banknote
 } from 'lucide-react';
+
 import { useData } from '../components/DataContext';
 import { formatCurrency, checkStockStatus, formatDateInput } from '../utils/helpers';
 import { generateDemandForecast } from '../utils/aiHelpers';
@@ -45,6 +48,7 @@ import {
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 
 export const Analytics: React.FC = () => {
+  const navigate = useNavigate();
   const { products, orders } = useData();
   const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
   const [fromDate, setFromDate] = useState<string>('');
@@ -272,7 +276,16 @@ export const Analytics: React.FC = () => {
               DeepSeek predictive modeling for glass, aluminum profiles, and order flow.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => navigate('/daily-sales')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-indigo-50 text-[#4f46e5] hover:bg-indigo-100/80 border border-indigo-100 text-xs font-bold transition-all shadow-2xs self-start sm:self-auto"
+          >
+            <Banknote className="w-4 h-4" />
+            <span>Daily Sales &amp; Cash Audit</span>
+          </button>
         </div>
+
 
         {/* Filter Toolbar Card: Date Range (presets + specific From/To) */}
         <div className="bg-white rounded-[28px] p-5 sm:p-6 border border-[#f1f5f9] shadow-sm">

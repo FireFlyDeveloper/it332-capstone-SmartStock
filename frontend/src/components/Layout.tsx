@@ -32,6 +32,7 @@ import {
   Lock,
   Bell,
   Sliders,
+  Banknote,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { NotificationDropdown } from './NotificationDropdown';
@@ -65,10 +66,12 @@ const navGroups: NavGroup[] = [
     items: [
       { icon: BarChart3, label: 'AI Analytics', path: '/analytics' },
       { icon: FileText, label: 'Reports & Sales', path: '/reports' },
+      { icon: Banknote, label: 'Daily Sales & Cash', path: '/daily-sales' },
       { icon: Sliders, label: 'Settings', path: '/profile' },
     ],
   },
 ];
+
 
 export function Layout({ children }: LayoutProps) {
   const { user, logout } = useAuth();
