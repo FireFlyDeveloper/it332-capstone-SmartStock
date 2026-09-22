@@ -1,6 +1,6 @@
 /**
- * AuthLayout — the asymmetric split shell used by LoginPage (and any
- * future auth surface — register, forgot-password, etc.).
+ * AuthLayout - the asymmetric split shell used by LoginPage (and any
+ * future auth surface - register, forgot-password, etc.).
  *
  * Pure layout. No state. Composes a form pane + an optional brand pane.
  *
@@ -22,7 +22,7 @@ export function AuthLayout({
   return (
     <main className="auth">
       <section className="auth__form-pane">
-        <div className="auth__demo-badge" aria-label="Demo build indicator" title="Demo build — data is mock data.">
+        <div className="auth__demo-badge" aria-label="Demo build indicator" title="Demo build - data is mock data.">
           <Sparkles className="auth__demo-icon" aria-hidden="true" />
           <span>Demo</span>
         </div>

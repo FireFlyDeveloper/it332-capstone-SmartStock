@@ -5,8 +5,10 @@
  * Last touched: 2026-06-29
  */
 
-import { sign, verify, type SignOptions } from 'jsonwebtoken';
+import jwt, { type SignOptions } from 'jsonwebtoken';
 import { authConfig } from './config.js';
+
+const { sign, verify } = jwt;
 
 export interface JwtPayload {
   sub: string;          // user id

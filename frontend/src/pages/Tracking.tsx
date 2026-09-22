@@ -1,19 +1,43 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Package, CheckCircle, Clock, Phone, User, Home, ShoppingBag } from 'lucide-react';
 import { useData } from '../components/DataContext';
+import { apiFetch } from '../api';
 import type { Order } from '../types';
 import { formatCurrency } from '../utils/helpers';
 import { toast } from 'sonner';
 
+type PublicTrackingOrder = {
+  referenceNumber: string;
+  customerName: string;
+  deliveryAddress?: string;
+  deliveryDate?: string;
+  orderStatus: string;
+  paymentStatus: string;
+  total: number;
+  paidAmount: number;
+  items: Array<{
+    name?: string;
+    productName?: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal?: number;
+    total?: number;
+  }>;
+  contact?: string;
+  address?: string;
+  orderType?: 'pickup' | 'delivery';
+};
+
 const TrackingPage: React.FC = () => {
   const { orders } = useData();
   const [referenceNumber, setReferenceNumber] = useState('');
-  const [order, setOrder] = useState<Order | null>(null);
+  const [order, setOrder] = useState<PublicTrackingOrder | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSearch = () => {
-    if (!referenceNumber.trim()) {
+  const handleSearch = async () => {
+    const reference = referenceNumber.trim();
+    if (!reference) {
       setError('Please enter a reference number');
       return;
     }
@@ -22,64 +46,92 @@ const TrackingPage: React.FC = () => {
     setError('');
     setOrder(null);
 
-    // TODO(backend): swap for `apiFetch<Order>(`/orders/${encodeURIComponent(referenceNumber)}`)`
-    // once the Hono backend exposes a lookup endpoint. For now we search the
-    // already-fetched list in memory.
-    setTimeout(() => {
-      const foundOrder = orders.find(
-        (o: Order) =>
-          o.referenceNumber.toLowerCase() === referenceNumber.trim().toLowerCase() ||
-          o.id.toLowerCase() === referenceNumber.trim().toLowerCase(),
+    try {
+      // 1. Attempt backend public tracking endpoint
+      const backendOrder = await apiFetch<PublicTrackingOrder>(
+        `/tracking/${encodeURIComponent(reference)}`,
+        { auth: false }
       );
-
-      if (foundOrder) {
-        setOrder(foundOrder);
+      if (backendOrder && backendOrder.referenceNumber) {
+        setOrder({
+          ...backendOrder,
+          address: backendOrder.deliveryAddress || backendOrder.address,
+        });
         toast.success('Order found!');
-      } else {
-        setError('Order not found. Please check your reference number.');
-        toast.error('Order not found');
+        setLoading(false);
+        return;
       }
-      setLoading(false);
-    }, 500);
+    } catch {
+      // Fall through to local demo orders search
+    }
+
+    // 2. Fallback to local memory orders (for demo or offline)
+    const foundOrder = orders.find(
+      (o: Order) =>
+        o.referenceNumber.toLowerCase() === reference.toLowerCase() ||
+        o.id.toLowerCase() === reference.toLowerCase(),
+    );
+
+    if (foundOrder) {
+      setOrder(foundOrder);
+      toast.success('Order found!');
+    } else {
+      setError('Order not found. Please check your reference number.');
+      toast.error('Order not found');
+    }
+    setLoading(false);
   };
 
   // Calculate order progress based on status
-  const getProgressSteps = useMemo(() => {
+  const progressSteps = useMemo(() => {
     if (!order) return [];
 
     if (order.orderType === 'pickup') {
-      // Pickup flow: Pending → Ready for Pickup → Completed
       return [
-        { key: 'pending', label: 'Order Placed', status: 'pending' as const },
-        { key: 'ready_for_pickup', label: 'Ready for Pickup', status: 'ready_for_pickup' as const },
-        { key: 'completed', label: 'Completed/Picked Up', status: 'completed' as const }
+        { key: 'pending', label: 'Order Placed' },
+        { key: 'ready_for_pickup', label: 'Ready for Pickup' },
+        { key: 'completed', label: 'Completed / Picked Up' }
       ];
     } else {
-      // Delivery flow: Pending → Packed → Out for Delivery → Delivered
       return [
-        { key: 'pending', label: 'Order Placed', status: 'pending' as const },
-        { key: 'packed', label: 'Packed', status: 'packed' as const },
-        { key: 'out_for_delivery', label: 'Out for Delivery', status: 'out_for_delivery' as const },
-        { key: 'delivered', label: 'Delivered', status: 'completed' as const }
+        { key: 'pending', label: 'Order Placed' },
+        { key: 'packed', label: 'Packed' },
+        { key: 'out_for_delivery', label: 'Out for Delivery' },
+        { key: 'completed', label: 'Delivered' }
       ];
     }
   }, [order]);
 
-  const getCurrentStepIndex = useMemo(() => {
+  const currentStepIndex = useMemo(() => {
     if (!order) return -1;
-    
-    const statusOrder = ['pending', 'ready_for_pickup', 'packed', 'out_for_delivery', 'completed'];
-    return statusOrder.indexOf(order.orderStatus);
-  }, [order]);
+    const status = order.orderStatus.toLowerCase();
+    if (status === 'completed' || status === 'delivered') return progressSteps.length - 1;
+    if (status === 'in_transit' || status === 'out_for_delivery') return 2;
+    if (status === 'packed' || status === 'ready_for_pickup' || status === 'processing') return 1;
+    if (status === 'pending') return 0;
+    return 0;
+  }, [order, progressSteps]);
 
   const getPaymentStatusColor = (status: string) => {
-    switch (status) {
-      case 'paid': return 'bg-green-100 text-green-700';
-      case 'partial': return 'bg-yellow-100 text-yellow-700';
-      case 'pending': return 'bg-gray-100 text-gray-700';
-      case 'refunded': return 'bg-red-100 text-red-700';
-      default: return 'bg-gray-100 text-gray-700';
+    switch (status.toLowerCase()) {
+      case 'paid': return 'bg-emerald-100 text-emerald-700';
+      case 'partial': return 'bg-amber-100 text-amber-700';
+      case 'pending':
+      case 'unpaid': return 'bg-slate-100 text-slate-700';
+      case 'refunded': return 'bg-rose-100 text-rose-700';
+      default: return 'bg-slate-100 text-slate-700';
     }
+  };
+
+  const getStatusText = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === 'pending') return 'Order Placed - Awaiting Confirmation';
+    if (s === 'ready_for_pickup') return 'Ready for Pickup';
+    if (s === 'packed') return 'Order Packed - Ready for Delivery';
+    if (s === 'out_for_delivery' || s === 'in_transit') return 'Out for Delivery / In Transit';
+    if (s === 'completed' || s === 'delivered') return 'Order Completed & Delivered';
+    if (s === 'cancelled') return 'Order Cancelled';
+    return status.replace(/_/g, ' ');
   };
 
   return (
@@ -107,11 +159,11 @@ const TrackingPage: React.FC = () => {
               onChange={(e) => setReferenceNumber(e.target.value)}
               placeholder="e.g. SS-2026-00001 or ORD-001"
               className="w-full pl-12 pr-4 py-3 bg-[#f8fafc] border border-slate-200/80 rounded-2xl focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none text-sm text-slate-800 font-medium"
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              onKeyPress={(e) => e.key === 'Enter' && void handleSearch()}
             />
           </div>
           <button
-            onClick={handleSearch}
+            onClick={() => void handleSearch()}
             disabled={loading}
             className="btn-primary"
           >
@@ -128,176 +180,187 @@ const TrackingPage: React.FC = () => {
         <div className="space-y-6">
           {/* Order Info Card */}
           <div className="bg-white rounded-[32px] shadow-sm border border-[#f1f5f9] p-6 sm:p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Order Details</h2>
-                  <p className="text-sm text-gray-500">Reference: {order.referenceNumber}</p>
-                </div>
-                <span className={`px-4 py-2 rounded-full font-medium ${getPaymentStatusColor(order.paymentStatus)}`}>
-                  {order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1)}
-                </span>
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-xl font-black text-slate-900">Order Details</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Reference: <span className="font-mono font-bold text-slate-800">{order.referenceNumber}</span></p>
               </div>
-
-              {/* Customer Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-                  <User className="w-5 h-5 text-blue-600" />
-                  <div>
-                    <p className="text-xs text-gray-500">Customer</p>
-                    <p className="font-medium text-gray-900">{order.customerName}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-                  <Phone className="w-5 h-5 text-blue-600" />
-                  <div>
-                    <p className="text-xs text-gray-500">Contact</p>
-                    <p className="font-medium text-gray-900">{order.contact}</p>
-                  </div>
-                </div>
-                {order.orderType === 'delivery' && (
-                  <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl md:col-span-2">
-                    <Home className="w-5 h-5 text-blue-600" />
-                    <div>
-                      <p className="text-xs text-gray-500">Delivery Address</p>
-                      <p className="font-medium text-gray-900">{order.address}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Items */}
-              <div className="border-t border-gray-100 pt-4">
-                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <ShoppingBag className="w-4 h-4" />
-                  Order Items
-                </h3>
-                <div className="space-y-2">
-                  {order.items.map((item, index) => (
-                    <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-900">{item.productName}</p>
-                        <p className="text-sm text-gray-500">Qty: {item.quantity} × {formatCurrency(item.unitPrice)}</p>
-                      </div>
-                      <span className="font-semibold text-gray-900">{formatCurrency(item.total)}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-between items-center mt-4 p-4 bg-blue-50 rounded-xl">
-                  <span className="font-semibold text-gray-900">Total Amount</span>
-                  <span className="text-xl font-bold text-blue-600">{formatCurrency(order.total)}</span>
-                </div>
-                {order.paymentStatus !== 'paid' && (
-                  <div className="mt-3 p-3 bg-yellow-50 rounded-lg flex justify-between items-center">
-                    <span className="text-sm text-yellow-800">Paid Amount</span>
-                    <span className="font-semibold text-yellow-800">{formatCurrency(order.paidAmount)}</span>
-                  </div>
-                )}
-              </div>
+              <span className={`px-4 py-1.5 rounded-full text-xs font-bold ${getPaymentStatusColor(order.paymentStatus)}`}>
+                Payment: {order.paymentStatus.toUpperCase()}
+              </span>
             </div>
 
-            {/* Progress Timeline */}
-            <div className="bg-white rounded-2xl shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Order Progress</h3>
-              
-              {/* Steps */}
-              <div className="flex items-center justify-between relative">
-                {/* Progress Line */}
-                <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-200 -translate-y-1/2" />
-                <div 
-                  className="absolute top-1/2 left-0 h-1 bg-blue-600 -translate-y-1/2 transition-all duration-500"
-                  style={{ width: `${(getCurrentStepIndex / (getProgressSteps.length - 1)) * 100}%` }}
-                />
-                
-                {getProgressSteps.map((step, index) => {
-                  const isCompleted = index <= getCurrentStepIndex;
-                  const isCurrent = index === getCurrentStepIndex;
-                  
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div className="flex items-center gap-3 p-4 bg-[#f8fafc] rounded-2xl border border-slate-100">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center">
+                  <User className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Customer</p>
+                  <p className="font-extrabold text-slate-900">{order.customerName}</p>
+                </div>
+              </div>
+
+              {order.contact && (
+                <div className="flex items-center gap-3 p-4 bg-[#f8fafc] rounded-2xl border border-slate-100">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center">
+                    <Phone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Contact</p>
+                    <p className="font-extrabold text-slate-900">{order.contact}</p>
+                  </div>
+                </div>
+              )}
+
+              {(order.address || order.deliveryAddress) && (
+                <div className="flex items-center gap-3 p-4 bg-[#f8fafc] rounded-2xl border border-slate-100 md:col-span-2">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center">
+                    <Home className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Delivery Address</p>
+                    <p className="font-extrabold text-slate-900">{order.address || order.deliveryAddress}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Items */}
+            <div className="border-t border-slate-100 pt-6">
+              <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2 text-sm uppercase tracking-wider">
+                <ShoppingBag className="w-4 h-4 text-[#4f46e5]" />
+                Order Items
+              </h3>
+              <div className="space-y-2">
+                {order.items.map((item, index) => {
+                  const name = item.productName || item.name || 'Custom item';
+                  const price = item.unitPrice || 0;
+                  const itemTotal = item.lineTotal || item.total || (item.quantity * price);
                   return (
-                    <div key={step.key} className="relative flex flex-col items-center z-10">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
-                        isCompleted 
-                          ? 'bg-blue-600 text-white' 
-                          : 'bg-gray-200 text-gray-400'
-                      }`}>
-                        {isCompleted ? (
-                          <CheckCircle className="w-5 h-5" />
-                        ) : (
-                          <Clock className="w-5 h-5" />
-                        )}
+                    <div key={index} className="flex justify-between items-center p-3.5 bg-[#f8fafc] rounded-2xl border border-slate-100">
+                      <div>
+                        <p className="font-bold text-slate-900 text-sm">{name}</p>
+                        <p className="text-xs text-slate-500">Qty: {item.quantity} × {formatCurrency(price)}</p>
                       </div>
-                      <p className={`mt-2 text-xs font-medium text-center ${
-                        isCurrent ? 'text-blue-600' : isCompleted ? 'text-gray-900' : 'text-gray-400'
-                      }`}>
-                        {step.label}
-                      </p>
+                      <span className="font-extrabold text-slate-900 text-sm">{formatCurrency(itemTotal)}</span>
                     </div>
                   );
                 })}
               </div>
 
-              {/* Current Status */}
-              <div className="mt-8 p-4 bg-blue-50 rounded-xl text-center">
-                <p className="text-sm text-blue-600 mb-1">Current Status</p>
-                <p className="text-lg font-bold text-blue-900">
-                  {order.orderStatus === 'pending' && 'Order Placed - Awaiting Confirmation'}
-                  {order.orderStatus === 'ready_for_pickup' && 'Ready for Pickup'}
-                  {order.orderStatus === 'packed' && 'Order Packed - Ready for Delivery'}
-                  {order.orderStatus === 'out_for_delivery' && 'Out for Delivery'}
-                  {order.orderStatus === 'completed' && 'Order Completed'}
-                  {order.orderStatus === 'cancelled' && 'Order Cancelled'}
+              <div className="flex justify-between items-center mt-4 p-5 bg-indigo-50/60 rounded-2xl border border-indigo-100">
+                <span className="font-bold text-slate-700 text-sm">Total Amount</span>
+                <span className="text-xl font-black text-[#4f46e5]">{formatCurrency(order.total)}</span>
+              </div>
+
+              {order.paymentStatus !== 'paid' && order.paidAmount > 0 && (
+                <div className="mt-3 p-4 bg-amber-50 rounded-2xl border border-amber-100 flex justify-between items-center">
+                  <span className="text-xs font-bold text-amber-800">Paid Amount</span>
+                  <span className="font-black text-amber-900">{formatCurrency(order.paidAmount)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Progress Timeline */}
+          <div className="bg-white rounded-[32px] shadow-sm border border-[#f1f5f9] p-6 sm:p-8">
+            <h3 className="text-lg font-black text-slate-900 mb-6">Order Progress</h3>
+            
+            {/* Steps */}
+            <div className="flex items-center justify-between relative px-2">
+              {/* Progress Line */}
+              <div className="absolute top-5 left-6 right-6 h-1 bg-slate-100 -translate-y-1/2" />
+              <div 
+                className="absolute top-5 left-6 h-1 bg-[#4f46e5] -translate-y-1/2 transition-all duration-500"
+                style={{ width: `${Math.max(0, (currentStepIndex / Math.max(1, progressSteps.length - 1)) * 100)}%` }}
+              />
+              
+              {progressSteps.map((step, index) => {
+                const isCompleted = index <= currentStepIndex;
+                const isCurrent = index === currentStepIndex;
+                
+                return (
+                  <div key={step.key} className="relative flex flex-col items-center z-10">
+                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+                      isCompleted 
+                        ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20' 
+                        : 'bg-slate-100 text-slate-400'
+                    }`}>
+                      {isCompleted ? (
+                        <CheckCircle className="w-5 h-5" />
+                      ) : (
+                        <Clock className="w-5 h-5" />
+                      )}
+                    </div>
+                    <p className={`mt-2 text-xs font-bold text-center ${
+                      isCurrent ? 'text-[#4f46e5]' : isCompleted ? 'text-slate-900' : 'text-slate-400'
+                    }`}>
+                      {step.label}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Current Status */}
+            <div className="mt-8 p-4 bg-[#f8fafc] rounded-2xl border border-slate-100 text-center">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Current Status</p>
+              <p className="text-base font-black text-[#4f46e5]">
+                {getStatusText(order.orderStatus)}
+              </p>
+            </div>
+          </div>
+
+          {/* Pickup Info (if applicable) */}
+          {order.orderType === 'pickup' && order.orderStatus !== 'completed' && (
+            <div className="bg-white rounded-[32px] shadow-sm border border-[#f1f5f9] p-6 sm:p-8">
+              <h3 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
+                <Package className="w-5 h-5 text-[#4f46e5]" />
+                Pickup Information
+              </h3>
+              <div className="p-4 bg-indigo-50/60 rounded-2xl border border-indigo-100">
+                <p className="text-xs text-[#4f46e5] font-bold mb-2">
+                  Please bring your reference confirmation and proceed to our warehouse to pick up your materials.
+                </p>
+                <p className="text-xs text-slate-600">
+                  <strong className="text-slate-800">Pickup Location:</strong> Glassram Warehouse, Manila
+                </p>
+                <p className="text-xs text-slate-600 mt-1">
+                  <strong className="text-slate-800">Business Hours:</strong> Mon–Sat 8:00 AM – 6:00 PM
                 </p>
               </div>
             </div>
+          )}
+        </div>
+      )}
 
-            {/* Pickup Info (if applicable) */}
-            {order.orderType === 'pickup' && order.orderStatus !== 'completed' && (
-              <div className="bg-white rounded-2xl shadow-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <Package className="w-5 h-5" />
-                  Pickup Information
-                </h3>
-                <div className="p-4 bg-blue-50 rounded-xl">
-                  <p className="text-sm text-blue-600 mb-2">
-                    Please bring your confirmation and proceed to our warehouse to pick up your order.
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <strong>Pickup Location:</strong> Glassram Warehouse, Manila
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <strong>Business Hours:</strong> Mon-Sat 8:00 AM - 6:00 PM
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Instructions */}
-        {!order && !loading && (
-          <div className="bg-white rounded-[32px] shadow-sm border border-[#f1f5f9] p-8 text-center">
-            <Search className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-            <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em] mb-2">
-              How to track your order?
-            </h3>
-            <p className="text-slate-500 text-sm mb-4">
-              Enter the reference number found on your order confirmation email, invoice, or SMS.
-            </p>
-            <ul className="text-left text-slate-600 text-xs space-y-2.5 max-w-md mx-auto">
-              <li className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                SmartStock order confirmation email
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                SMS notification sent to recipient
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                Delivery dispatch note or receipt from driver
-              </li>
-            </ul>
-          </div>
-        )}
+      {/* Instructions */}
+      {!order && !loading && (
+        <div className="bg-white rounded-[32px] shadow-sm border border-[#f1f5f9] p-8 text-center">
+          <Search className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em] mb-2">
+            How to track your order?
+          </h3>
+          <p className="text-slate-500 text-sm mb-4">
+            Enter the reference number found on your order confirmation email, invoice, or SMS.
+          </p>
+          <ul className="text-left text-slate-600 text-xs space-y-2.5 max-w-md mx-auto">
+            <li className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+              SmartStock order confirmation email
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+              SMS notification sent to recipient
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+              Delivery dispatch note or receipt from driver
+            </li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 };

@@ -155,4 +155,91 @@ describe('product inventory routes', () => {
     });
     expect(invalid.status).toBe(400);
   });
+
+  it('records inbound stock and exposes the created movement', async () => {
+    const token = await login(app, ADMIN);
+    const products = (await (await app.request('/products', {
+      headers: { authorization: 'Bearer ' + token },
+    })).json()) as Array<{ id: string; stock: number }>;
+    const product = products[0];
+
+    const inbound = await app.request('/products/' + product.id + '/stock/inbound', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ quantity: 4, referenceNo: 'PO-1001', supplier: 'Acme Glass' }),
+    });
+
+    expect(inbound.status).toBe(201);
+    const updated = (await inbound.json()) as { product: { stock: number }; movement: { type: string; quantity: number; referenceNo: string; supplier: string; createdBy: string } };
+    expect(updated.product.stock).toBe(product.stock + 4);
+    expect(updated.movement).toMatchObject({ type: 'inbound', quantity: 4, referenceNo: 'PO-1001', supplier: 'Acme Glass', createdBy: ADMIN });
+
+    const list = await app.request('/products/' + product.id + '/movements', {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(list.status).toBe(200);
+    const movements = (await list.json()) as Array<{ referenceNo: string }>;
+    expect(movements.map((movement) => movement.referenceNo)).toContain('PO-1001');
+  });
+
+  it('records outbound stock and rejects insufficient stock', async () => {
+    const token = await login(app, ADMIN);
+    const products = (await (await app.request('/products', {
+      headers: { authorization: 'Bearer ' + token },
+    })).json()) as Array<{ id: string; stock: number }>;
+    const product = products.find((item) => item.stock > 0)!;
+
+    const outbound = await app.request('/products/' + product.id + '/stock/outbound', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ quantity: 3, referenceNo: 'SO-2001' }),
+    });
+    expect(outbound.status).toBe(201);
+    const updated = (await outbound.json()) as { product: { stock: number }; movement: { type: string; quantity: number; referenceNo: string } };
+    expect(updated.product.stock).toBe(product.stock - 3);
+    expect(updated.movement).toMatchObject({ type: 'outbound', quantity: 3, referenceNo: 'SO-2001' });
+
+    const rejected = await app.request('/products/' + product.id + '/stock/outbound', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ quantity: 9999, referenceNo: 'SO-2002' }),
+    });
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toEqual({ error: 'insufficient stock' });
+  });
+
+  it('rejects duplicate stock movement references', async () => {
+    const token = await login(app, ADMIN);
+    const products = (await (await app.request('/products', {
+      headers: { authorization: 'Bearer ' + token },
+    })).json()) as Array<{ id: string }>;
+    const product = products[0];
+
+    const first = await app.request('/products/' + product.id + '/stock/inbound', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ quantity: 1, referenceNo: 'DUP-REF-1', supplier: 'Supplier A' }),
+    });
+    expect(first.status).toBe(201);
+
+    const duplicate = await app.request('/products/' + product.id + '/stock/inbound', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ quantity: 1, referenceNo: 'DUP-REF-1', supplier: 'Supplier B' }),
+    });
+    expect(duplicate.status).toBe(409);
+    expect(await duplicate.json()).toEqual({ error: 'referenceNo already exists' });
+  });
+
+  it('lists low-stock products using stock less than or equal to threshold', async () => {
+    const token = await login(app, STAFF);
+    const res = await app.request('/inventory/low-stock', {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(res.status).toBe(200);
+    const products = (await res.json()) as Array<{ sku: string; stock: number; threshold: number }>;
+    expect(products.length).toBeGreaterThan(0);
+    expect(products.every((product) => product.stock <= product.threshold)).toBe(true);
+    expect(products.map((product) => product.sku)).toContain('ALU-FRM-BLK');
+  });
 });

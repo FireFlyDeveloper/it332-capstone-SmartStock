@@ -1,5 +1,5 @@
 /**
- * AuthArtPanel — ambient brand surface rendered on the right pane at
+ * AuthArtPanel - ambient brand surface rendered on the right pane at
  * desktop widths. Purely decorative; the parent should mark it
  * aria-hidden.
  *

@@ -15,8 +15,9 @@ import {
 import { useData } from '../components/DataContext';
 import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
 import { toast } from 'sonner';
+import { apiFetchBlob, type ApiError } from '../api';
+import { useAuth } from '../components/AuthContext';
 
-// Last touched: 2026-07-07 (round 2 — demo polish)
 type DateRange = '7d' | '30d' | 'all';
 
 const DATE_PILLS: { key: DateRange; label: string }[] = [
@@ -48,6 +49,7 @@ const ReportCard: React.FC<{
 
 export const Reports: React.FC = () => {
   const { products, orders } = useData();
+  const { canExportReports } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState<DateRange>('30d');
   const [generatedAt] = useState(() => new Date().toLocaleString());
@@ -65,7 +67,7 @@ export const Reports: React.FC = () => {
       })),
       total: order.total,
       date: order.date,
-      status: (order.orderStatus === 'completed' ? 'completed' :
+      status: (order.orderStatus === 'completed' ? 'completed' : 
                order.orderStatus === 'cancelled' ? 'cancelled' : 'pending') as 'completed' | 'pending' | 'cancelled',
     }));
   }, [orders]);
@@ -88,12 +90,36 @@ export const Reports: React.FC = () => {
   const totalInventoryValue = products.reduce((sum, p) => sum + (p.stock * p.price), 0);
 
   const handlePrint = () => {
-    toast.info('Opening browser print dialog…');
+    toast.info('Opening browser print dialog...');
     window.print();
   };
 
-  const handleExport = () => {
-    toast.info('Export functionality - would download CSV/PDF');
+  const handleExport = async (format: 'pdf' | 'xlsx') => {
+    const label = format.toUpperCase();
+    toast.info(`Preparing ${label} export...`);
+    try {
+      const response = await apiFetchBlob(`/reports/export?type=sales&format=${format}`);
+      const blob = await response.blob();
+      const fallbackName = `smartstock-sales-report.${format}`;
+      const disposition = response.headers.get('content-disposition') ?? '';
+      const filename = disposition.match(/filename="?([^";]+)"?/)?.[1] ?? fallbackName;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`${label} report downloaded.`);
+    } catch (error) {
+      const apiError = error as ApiError;
+      if (apiError.status === 403) {
+        toast.error('Only admins can export PDF/XLSX reports.');
+      } else {
+        toast.error(apiError.message || `Failed to export ${label} report.`);
+      }
+    }
   };
 
   const handleDatePill = (key: DateRange) => {
@@ -167,19 +193,36 @@ export const Reports: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex gap-3">
-            <button
-              onClick={handleExport}
-              className="btn-secondary flex items-center gap-2"
-            >
-              <Download className="w-5 h-5" />
-              Export
-            </button>
+          <div className="flex flex-wrap items-center gap-3">
+            {canExportReports ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleExport('pdf')}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleExport('xlsx')}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  XLSX
+                </button>
+              </>
+            ) : (
+              <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                Exports are admin-only
+              </span>
+            )}
             <button
               onClick={handlePrint}
               className="btn-primary flex items-center gap-2"
             >
-              <Printer className="w-5 h-5" />
+              <Printer className="w-4 h-4" />
               Print Report
             </button>
           </div>
@@ -356,7 +399,7 @@ export const Reports: React.FC = () => {
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-gray-900">SMARTSTOCK</h2>
               <p className="text-gray-500">Glassram Glass and Aluminum Supply</p>
-              <p className="text-sm text-gray-400 mt-2">Inventory & Sales Report</p>
+              <p className="text-sm text-gray-400 mt-2">Inventory &amp; Sales Report</p>
               <p className="text-sm text-gray-400">Generated: {new Date().toLocaleDateString()}</p>
             </div>
             
@@ -378,9 +421,10 @@ export const Reports: React.FC = () => {
                 <p className="text-xl font-bold text-gray-900">{pendingOrders}</p>
               </div>
             </div>
-
           </div>
         </div>
       </div>
   );
 };
+
+export default Reports;

@@ -5,6 +5,7 @@
  * Last touched: 2026-07-08
  */
 
+import { sendNotificationEvent } from '../notifications/webhook.js';
 import {
   createDelivery,
   deleteDelivery,
@@ -285,6 +286,21 @@ export function editDeliveryRecord(id: string, body: unknown): ServiceResult<Del
   const checked = assertLegalTransition(current, parsed.data);
   if (!checked.ok) return checked;
   const item = updateDelivery(id, checked.data);
+  if (item && checked.data.status !== undefined && current.status !== item.status) {
+    void sendNotificationEvent({
+      type: 'delivery.status_changed',
+      occurredAt: new Date().toISOString(),
+      data: {
+        deliveryId: item.id,
+        orderId: item.orderId,
+        previousStatus: current.status,
+        status: item.status,
+      },
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : 'unknown notification error';
+      console.warn(`[notifications] delivery status event failed: ${message}`);
+    });
+  }
   return item ? { ok: true, data: item } : { ok: false, status: 404, error: 'delivery not found' };
 }
 

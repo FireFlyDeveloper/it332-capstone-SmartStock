@@ -1,0 +1,45 @@
+{
+  "name": "smartstock-desktop",
+  "version": "0.1.0",
+  "description": "Electron desktop shell for SmartStock.",
+  "private": true,
+  "main": "dist/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "npm run build && electron .",
+    "package": "npm run build && electron-builder --dir",
+    "package:win": "npm run build && electron-builder --win nsis"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12",
+    "typescript": "~6.0.2"
+  },
+  "build": {
+    "appId": "com.smartstock.desktop",
+    "productName": "SmartStock",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../frontend/dist",
+        "to": "frontend-dist"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

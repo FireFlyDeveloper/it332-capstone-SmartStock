@@ -14,6 +14,22 @@ import { requireAuth } from './middleware.js';
 
 export const authRoutes = new Hono();
 
+const demoUsers: Array<{ email: string; name: string; password: string; role: Role }> = [
+  { email: 'admin@smartstock.local', name: 'Admin', password: 'admin123', role: 'admin' },
+  { email: 'staff@smartstock.local', name: 'Staff', password: 'staff123', role: 'staff' },
+];
+let demoSeeded = false;
+
+async function ensureDemoUsers(): Promise<void> {
+  if (demoSeeded) return;
+  for (const user of demoUsers) {
+    if (!findByEmail(user.email)) {
+      createUser({ ...user, passwordHash: await hashPassword(user.password) });
+    }
+  }
+  demoSeeded = true;
+}
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function validateRegister(body: unknown): { ok: true; data: { email: string; name: string; password: string; role: Role } } | { ok: false; error: string } {
@@ -46,6 +62,7 @@ authRoutes.post('/register', async (c) => {
 });
 
 authRoutes.post('/login', async (c) => {
+  await ensureDemoUsers();
   const body = await c.req.json().catch(() => null);
   const parsed = validateLogin(body);
   if (!parsed.ok) return c.json({ error: parsed.error }, 400);

@@ -1,20 +1,17 @@
 /**
- * LoginForm — email + password form, owns state, calls /auth/login.
+ * LoginForm - email + password form, owns state, calls /auth/login.
  *
  * Author: Luraine Villaranda
- * Last touched: 2026-07-07
+ * Last touched: 2026-07-17
  *
- * DEMO FALLBACK: when the backend is unreachable (this is a demo build
- * with no Hono server running), the form falls through to a local
- * credential check against DEMO_CREDENTIALS so the demo still works.
- * The first network attempt goes to /auth/login as normal; only on
- * a network/5xx failure do we try the local path. Production login
- * flow is unchanged when the backend is up.
+ * Demo credential buttons only prefill the backend-seeded accounts; they do
+ * not create local/demo tokens.
  */
 
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
-import { useAuth, type User } from './AuthContext'
+import { loginRequest, type ApiError } from '../api'
+import { useAuth } from './AuthContext'
 import './LoginForm.css'
 
 const DEMO_CREDENTIALS = [
@@ -39,23 +36,16 @@ export function LoginForm() {
       return
     }
     setSubmitting(true)
-    // Demo-only build: match against local credentials, no backend call.
-    // In production this would call apiFetch<...>('/auth/login', ...) instead.
-    const matched = DEMO_CREDENTIALS.find(
-      (c) => c.email === email && c.password === password,
-    )
-    if (matched) {
-      const mockUser: User = {
-        id: matched.email,
-        name: matched.label,
-        email: matched.email,
-        role: matched.role,
-      }
-      login(`demo-token-${matched.role}-${Date.now()}`, mockUser)
-    } else {
-      setError('No matching demo account. Use admin@smartstock.local / admin123 or staff@smartstock.local / staff123.')
+    try {
+      const { token, user } = await loginRequest(email, password)
+      login(token, user)
+      toast.success('Signed in to SmartStock.')
+    } catch (err) {
+      const apiError = err as ApiError
+      setError(apiError.message || 'Sign in failed. Check your email and password.')
+    } finally {
+      setSubmitting(false)
     }
-    setSubmitting(false)
   }
 
   function handleForgot(e: React.MouseEvent<HTMLAnchorElement>) {
@@ -68,14 +58,14 @@ export function LoginForm() {
       await navigator.clipboard.writeText(text)
       toast.success(`${label} copied to clipboard`)
     } catch {
-      toast.error('Copy failed — your browser blocked clipboard access.')
+      toast.error('Copy failed - your browser blocked clipboard access.')
     }
   }
 
   function fillDemoCredential(creds: { email: string; password: string }) {
     setEmail(creds.email)
     setPassword(creds.password)
-    toast.info('Demo credentials filled in — press Sign in.')
+    toast.info('Demo credentials filled in - press Sign in.')
   }
 
   return (
@@ -160,7 +150,7 @@ export function LoginForm() {
       {showDemoCard && (
         <aside className="login-form__demo" aria-label="Demo credentials">
           <div className="login-form__demo-head">
-            <span className="login-form__demo-pill">Demo build</span>
+            <span className="login-form__demo-pill">Demo accounts</span>
             <span className="login-form__demo-title">Use one of these accounts</span>
             <button
               type="button"

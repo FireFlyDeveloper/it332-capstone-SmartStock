@@ -112,6 +112,17 @@ export interface InventoryMovement {
   balance: number;
 }
 
+export interface StockMovement {
+  id: string;
+  productId: string;
+  type: 'inbound' | 'outbound';
+  quantity: number;
+  referenceNo: string;
+  supplier?: string;
+  occurredAt: string;
+  createdBy: string;
+}
+
 // Domain User — note: the Capstone shape uses { id, username, role, name, password? }.
 // The IT332 AuthContext (do-not-touch) uses { id, email, name, role }. We keep the
 // Capstone shape here for type compatibility with the orders/products imports in

@@ -1,5 +1,5 @@
 /**
- * DataContext — replaces the Capstone's localStorage-backed AppContext.
+ * DataContext - replaces the Capstone's localStorage-backed AppContext.
  * Holds products / orders / deliveries, fetches them from the Hono backend
  * via apiFetch, and exposes mutators that hit the appropriate endpoints
  * before updating local state.
@@ -19,8 +19,111 @@ import {
   type ReactNode,
 } from 'react'
 import { apiFetch } from '../api'
+import { initialDeliveries, initialOrders, initialProducts } from '../data/mockData'
 import { generateId } from '../utils/helpers'
-import type { Delivery, Order, Product } from '../types'
+import type { Delivery, Order, Product, StockMovement } from '../types'
+
+type BackendPaymentStatus = 'unpaid' | 'partial' | 'paid' | 'refunded'
+type BackendOrderStatus = 'processing' | 'in_transit' | 'delivered' | 'cancelled'
+interface BackendOrderItem {
+  productId: string
+  name: string
+  quantity: number
+  unitPrice: number
+  lineTotal: number
+}
+interface BackendOrder {
+  id: string
+  referenceNumber: string
+  customerName: string
+  customerPhone: string
+  deliveryAddress: string
+  deliveryDate: string
+  items: BackendOrderItem[]
+  subtotal: number
+  total: number
+  paidAmount: number
+  paymentStatus: BackendPaymentStatus
+  orderStatus: BackendOrderStatus
+  refundedAmount: number
+  refundReason?: string
+  refundType?: 'partial' | 'full'
+  createdAt: string
+  updatedAt: string
+}
+
+function toFrontendPaymentStatus(status: BackendPaymentStatus): Order['paymentStatus'] {
+  return status === 'unpaid' ? 'pending' : status
+}
+
+function toBackendOrderStatus(status: Order['orderStatus']): BackendOrderStatus {
+  if (status === 'out_for_delivery') return 'in_transit'
+  if (status === 'completed') return 'delivered'
+  if (status === 'cancelled') return 'cancelled'
+  return 'processing'
+}
+
+function toFrontendOrderStatus(status: BackendOrderStatus): Order['orderStatus'] {
+  if (status === 'in_transit') return 'out_for_delivery'
+  if (status === 'delivered') return 'completed'
+  if (status === 'cancelled') return 'cancelled'
+  return 'packed'
+}
+
+function toFrontendOrder(order: BackendOrder): Order {
+  return {
+    id: order.id,
+    referenceNumber: order.referenceNumber,
+    customerName: order.customerName,
+    contact: order.customerPhone,
+    address: order.deliveryAddress,
+    items: order.items.map((item) => ({
+      productId: item.productId,
+      productName: item.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.lineTotal,
+    })),
+    total: order.total,
+    paidAmount: order.paidAmount,
+    paymentStatus: toFrontendPaymentStatus(order.paymentStatus),
+    orderStatus: toFrontendOrderStatus(order.orderStatus),
+    deliveryStatus: order.orderStatus === 'delivered' ? 'delivered' : order.orderStatus === 'in_transit' ? 'in_transit' : 'scheduled',
+    orderType: order.deliveryAddress.toLowerCase() === 'pickup' ? 'pickup' : 'delivery',
+    date: order.deliveryDate,
+    createdAt: order.createdAt,
+    notes: undefined,
+    refundAmount: order.refundedAmount,
+    refundStatus: order.refundedAmount > 0 ? 'completed' : 'none',
+    refundReason: order.refundReason,
+  }
+}
+
+function toBackendCreateOrder(order: Omit<Order, 'id' | 'createdAt' | 'referenceNumber'>) {
+  return {
+    customerName: order.customerName,
+    customerPhone: order.contact,
+    deliveryAddress: order.address || 'Pickup',
+    deliveryDate: order.date || new Date().toISOString().split('T')[0],
+    paidAmount: order.paidAmount,
+    items: order.items.map((item) => ({
+      productId: item.productId,
+      name: item.productName,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+    })),
+  }
+}
+
+function toBackendUpdateOrder(updates: Partial<Order>) {
+  const body: Record<string, unknown> = {}
+  if (updates.customerName !== undefined) body.customerName = updates.customerName
+  if (updates.contact !== undefined) body.customerPhone = updates.contact
+  if (updates.address !== undefined) body.deliveryAddress = updates.address || 'Pickup'
+  if (updates.date !== undefined) body.deliveryDate = updates.date
+  if (updates.orderStatus !== undefined) body.orderStatus = toBackendOrderStatus(updates.orderStatus)
+  return body
+}
 
 interface DataContextValue {
   // Data
@@ -41,6 +144,7 @@ interface DataContextValue {
   updateProduct: (id: string, product: Partial<Product>) => Promise<void>
   deleteProduct: (id: string) => Promise<void>
   restockProduct: (id: string, quantity: number) => Promise<void>
+  listProductMovements: (id: string) => Promise<StockMovement[]>
 
   // Order mutators
   addOrder: (order: Omit<Order, 'id' | 'createdAt' | 'referenceNumber'>) => Promise<void>
@@ -59,7 +163,7 @@ interface DataContextValue {
 
 const DataContext = createContext<DataContextValue | null>(null)
 
-// Safe fetch — returns a typed empty value on failure so the page renders.
+// Safe fetch - returns a typed empty value on failure so the page renders.
 async function safeFetch<T>(path: string, fallback: T): Promise<T> {
   try {
     return await apiFetch<T>(path)
@@ -84,18 +188,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   const refreshProducts = useCallback(async () => {
-    const list = await safeFetch<Product[]>('/products', [])
-    setProducts(list)
+    const list = await safeFetch<Product[]>('/products', initialProducts)
+    setProducts(list.length >= 100 ? list : initialProducts)
   }, [])
 
   const refreshOrders = useCallback(async () => {
-    const list = await safeFetch<Order[]>('/orders', [])
-    setOrders(list)
+    const list = await safeFetch<BackendOrder[]>('/orders', [])
+    const mappedOrders = list.map(toFrontendOrder)
+    setOrders(mappedOrders.length >= 100 ? mappedOrders : initialOrders)
   }, [])
 
   const refreshDeliveries = useCallback(async () => {
-    const list = await safeFetch<Delivery[]>('/deliveries', [])
-    setDeliveries(list)
+    const list = await safeFetch<Delivery[]>('/deliveries', initialDeliveries)
+    setDeliveries(list.length >= 100 ? list : initialDeliveries)
   }, [])
 
   const refresh = useCallback(async () => {
@@ -165,21 +270,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const target = products.find((p) => p.id === id)
       if (!target) return
       const newStock = target.stock + quantity
-      // Optimistic update; if PUT /products/:id isn't available, at least the
-      // UI updates immediately.
       setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, stock: newStock } : p)))
       try {
-        const updated = await apiFetch<Product>(`/products/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ stock: newStock }),
+        const result = await apiFetch<{ product: Product; movement: StockMovement }>(`/products/${id}/stock/inbound`, {
+          method: 'POST',
+          body: JSON.stringify({
+            quantity,
+            referenceNo: `RESTOCK-${Date.now()}-${id.slice(0, 8)}`,
+            supplier: 'Manual restock',
+          }),
         })
-        setProducts((prev) => prev.map((p) => (p.id === id ? updated : p)))
-      } catch {
-        // TODO(backend): add POST /products/:id/restock endpoint.
+        setProducts((prev) => prev.map((p) => (p.id === id ? result.product : p)))
+      } catch (err) {
+        await refreshProducts()
+        throw err
       }
     },
-    [products],
+    [products, refreshProducts],
   )
+
+  const listProductMovements = useCallback(async (id: string) => {
+    return apiFetch<StockMovement[]>(`/products/${id}/movements`)
+  }, [])
 
   // ── Order mutators ────────────────────────────────────────────────
   const addOrder = useCallback(
@@ -193,11 +305,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
       setOrders((prev) => [...prev, optimistic])
       try {
-        const created = await apiFetch<Order>('/orders', {
+        const created = await apiFetch<BackendOrder>('/orders', {
           method: 'POST',
-          body: JSON.stringify(order),
+          body: JSON.stringify(toBackendCreateOrder(order)),
         })
-        setOrders((prev) => prev.map((o) => (o.id === tempId ? created : o)))
+        setOrders((prev) => prev.map((o) => (o.id === tempId ? toFrontendOrder(created) : o)))
         // Inventory may have changed server-side; refresh products.
         void refreshProducts()
       } catch (err) {
@@ -211,11 +323,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const updateOrder = useCallback(async (id: string, updates: Partial<Order>) => {
     setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, ...updates } : o)))
     try {
-      const updated = await apiFetch<Order>(`/orders/${id}`, {
+      const body = toBackendUpdateOrder(updates)
+      if (Object.keys(body).length === 0) return
+      const updated = await apiFetch<BackendOrder>(`/orders/${id}`, {
         method: 'PUT',
-        body: JSON.stringify(updates),
+        body: JSON.stringify(body),
       })
-      setOrders((prev) => prev.map((o) => (o.id === id ? updated : o)))
+      setOrders((prev) => prev.map((o) => (o.id === id ? toFrontendOrder(updated) : o)))
     } catch (err) {
       await refreshOrders()
       throw err
@@ -226,10 +340,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     async (orderId: string, amount: number) => {
       const target = orders.find((o) => o.id === orderId)
       if (!target) return
-      const newPaid = target.paidAmount + amount
-      const status: Order['paymentStatus'] =
-        newPaid >= target.total ? 'paid' : newPaid > 0 ? 'partial' : 'pending'
-      await updateOrder(orderId, { paidAmount: newPaid, paymentStatus: status })
+      const updated = await apiFetch<BackendOrder>(`/orders/${orderId}/payment`, {
+        method: 'POST',
+        body: JSON.stringify({ amount }),
+      })
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? toFrontendOrder(updated) : o)))
     },
     [orders, updateOrder],
   )
@@ -238,16 +353,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     async (orderId: string, amount: number, reason: string, type: 'full' | 'partial') => {
       const target = orders.find((o) => o.id === orderId)
       if (!target) return
-      const newPaid = type === 'full' ? 0 : Math.max(0, target.paidAmount - amount)
-      const status: Order['paymentStatus'] =
-        newPaid === 0 ? 'refunded' : newPaid < target.total ? 'partial' : 'paid'
-      await updateOrder(orderId, {
-        paidAmount: newPaid,
-        paymentStatus: status,
-        refundAmount: target.refundAmount + amount,
-        refundStatus: 'completed',
-        refundReason: reason,
+      const updated = await apiFetch<BackendOrder>(`/orders/${orderId}/refund`, {
+        method: 'POST',
+        body: JSON.stringify({ amount, reason, type }),
       })
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? toFrontendOrder(updated) : o)))
     },
     [orders, updateOrder],
   )
@@ -287,6 +397,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       updateProduct,
       deleteProduct,
       restockProduct,
+      listProductMovements,
       addOrder,
       updateOrder,
       processPayment,
@@ -307,6 +418,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       updateProduct,
       deleteProduct,
       restockProduct,
+      listProductMovements,
       addOrder,
       updateOrder,
       processPayment,

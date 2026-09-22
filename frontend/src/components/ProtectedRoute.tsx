@@ -1,20 +1,40 @@
 /**
- * ProtectedRoute — redirects to /login if there's no token in the auth
- * context. Otherwise renders the children.
+ * ProtectedRoute - redirects to /login if there's no token in the auth
+ * context. Optionally gates routes by user role.
  *
- * Last touched: 2026-07-07
+ * Last touched: 2026-07-17
  */
 
 import { Navigate, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { useAuth } from './AuthContext'
+import { useAuth, type Role } from './AuthContext'
 
-export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { token } = useAuth()
+interface ProtectedRouteProps {
+  children: ReactNode
+  allowedRoles?: Role[]
+}
+
+export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
+  const { token, user } = useAuth()
   const location = useLocation()
 
   if (!token) {
     return <Navigate to="/login" replace state={{ from: location }} />
   }
+
+  if (allowedRoles && (!user || !allowedRoles.includes(user.role))) {
+    return (
+      <div className="flex min-min-h-[100dvh] items-center justify-center bg-surface-2 p-6">
+        <div className="max-w-md rounded-xl border border-border bg-surface p-6 text-center shadow-[var(--shadow-card)]">
+          <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Unauthorized</p>
+          <h1 className="mt-3 text-2xl font-bold text-text">Access restricted</h1>
+          <p className="mt-2 text-sm text-text-muted">
+            Your account role does not have permission to view this SmartStock page.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return <>{children}</>
 }
