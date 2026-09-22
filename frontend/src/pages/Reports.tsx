@@ -11,21 +11,33 @@ import {
   DollarSign,
   Clock,
   Calendar,
-  ArrowUpRight
+  ArrowUpRight,
+  X,
+  Filter
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
 import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
+import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
 import { apiFetchBlob, type ApiError } from '../api';
 import { useAuth } from '../components/AuthContext';
 
-type DateRange = '7d' | '30d' | 'all';
+type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
+type ExportType = 'sales' | 'purchases' | 'inventory' | 'spending';
 
-const DATE_PILLS: { key: DateRange; label: string }[] = [
-  { key: '7d', label: 'Last 7 days' },
-  { key: '30d', label: 'Last 30 days' },
-  { key: 'all', label: 'All time' },
-];
+const EXPORT_TYPE_LABELS: Record<ExportType, string> = {
+  sales: 'Sales Report',
+  purchases: 'Purchases Report',
+  inventory: 'Inventory Evaluation',
+  spending: 'Spending Report',
+};
+
+const formatDateInput = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
 
 interface ReportCardProps {
   title: string;
@@ -87,12 +99,68 @@ export const Reports: React.FC = () => {
   const { products, orders } = useData();
   const { canExportReports } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateRange, setDateRange] = useState<DateRange>('30d');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending' | 'cancelled'>('all');
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+  const [exportType, setExportType] = useState<ExportType>('sales');
   const [generatedAt] = useState(() => new Date().toLocaleString());
 
-  // Build dynamic transaction history from orders
+  // Anchor date: latest date in orders (or fallback to current date)
+  const latestOrderDate = useMemo(() => {
+    if (!orders || orders.length === 0) return new Date();
+    const timestamps = orders.map(o => new Date(o.date).getTime()).filter(t => !isNaN(t));
+    return timestamps.length > 0 ? new Date(Math.max(...timestamps)) : new Date();
+  }, [orders]);
+
+  const handleDatePreset = (preset: '7d' | '30d' | 'all') => {
+    setDatePreset(preset);
+    if (preset === 'all') {
+      setFromDate('');
+      setToDate('');
+      toast.info('Showing all-time records.');
+    } else {
+      const end = new Date(latestOrderDate);
+      const start = new Date(latestOrderDate);
+      const days = preset === '7d' ? 7 : 30;
+      start.setDate(start.getDate() - days);
+      const startStr = formatDateInput(start);
+      const endStr = formatDateInput(end);
+      setFromDate(startStr);
+      setToDate(endStr);
+      toast.success(`Filtered to last ${days} days (${startStr} to ${endStr})`);
+    }
+  };
+
+  const handleFromDateChange = (val: string) => {
+    setFromDate(val);
+    setDatePreset('custom');
+  };
+
+  const handleToDateChange = (val: string) => {
+    setToDate(val);
+    setDatePreset('custom');
+  };
+
+  const handleClearDates = () => {
+    setFromDate('');
+    setToDate('');
+    setDatePreset('all');
+    toast.info('Date filters cleared.');
+  };
+
+  // Filter orders by specific date range (from / to)
+  const filteredOrders = useMemo(() => {
+    return orders.filter(order => {
+      if (fromDate && order.date < fromDate) return false;
+      if (toDate && order.date > toDate) return false;
+      return true;
+    });
+  }, [orders, fromDate, toDate]);
+
+  // Build dynamic transaction history from filtered orders
   const transactionHistory = useMemo(() => {
-    return orders.map((order, i) => ({
+    return filteredOrders.map((order, i) => ({
       id: `TXN-${String(i + 1).padStart(3, '0')}`,
       type: 'sale' as const,
       reference: order.referenceNumber,
@@ -106,22 +174,27 @@ export const Reports: React.FC = () => {
       status: (order.orderStatus === 'completed' ? 'completed' : 
                order.orderStatus === 'cancelled' ? 'cancelled' : 'pending') as 'completed' | 'pending' | 'cancelled',
     }));
-  }, [orders]);
+  }, [filteredOrders]);
 
-  // Filter transactions
+  // Filter transactions by search term and status filter
   const filteredTransactions = useMemo(() => {
     return transactionHistory.filter(txn => {
-      const matchesSearch = txn.reference.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesSearch;
+      const q = searchTerm.toLowerCase().trim();
+      const matchesSearch = !q || 
+        txn.reference.toLowerCase().includes(q) ||
+        txn.id.toLowerCase().includes(q) ||
+        txn.items.some(item => item.name.toLowerCase().includes(q));
+      const matchesStatus = statusFilter === 'all' || txn.status === statusFilter;
+      return matchesSearch && matchesStatus;
     });
-  }, [searchTerm, transactionHistory]);
+  }, [searchTerm, statusFilter, transactionHistory]);
 
-  // Calculate summary stats
-  const totalSales = orders.filter(o => o.orderStatus === 'completed').reduce((sum, o) => sum + o.total, 0);
+  // Calculate summary stats dynamically based on filtered orders
+  const totalSales = filteredOrders.filter(o => o.orderStatus === 'completed').reduce((sum, o) => sum + o.total, 0);
   const totalRevenue = totalSales;
-  const totalOrders = orders.length;
-  const completedOrders = orders.filter(o => o.orderStatus === 'completed').length;
-  const pendingOrders = orders.filter(o => ['pending', 'packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)).length;
+  const totalOrders = filteredOrders.length;
+  const completedOrders = filteredOrders.filter(o => o.orderStatus === 'completed').length;
+  const pendingOrders = filteredOrders.filter(o => ['pending', 'packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)).length;
   const totalProducts = products.length;
   const totalInventoryValue = products.reduce((sum, p) => sum + (p.stock * p.price), 0);
 
@@ -132,11 +205,12 @@ export const Reports: React.FC = () => {
 
   const handleExport = async (format: 'pdf' | 'xlsx') => {
     const label = format.toUpperCase();
-    toast.info(`Preparing ${label} export...`);
+    const typeLabel = EXPORT_TYPE_LABELS[exportType];
+    toast.info(`Preparing ${typeLabel} (${label})...`);
     try {
-      const response = await apiFetchBlob(`/reports/export?type=sales&format=${format}`);
+      const response = await apiFetchBlob(`/reports/export?type=${exportType}&format=${format}`);
       const blob = await response.blob();
-      const fallbackName = `smartstock-sales-report.${format}`;
+      const fallbackName = `smartstock-${exportType}-report.${format}`;
       const disposition = response.headers.get('content-disposition') ?? '';
       const filename = disposition.match(/filename="?([^";]+)"?/)?.[1] ?? fallbackName;
       const url = URL.createObjectURL(blob);
@@ -147,7 +221,7 @@ export const Reports: React.FC = () => {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      toast.success(`${label} report downloaded.`);
+      toast.success(`${typeLabel} (${label}) downloaded successfully.`);
     } catch (error) {
       const apiError = error as ApiError;
       if (apiError.status === 403) {
@@ -158,9 +232,33 @@ export const Reports: React.FC = () => {
     }
   };
 
-  const handleDatePill = (key: DateRange) => {
-    setDateRange(key);
-    toast.info('Demo data is static — date range is for display only.');
+  const handleExportCSV = () => {
+    if (filteredTransactions.length === 0) {
+      toast.warning('No transactions found to export for the selected date range.');
+      return;
+    }
+    const rows = filteredTransactions.map((txn) => ({
+      id: txn.id,
+      type: txn.type,
+      reference: txn.reference,
+      items: txn.items.map((i) => `${i.name} (qty: ${i.quantity})`).join('; '),
+      total: txn.total,
+      date: txn.date,
+      status: txn.status,
+    }));
+    const columns: { key: keyof typeof rows[0]; header: string }[] = [
+      { key: 'id', header: 'Transaction ID' },
+      { key: 'type', header: 'Type' },
+      { key: 'reference', header: 'Reference' },
+      { key: 'items', header: 'Items' },
+      { key: 'total', header: 'Total (PHP)' },
+      { key: 'date', header: 'Date' },
+      { key: 'status', header: 'Status' },
+    ];
+    const csvData = toCSV(rows, columns);
+    const dateRangeSlug = fromDate || toDate ? `_${fromDate || 'start'}_to_${toDate || 'end'}` : '_all-time';
+    downloadCSV(`smartstock-${exportType}-report${dateRangeSlug}.csv`, csvData);
+    toast.success(`Exported ${filteredTransactions.length} transaction records to CSV.`);
   };
 
   const getTransactionIcon = (type: 'sale' | 'restock' | 'return' | 'adjustment') => {
@@ -185,8 +283,8 @@ export const Reports: React.FC = () => {
 
   return (
       <div className="space-y-6 animate-fadeIn">
-        {/* Header — title + generated-at + date pills */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {/* Header — title + generated-at */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
               Financial Reports &amp; Statement
@@ -195,72 +293,187 @@ export const Reports: React.FC = () => {
               Generated on: <span className="font-mono text-slate-700">{generatedAt}</span>
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2" aria-label="Date range">
-            <Calendar className="w-4 h-4 text-slate-400" aria-hidden="true" />
-            {DATE_PILLS.map((pill) => (
-              <button
-                key={pill.key}
-                type="button"
-                onClick={() => handleDatePill(pill.key)}
-                className={`rounded-2xl px-3.5 py-1.5 text-xs font-bold transition-all ${
-                  dateRange === pill.key
-                    ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
-                    : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
-                }`}
-              >
-                {pill.label}
-              </button>
-            ))}
-          </div>
         </div>
 
-        {/* Search + Print/Export row */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-between">
-          <div className="flex gap-3">
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search transactions..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="input !pl-10 w-full sm:w-64"
-              />
+        {/* Filter Toolbar Card: Date Range (presets + specific From/To) & Export Controls */}
+        <div className="bg-white rounded-[28px] p-5 sm:p-6 border border-[#f1f5f9] shadow-sm space-y-4">
+          {/* Row 1: Date Range Presets & Specific Date From / To */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            {/* Quick Presets */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
+                <Calendar className="w-4 h-4 text-slate-400" />
+                <span>Date Range:</span>
+              </div>
+              {(['all', '30d', '7d'] as const).map((key) => {
+                const label = key === 'all' ? 'All time' : key === '30d' ? 'Last 30 days' : 'Last 7 days';
+                const isActive = datePreset === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleDatePreset(key)}
+                    className={`rounded-2xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+                      isActive
+                        ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/70'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              {datePreset === 'custom' && (
+                <span className="rounded-2xl px-3.5 py-1.5 text-xs font-bold bg-indigo-50 text-[#4f46e5] border border-indigo-100">
+                  Custom Range
+                </span>
+              )}
+            </div>
+
+            {/* Specific Date From -> To */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="report-from-date" className="text-xs font-bold text-slate-500 whitespace-nowrap">
+                  From:
+                </label>
+                <input
+                  id="report-from-date"
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => handleFromDateChange(e.target.value)}
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#4f46e5] focus:outline-none transition-all shadow-2xs"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="report-to-date" className="text-xs font-bold text-slate-500 whitespace-nowrap">
+                  To:
+                </label>
+                <input
+                  id="report-to-date"
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => handleToDateChange(e.target.value)}
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#4f46e5] focus:outline-none transition-all shadow-2xs"
+                />
+              </div>
+
+              {(fromDate || toDate) && (
+                <button
+                  type="button"
+                  onClick={handleClearDates}
+                  title="Clear date filters"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/70 transition-colors shadow-2xs"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Clear</span>
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {canExportReports ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => void handleExport('pdf')}
-                  className="btn-secondary flex items-center gap-2"
+          <div className="h-px bg-[#f1f5f9] w-full" />
+
+          {/* Row 2: Search, Status Filter & Export Controls */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            {/* Search + Status Filter */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search reference, items..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="input !pl-10 w-full sm:w-64 text-xs font-medium"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-400 hidden sm:inline">Status:</span>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  className="rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:border-[#4f46e5] focus:outline-none shadow-2xs"
                 >
-                  <Download className="w-4 h-4" />
-                  PDF
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleExport('xlsx')}
-                  className="btn-secondary flex items-center gap-2"
+                  <option value="all">All Statuses</option>
+                  <option value="completed">Completed</option>
+                  <option value="pending">Pending</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Export Filter + Buttons */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Export Type Selector */}
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 text-xs font-bold text-slate-400">
+                  <Filter className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="hidden sm:inline">Export:</span>
+                </div>
+                <select
+                  value={exportType}
+                  onChange={(e) => setExportType(e.target.value as ExportType)}
+                  className="rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:border-[#4f46e5] focus:outline-none shadow-2xs"
+                  title="Choose report type to export"
                 >
-                  <Download className="w-4 h-4" />
-                  XLSX
-                </button>
-              </>
-            ) : (
-              <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
-                Exports are admin-only
-              </span>
-            )}
-            <button
-              onClick={handlePrint}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Printer className="w-4 h-4" />
-              Print Report
-            </button>
+                  <option value="sales">Sales Report</option>
+                  <option value="purchases">Purchases Report</option>
+                  <option value="inventory">Inventory Evaluation</option>
+                  <option value="spending">Spending Report</option>
+                </select>
+              </div>
+
+              {/* Action Buttons */}
+              {canExportReports ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void handleExport('pdf')}
+                    className="btn-secondary flex items-center gap-1.5 text-xs font-bold py-2 px-3 shadow-2xs"
+                    title={`Export ${EXPORT_TYPE_LABELS[exportType]} as PDF`}
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleExport('xlsx')}
+                    className="btn-secondary flex items-center gap-1.5 text-xs font-bold py-2 px-3 shadow-2xs"
+                    title={`Export ${EXPORT_TYPE_LABELS[exportType]} as XLSX`}
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    XLSX
+                  </button>
+                </>
+              ) : (
+                <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                  Exports are admin-only
+                </span>
+              )}
+
+              {/* CSV export (available for filtered table data) */}
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                className="btn-secondary flex items-center gap-1.5 text-xs font-bold py-2 px-3 text-slate-700 shadow-2xs"
+                title="Export current filtered transactions as CSV"
+              >
+                <Download className="w-3.5 h-3.5" />
+                CSV
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="btn-primary flex items-center gap-1.5 text-xs font-bold py-2 px-3.5 shadow-2xs"
+                title="Print current report view"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Print
+              </button>
+            </div>
           </div>
         </div>
 
@@ -322,10 +535,10 @@ export const Reports: React.FC = () => {
             <h3 className="text-lg font-bold text-slate-900 mb-4">Order Status Breakdown</h3>
             <div className="space-y-4">
               {[
-                { status: 'Completed', count: orders.filter(o => o.orderStatus === 'completed').length, color: 'bg-emerald-500', total: completedOrders },
-                { status: 'In Progress', count: orders.filter(o => ['packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)).length, color: 'bg-sky-500', total: orders.filter(o => ['packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)).length },
-                { status: 'Pending', count: orders.filter(o => o.orderStatus === 'pending').length, color: 'bg-amber-500', total: orders.filter(o => o.orderStatus === 'pending').length },
-                { status: 'Cancelled', count: orders.filter(o => o.orderStatus === 'cancelled').length, color: 'bg-rose-500', total: orders.filter(o => o.orderStatus === 'cancelled').length },
+                { status: 'Completed', count: filteredOrders.filter(o => o.orderStatus === 'completed').length, color: 'bg-emerald-500', total: completedOrders },
+                { status: 'In Progress', count: filteredOrders.filter(o => ['packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)).length, color: 'bg-sky-500', total: filteredOrders.filter(o => ['packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)).length },
+                { status: 'Pending', count: filteredOrders.filter(o => o.orderStatus === 'pending').length, color: 'bg-amber-500', total: filteredOrders.filter(o => o.orderStatus === 'pending').length },
+                { status: 'Cancelled', count: filteredOrders.filter(o => o.orderStatus === 'cancelled').length, color: 'bg-rose-500', total: filteredOrders.filter(o => o.orderStatus === 'cancelled').length },
               ].map((item) => (
                 <div key={item.status} className="space-y-2">
                   <div className="flex justify-between text-sm font-medium">
@@ -335,7 +548,7 @@ export const Reports: React.FC = () => {
                   <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                     <div 
                       className={`h-2 rounded-full ${item.color} transition-all duration-500`} 
-                      style={{ width: `${orders.length > 0 ? (item.count / orders.length) * 100 : 0}%` }}
+                      style={{ width: `${filteredOrders.length > 0 ? (item.count / filteredOrders.length) * 100 : 0}%` }}
                     />
                   </div>
                 </div>
@@ -348,10 +561,10 @@ export const Reports: React.FC = () => {
             <h3 className="text-lg font-bold text-slate-900 mb-4">Payment Status Breakdown</h3>
             <div className="space-y-4">
               {[
-                { status: 'Paid', count: orders.filter(o => o.paymentStatus === 'paid').length, color: 'bg-emerald-500' },
-                { status: 'Pending', count: orders.filter(o => o.paymentStatus === 'pending').length, color: 'bg-amber-500' },
-                { status: 'Partial', count: orders.filter(o => o.paymentStatus === 'partial').length, color: 'bg-orange-500' },
-                { status: 'Refunded', count: orders.filter(o => o.paymentStatus === 'refunded').length, color: 'bg-rose-500' },
+                { status: 'Paid', count: filteredOrders.filter(o => o.paymentStatus === 'paid').length, color: 'bg-emerald-500' },
+                { status: 'Pending', count: filteredOrders.filter(o => o.paymentStatus === 'pending').length, color: 'bg-amber-500' },
+                { status: 'Partial', count: filteredOrders.filter(o => o.paymentStatus === 'partial').length, color: 'bg-orange-500' },
+                { status: 'Refunded', count: filteredOrders.filter(o => o.paymentStatus === 'refunded').length, color: 'bg-rose-500' },
               ].map((item) => (
                 <div key={item.status} className="space-y-2">
                   <div className="flex justify-between text-sm font-medium">
@@ -361,7 +574,7 @@ export const Reports: React.FC = () => {
                   <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                     <div 
                       className={`h-2 rounded-full ${item.color} transition-all duration-500`} 
-                      style={{ width: `${orders.length > 0 ? (item.count / orders.length) * 100 : 0}%` }}
+                      style={{ width: `${filteredOrders.length > 0 ? (item.count / filteredOrders.length) * 100 : 0}%` }}
                     />
                   </div>
                 </div>
@@ -454,8 +667,12 @@ export const Reports: React.FC = () => {
             <div className="text-center mb-8">
               <h2 className="text-2xl font-black text-slate-900 tracking-tight">SMARTSTOCK</h2>
               <p className="text-slate-500 text-sm font-medium">Glassram Glass and Aluminum Supply</p>
-              <p className="text-xs text-slate-400 mt-2 font-medium">Inventory &amp; Sales Report</p>
-              <p className="text-xs text-slate-400">Generated: {new Date().toLocaleDateString()}</p>
+              <p className="text-xs text-slate-400 mt-2 font-medium">
+                {EXPORT_TYPE_LABELS[exportType]}
+              </p>
+              <p className="text-xs text-slate-400">
+                Period: {fromDate ? formatDate(fromDate) : 'All Time'} {toDate ? `to ${formatDate(toDate)}` : ''} • Generated: {new Date().toLocaleDateString()}
+              </p>
             </div>
             
             <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-8">
