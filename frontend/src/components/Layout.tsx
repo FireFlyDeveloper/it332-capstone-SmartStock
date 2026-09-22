@@ -20,7 +20,6 @@ import {
   Package,
   ShoppingBag,
   Truck,
-  Compass,
   BarChart3,
   FileText,
   ChevronRight,
@@ -64,7 +63,6 @@ const navGroups: NavGroup[] = [
   {
     label: 'FINANCES & ANALYTICS',
     items: [
-      { icon: Compass, label: 'Live Tracking', path: '/tracking' },
       { icon: BarChart3, label: 'AI Analytics', path: '/analytics' },
       { icon: FileText, label: 'Reports & Sales', path: '/reports' },
       { icon: Sliders, label: 'Settings', path: '/profile' },
