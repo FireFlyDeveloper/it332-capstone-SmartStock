@@ -10,7 +10,8 @@ import {
   Settings,
   DollarSign,
   Clock,
-  Calendar
+  Calendar,
+  ArrowUpRight
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
 import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
@@ -26,22 +27,57 @@ const DATE_PILLS: { key: DateRange; label: string }[] = [
   { key: 'all', label: 'All time' },
 ];
 
-const ReportCard: React.FC<{
+interface ReportCardProps {
   title: string;
   value: string;
-  subtitle?: string;
+  badge?: string;
   icon: React.ElementType;
-  color: string;
-}> = ({ title, value, subtitle, icon: Icon, color }) => (
-  <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-6 micro-hover">
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">{title}</p>
-        <p className="text-2xl font-black text-slate-900 mt-1">{value}</p>
-        {subtitle && <p className="text-xs text-slate-500 mt-1 font-medium">{subtitle}</p>}
+  iconBoxBg: string;
+  iconColor: string;
+  badgeBg: string;
+  badgeColor: string;
+  badgeBorder?: string;
+  badgeIcon?: React.ElementType;
+}
+
+const ReportCard: React.FC<ReportCardProps> = ({
+  title,
+  value,
+  badge,
+  icon: Icon,
+  iconBoxBg,
+  iconColor,
+  badgeBg,
+  badgeColor,
+  badgeBorder = 'border-slate-100',
+  badgeIcon: BadgeIcon,
+}) => (
+  <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover flex flex-col justify-between min-w-0 overflow-hidden">
+    {/* Top row: Icon Box on the left, Badge pill on the right */}
+    <div className="flex items-center justify-between gap-2 mb-4 min-w-0">
+      <div className={`w-11 h-11 rounded-xl ${iconBoxBg} ${iconColor} flex items-center justify-center shrink-0 shadow-2xs`}>
+        <Icon className="w-5 h-5" />
       </div>
-      <div className={`w-12 h-12 rounded-[12px] flex items-center justify-center ${color}`}>
-        <Icon className="w-6 h-6" />
+      {badge && (
+        <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full ${badgeBg} ${badgeColor} border ${badgeBorder} text-xs font-bold shrink-0`}>
+          {BadgeIcon && <BadgeIcon className="w-3.5 h-3.5 shrink-0" />}
+          <span>{badge}</span>
+        </div>
+      )}
+    </div>
+
+    {/* Bottom row: Label & full-width Value */}
+    <div className="space-y-1 min-w-0">
+      <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 truncate">
+        {title}
+      </p>
+      <div className="min-w-0">
+        <span
+          title={value}
+          className="text-2xl sm:text-[26px] font-black text-slate-900 tracking-tight leading-none truncate block"
+        >
+          {value}
+        </span>
       </div>
     </div>
   </div>
@@ -233,53 +269,72 @@ export const Reports: React.FC = () => {
           <ReportCard
             title="Total Revenue"
             value={formatCurrency(totalRevenue)}
-            subtitle="From completed orders"
+            badge="Completed"
             icon={DollarSign}
-            color="bg-green-100 text-green-600"
+            iconBoxBg="bg-emerald-50"
+            iconColor="text-[#10b981]"
+            badgeBg="bg-emerald-50"
+            badgeColor="text-emerald-700"
+            badgeBorder="border-emerald-100/60"
+            badgeIcon={ArrowUpRight}
           />
           <ReportCard
             title="Total Orders"
             value={totalOrders.toString()}
-            subtitle={`${completedOrders} completed`}
+            badge={`${completedOrders} completed`}
             icon={ShoppingCart}
-            color="bg-blue-100 text-blue-600"
+            iconBoxBg="bg-indigo-50"
+            iconColor="text-[#4f46e5]"
+            badgeBg="bg-indigo-50"
+            badgeColor="text-[#4f46e5]"
+            badgeBorder="border-indigo-100/60"
+            badgeIcon={Package}
           />
           <ReportCard
             title="Inventory Value"
             value={formatCurrency(totalInventoryValue)}
-            subtitle={`${totalProducts} products`}
+            badge={`${totalProducts} products`}
             icon={Package}
-            color="bg-purple-100 text-purple-600"
+            iconBoxBg="bg-purple-50"
+            iconColor="text-purple-600"
+            badgeBg="bg-purple-50"
+            badgeColor="text-purple-700"
+            badgeBorder="border-purple-100/60"
           />
           <ReportCard
             title="Pending Orders"
             value={pendingOrders.toString()}
-            subtitle="Awaiting completion"
+            badge={pendingOrders > 0 ? `${pendingOrders} awaiting` : 'All clear'}
             icon={Clock}
-            color="bg-yellow-100 text-yellow-600"
+            iconBoxBg="bg-amber-50"
+            iconColor="text-amber-600"
+            badgeBg="bg-amber-50"
+            badgeColor="text-amber-700"
+            badgeBorder="border-amber-100/60"
+            badgeIcon={Clock}
           />
         </div>
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Order Status Breakdown */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Status Breakdown</h3>
+          <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">Order Status Breakdown</h3>
             <div className="space-y-4">
               {[
-                { status: 'Completed', count: orders.filter(o => o.orderStatus === 'completed').length, color: 'bg-green-500', total: completedOrders },
-                { status: 'In Progress', count: orders.filter(o => ['packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)).length, color: 'bg-blue-500', total: orders.filter(o => ['packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)).length },
-                { status: 'Pending', count: orders.filter(o => o.orderStatus === 'pending').length, color: 'bg-yellow-500', total: orders.filter(o => o.orderStatus === 'pending').length },
-                { status: 'Cancelled', count: orders.filter(o => o.orderStatus === 'cancelled').length, color: 'bg-red-500', total: orders.filter(o => o.orderStatus === 'cancelled').length },
+                { status: 'Completed', count: orders.filter(o => o.orderStatus === 'completed').length, color: 'bg-emerald-500', total: completedOrders },
+                { status: 'In Progress', count: orders.filter(o => ['packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)).length, color: 'bg-sky-500', total: orders.filter(o => ['packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)).length },
+                { status: 'Pending', count: orders.filter(o => o.orderStatus === 'pending').length, color: 'bg-amber-500', total: orders.filter(o => o.orderStatus === 'pending').length },
+                { status: 'Cancelled', count: orders.filter(o => o.orderStatus === 'cancelled').length, color: 'bg-rose-500', total: orders.filter(o => o.orderStatus === 'cancelled').length },
               ].map((item) => (
                 <div key={item.status} className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">{item.status}</span>
-                    <span className="font-medium text-gray-900">{item.count} orders</span>
+                  <div className="flex justify-between text-sm font-medium">
+                    <span className="text-slate-600">{item.status}</span>
+                    <span className="font-bold text-slate-900">{item.count} orders</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                     <div 
-                      className={`h-2 rounded-full ${item.color}`} 
+                      className={`h-2 rounded-full ${item.color} transition-all duration-500`} 
                       style={{ width: `${orders.length > 0 ? (item.count / orders.length) * 100 : 0}%` }}
                     />
                   </div>
@@ -289,23 +344,23 @@ export const Reports: React.FC = () => {
           </div>
 
           {/* Payment Status Breakdown */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Status Breakdown</h3>
+          <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">Payment Status Breakdown</h3>
             <div className="space-y-4">
               {[
-                { status: 'Paid', count: orders.filter(o => o.paymentStatus === 'paid').length, color: 'bg-green-500' },
-                { status: 'Pending', count: orders.filter(o => o.paymentStatus === 'pending').length, color: 'bg-yellow-500' },
+                { status: 'Paid', count: orders.filter(o => o.paymentStatus === 'paid').length, color: 'bg-emerald-500' },
+                { status: 'Pending', count: orders.filter(o => o.paymentStatus === 'pending').length, color: 'bg-amber-500' },
                 { status: 'Partial', count: orders.filter(o => o.paymentStatus === 'partial').length, color: 'bg-orange-500' },
-                { status: 'Refunded', count: orders.filter(o => o.paymentStatus === 'refunded').length, color: 'bg-red-500' },
+                { status: 'Refunded', count: orders.filter(o => o.paymentStatus === 'refunded').length, color: 'bg-rose-500' },
               ].map((item) => (
                 <div key={item.status} className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">{item.status}</span>
-                    <span className="font-medium text-gray-900">{item.count} orders</span>
+                  <div className="flex justify-between text-sm font-medium">
+                    <span className="text-slate-600">{item.status}</span>
+                    <span className="font-bold text-slate-900">{item.count} orders</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                     <div 
-                      className={`h-2 rounded-full ${item.color}`} 
+                      className={`h-2 rounded-full ${item.color} transition-all duration-500`} 
                       style={{ width: `${orders.length > 0 ? (item.count / orders.length) * 100 : 0}%` }}
                     />
                   </div>
@@ -316,51 +371,51 @@ export const Reports: React.FC = () => {
         </div>
 
         {/* Transaction History */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Transaction History</h3>
-            <p className="text-sm text-gray-500">Recent financial transactions</p>
+        <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] overflow-hidden">
+          <div className="p-6 border-b border-[#f1f5f9]">
+            <h3 className="text-lg font-bold text-slate-900">Transaction History</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Recent financial transactions</p>
           </div>
           
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-slate-50/80 border-b border-[#f1f5f9]">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">ID</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Type</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Reference</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Items</th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase">Amount</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Date</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">ID</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Reference</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Items</th>
+                  <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Amount</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-[#f1f5f9]">
                 {filteredTransactions.map((txn) => {
                   const Icon = getTransactionIcon(txn.type);
                   return (
-                    <tr key={txn.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm text-gray-500 font-medium">{txn.id}</td>
+                    <tr key={txn.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-4 text-sm text-slate-500 font-medium">{txn.id}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
-                          <span className={`p-2 rounded-lg ${getTransactionColor(txn.type)}`}>
+                          <span className={`p-2 rounded-xl shadow-2xs ${getTransactionColor(txn.type)}`}>
                             <Icon className="w-4 h-4" />
                           </span>
-                          <span className="text-sm text-gray-900 capitalize">{txn.type}</span>
+                          <span className="text-sm font-semibold text-slate-900 capitalize">{txn.type}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 font-medium">{txn.reference}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
+                      <td className="px-6 py-4 text-sm text-slate-900 font-semibold">{txn.reference}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
                         {txn.items.map((item, idx) => (
                           <div key={idx} className="text-xs">
-                            {item.name}: {item.quantity} x {formatCurrency(item.amount)}
+                            <span className="font-medium text-slate-700">{item.name}:</span> {item.quantity} × {formatCurrency(item.amount)}
                           </div>
                         ))}
                       </td>
-                      <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrency(txn.total)}</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{formatDate(txn.date)}</td>
+                      <td className="px-6 py-4 text-right font-bold text-slate-900">{formatCurrency(txn.total)}</td>
+                      <td className="px-6 py-4 text-sm text-slate-500">{formatDate(txn.date)}</td>
                       <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(txn.status)}`}>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(txn.status)}`}>
                           {txn.status}
                         </span>
                       </td>
@@ -373,18 +428,18 @@ export const Reports: React.FC = () => {
           
           {filteredTransactions.length === 0 && (
             <div className="p-12 text-center">
-              <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No transactions found</p>
+              <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+              <p className="text-slate-500 font-medium text-sm">No transactions found</p>
             </div>
           )}
         </div>
 
         {/* Print-friendly report preview */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 print:hidden">
+        <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 print:hidden">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Print-Friendly Report Preview</h3>
-              <p className="text-sm text-gray-500">How the report will look when printed</p>
+              <h3 className="text-lg font-bold text-slate-900">Print-Friendly Report Preview</h3>
+              <p className="text-xs text-slate-500 mt-0.5">How the report will look when printed</p>
             </div>
             <button
               onClick={handlePrint}
@@ -395,30 +450,30 @@ export const Reports: React.FC = () => {
             </button>
           </div>
           
-          <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 bg-gray-50">
+          <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 bg-slate-50/50">
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-gray-900">SMARTSTOCK</h2>
-              <p className="text-gray-500">Glassram Glass and Aluminum Supply</p>
-              <p className="text-sm text-gray-400 mt-2">Inventory &amp; Sales Report</p>
-              <p className="text-sm text-gray-400">Generated: {new Date().toLocaleDateString()}</p>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">SMARTSTOCK</h2>
+              <p className="text-slate-500 text-sm font-medium">Glassram Glass and Aluminum Supply</p>
+              <p className="text-xs text-slate-400 mt-2 font-medium">Inventory &amp; Sales Report</p>
+              <p className="text-xs text-slate-400">Generated: {new Date().toLocaleDateString()}</p>
             </div>
             
-            <div className="grid grid-cols-2 gap-6 mb-8">
-              <div className="p-4 border border-gray-200 rounded-lg bg-white">
-                <p className="text-sm text-gray-500">Total Revenue</p>
-                <p className="text-xl font-bold text-gray-900">{formatCurrency(totalRevenue)}</p>
+            <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-8">
+              <div className="p-5 border border-[#f1f5f9] rounded-2xl bg-white shadow-2xs">
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Revenue</p>
+                <p className="text-xl font-black text-slate-900 mt-1">{formatCurrency(totalRevenue)}</p>
               </div>
-              <div className="p-4 border border-gray-200 rounded-lg bg-white">
-                <p className="text-sm text-gray-500">Total Orders</p>
-                <p className="text-xl font-bold text-gray-900">{totalOrders}</p>
+              <div className="p-5 border border-[#f1f5f9] rounded-2xl bg-white shadow-2xs">
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Orders</p>
+                <p className="text-xl font-black text-slate-900 mt-1">{totalOrders}</p>
               </div>
-              <div className="p-4 border border-gray-200 rounded-lg bg-white">
-                <p className="text-sm text-gray-500">Completed Orders</p>
-                <p className="text-xl font-bold text-gray-900">{completedOrders}</p>
+              <div className="p-5 border border-[#f1f5f9] rounded-2xl bg-white shadow-2xs">
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Completed Orders</p>
+                <p className="text-xl font-black text-slate-900 mt-1">{completedOrders}</p>
               </div>
-              <div className="p-4 border border-gray-200 rounded-lg bg-white">
-                <p className="text-sm text-gray-500">Pending Orders</p>
-                <p className="text-xl font-bold text-gray-900">{pendingOrders}</p>
+              <div className="p-5 border border-[#f1f5f9] rounded-2xl bg-white shadow-2xs">
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Pending Orders</p>
+                <p className="text-xl font-black text-slate-900 mt-1">{pendingOrders}</p>
               </div>
             </div>
           </div>
