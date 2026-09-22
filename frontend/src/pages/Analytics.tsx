@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-// Last touched: 2026-07-07 (round 2 — demo polish)
+// Last touched: 2026-09-22 (interactive date filter toolbar matching Reports & Sales)
 import { 
   TrendingUp, 
   Package, 
@@ -12,10 +12,11 @@ import {
   TrendingDown,
   Minus,
   Zap,
-  Calendar
+  Calendar,
+  X
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
-import { formatCurrency, checkStockStatus } from '../utils/helpers';
+import { formatCurrency, checkStockStatus, formatDateInput } from '../utils/helpers';
 import { generateDemandForecast } from '../utils/aiHelpers';
 import { toast } from 'sonner';
 import { 
@@ -37,24 +38,75 @@ import {
   monthlySalesData, 
   topItemsData, 
   fastMovingItems, 
-  slowMovingItems,
+  slowMovingItems, 
   mockAIRecommendations 
 } from '../data/mockData';
 
-type DateRange = '7d' | '30d' | 'all';
-
-const DATE_PILLS: { key: DateRange; label: string }[] = [
-  { key: '7d', label: 'Last 7 days' },
-  { key: '30d', label: 'Last 30 days' },
-  { key: 'all', label: 'All time' },
-];
+type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 
 export const Analytics: React.FC = () => {
   const { products, orders } = useData();
-  const [dateRange, setDateRange] = useState<DateRange>('30d');
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+
+  // Anchor date: latest date in orders (or fallback to current date)
+  const latestOrderDate = useMemo(() => {
+    if (!orders || orders.length === 0) return new Date();
+    const timestamps = orders.map(o => new Date(o.date).getTime()).filter(t => !isNaN(t));
+    return timestamps.length > 0 ? new Date(Math.max(...timestamps)) : new Date();
+  }, [orders]);
+
+  const handleDatePreset = (preset: '7d' | '30d' | 'all') => {
+    setDatePreset(preset);
+    if (preset === 'all') {
+      setFromDate('');
+      setToDate('');
+      toast.info('Showing all-time analytics.');
+    } else {
+      const end = new Date(latestOrderDate);
+      const start = new Date(latestOrderDate);
+      const days = preset === '7d' ? 7 : 30;
+      start.setDate(start.getDate() - days);
+      const startStr = formatDateInput(start);
+      const endStr = formatDateInput(end);
+      setFromDate(startStr);
+      setToDate(endStr);
+      toast.success(`Filtered to last ${days} days (${startStr} to ${endStr})`);
+    }
+  };
+
+  const handleFromDateChange = (val: string) => {
+    setFromDate(val);
+    setDatePreset('custom');
+  };
+
+  const handleToDateChange = (val: string) => {
+    setToDate(val);
+    setDatePreset('custom');
+  };
+
+  const handleClearDates = () => {
+    setFromDate('');
+    setToDate('');
+    setDatePreset('all');
+    toast.info('Date filters cleared.');
+  };
+
+  // Dynamically filter orders based on selected date range
+  const filteredOrders = useMemo(() => {
+    return orders.filter(order => {
+      if (fromDate && order.date < fromDate) return false;
+      if (toDate && order.date > toDate) return false;
+      return true;
+    });
+  }, [orders, fromDate, toDate]);
 
   // AI Demand Forecasting
-  const aiForecasts = useMemo(() => generateDemandForecast(products, orders), [products, orders]);
+  const aiForecasts = useMemo(
+    () => generateDemandForecast(products, filteredOrders.length > 0 ? filteredOrders : orders),
+    [products, filteredOrders, orders]
+  );
 
   // Calculate inventory stats
   const totalInventoryValue = products.reduce((sum, p) => sum + (p.stock * p.price), 0);
@@ -64,16 +116,40 @@ export const Analytics: React.FC = () => {
   const aluminumValue = aluminumProducts.reduce((sum, p) => sum + (p.stock * p.price), 0);
 
   const avgOrderValue = useMemo(() => {
-    return orders.length > 0 ? orders.reduce((sum, o) => sum + o.total, 0) / orders.length : 0;
-  }, [orders]);
+    return filteredOrders.length > 0
+      ? filteredOrders.reduce((sum, o) => sum + o.total, 0) / filteredOrders.length
+      : 0;
+  }, [filteredOrders]);
 
   const lowStockCount = useMemo(() => {
     return products.filter(p => checkStockStatus(p.stock, p.threshold) !== 'healthy').length;
   }, [products]);
 
-  // Top Selling Items for bar chart - top 5 items with clean short names for Y-axis and full names for tooltip
+  // Top Selling Items for bar chart - derived from filtered orders with fallback to topItemsData
   const topSellingItems = useMemo(() => {
-    return topItemsData.slice(0, 5).map(item => {
+    const productCounts: Record<string, { name: string; quantity: number; category: string }> = {};
+    filteredOrders.forEach(o => {
+      if (o.orderStatus === 'cancelled') return;
+      o.items.forEach(i => {
+        if (!productCounts[i.productId]) {
+          const prod = products.find(p => p.id === i.productId);
+          productCounts[i.productId] = {
+            name: i.productName,
+            quantity: 0,
+            category: prod?.category || 'aluminum',
+          };
+        }
+        productCounts[i.productId].quantity += i.quantity;
+      });
+    });
+
+    const sorted = Object.values(productCounts)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+
+    const itemsToUse = sorted.length > 0 ? sorted : topItemsData.slice(0, 5);
+
+    return itemsToUse.map(item => {
       let shortName = item.name
         .replace(/^Aluminum\s+/i, '')
         .replace(/\s*-\s*Bronze Finish/i, '')
@@ -89,7 +165,7 @@ export const Analytics: React.FC = () => {
         fullName: item.name,
       };
     });
-  }, []);
+  }, [filteredOrders, products]);
 
   // Stock status distribution for pie chart
   const stockDistribution = [
@@ -99,33 +175,95 @@ export const Analytics: React.FC = () => {
     { name: 'Out of Stock', value: products.filter(p => p.stock === 0).length, color: '#6b7280' }
   ].filter(item => item.value > 0);
 
-  // Calculate inventory movements (mock calculation based on orders)
-  const inventoryMovements = products.slice(0, 8).map(product => {
-    const orderedQty = orders
-      .filter(o => o.orderStatus !== 'cancelled')
-      .reduce((sum, o) => {
-        const item = o.items.find(i => i.productId === product.id);
-        return sum + (item?.quantity || 0);
-      }, 0);
-    return {
-      productId: product.id,
-      productName: product.name,
-      category: product.category,
-      inward: Math.floor(Math.random() * 50) + 20,
-      outward: orderedQty,
-      balance: product.stock
-    };
-  });
+  // Calculate inventory movements (mock calculation based on filtered orders)
+  const inventoryMovements = useMemo(() => {
+    return products.slice(0, 8).map(product => {
+      const orderedQty = filteredOrders
+        .filter(o => o.orderStatus !== 'cancelled')
+        .reduce((sum, o) => {
+          const item = o.items.find(i => i.productId === product.id);
+          return sum + (item?.quantity || 0);
+        }, 0);
+      return {
+        productId: product.id,
+        productName: product.name,
+        category: product.category,
+        inward: Math.floor(Math.random() * 50) + 20,
+        outward: orderedQty,
+        balance: product.stock
+      };
+    });
+  }, [products, filteredOrders]);
 
-  const handleDatePill = (key: DateRange) => {
-    setDateRange(key);
-    toast.info('Demo data is static — date range is for display only.');
-  };
+  // Dynamic sales and order trend data aggregated from filtered orders
+  const salesTrendData = useMemo(() => {
+    if (filteredOrders.length === 0) {
+      return [];
+    }
+    const dates = filteredOrders.map(o => o.date).filter(Boolean).sort();
+    if (dates.length === 0) return monthlySalesData;
+
+    const minDate = dates[0];
+    const maxDate = dates[dates.length - 1];
+    const dayDiff = (new Date(maxDate).getTime() - new Date(minDate).getTime()) / (1000 * 60 * 60 * 24);
+
+    // If viewing short date range (<= 31 days) with an active filter, group by day
+    if (dayDiff <= 31 && (fromDate || toDate)) {
+      const dayMap: Record<string, { label: string; sales: number; orders: number }> = {};
+      filteredOrders.forEach(o => {
+        const d = o.date;
+        if (!dayMap[d]) {
+          const parsed = new Date(d);
+          const label = !isNaN(parsed.getTime())
+            ? parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            : d;
+          dayMap[d] = { label, sales: 0, orders: 0 };
+        }
+        if (o.orderStatus !== 'cancelled') {
+          dayMap[d].sales += o.total;
+        }
+        dayMap[d].orders += 1;
+      });
+      return Object.keys(dayMap).sort().map(d => ({
+        month: dayMap[d].label,
+        sales: dayMap[d].sales,
+        orders: dayMap[d].orders,
+      }));
+    }
+
+    // Default or multi-month view: group by YYYY-MM
+    const monthMap: Record<string, { label: string; sales: number; orders: number }> = {};
+    filteredOrders.forEach(o => {
+      const m = o.date.slice(0, 7);
+      if (!monthMap[m]) {
+        const [yr, mo] = m.split('-');
+        const monthDate = new Date(Number(yr), Number(mo) - 1, 1);
+        const label = !isNaN(monthDate.getTime())
+          ? monthDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+          : m;
+        monthMap[m] = { label, sales: 0, orders: 0 };
+      }
+      if (o.orderStatus !== 'cancelled') {
+        monthMap[m].sales += o.total;
+      }
+      monthMap[m].orders += 1;
+    });
+
+    const results = Object.keys(monthMap).sort().map(m => ({
+      month: monthMap[m].label,
+      sales: monthMap[m].sales,
+      orders: monthMap[m].orders,
+    }));
+
+    return results.length > 0 ? results : monthlySalesData;
+  }, [filteredOrders, fromDate, toDate]);
+
+  const chartSalesData = salesTrendData.length > 0 ? salesTrendData : monthlySalesData;
 
   return (
-      <div className="space-y-8 animate-fadeIn">
-        {/* Date range pills + page title */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-6 sm:space-y-8 animate-fadeIn">
+        {/* Page Title Header */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
               AI Analytics &amp; Forecasting
@@ -134,22 +272,86 @@ export const Analytics: React.FC = () => {
               DeepSeek predictive modeling for glass, aluminum profiles, and order flow.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2" aria-label="Date range">
-            <Calendar className="w-4 h-4 text-slate-400" aria-hidden="true" />
-            {DATE_PILLS.map((pill) => (
-              <button
-                key={pill.key}
-                type="button"
-                onClick={() => handleDatePill(pill.key)}
-                className={`rounded-2xl px-3.5 py-1.5 text-xs font-bold transition-all ${
-                  dateRange === pill.key
-                    ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
-                    : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
-                }`}
-              >
-                {pill.label}
-              </button>
-            ))}
+        </div>
+
+        {/* Filter Toolbar Card: Date Range (presets + specific From/To) */}
+        <div className="bg-white rounded-[28px] p-5 sm:p-6 border border-[#f1f5f9] shadow-sm">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            {/* Quick Presets */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
+                <Calendar className="w-4 h-4 text-slate-400" />
+                <span>Date Range:</span>
+              </div>
+              {(['all', '30d', '7d'] as const).map((key) => {
+                const label = key === 'all' ? 'All time' : key === '30d' ? 'Last 30 days' : 'Last 7 days';
+                const isActive = datePreset === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleDatePreset(key)}
+                    className={`rounded-2xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+                      isActive
+                        ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/70'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              {datePreset === 'custom' && (
+                <span className="rounded-2xl px-3.5 py-1.5 text-xs font-bold bg-indigo-50 text-[#4f46e5] border border-indigo-100">
+                  Custom Range
+                </span>
+              )}
+            </div>
+
+            {/* Specific Date From -> To */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="analytics-from-date" className="text-xs font-bold text-slate-500 whitespace-nowrap">
+                  From:
+                </label>
+                <input
+                  id="analytics-from-date"
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => handleFromDateChange(e.target.value)}
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#4f46e5] focus:outline-none transition-all shadow-2xs"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="analytics-to-date" className="text-xs font-bold text-slate-500 whitespace-nowrap">
+                  To:
+                </label>
+                <input
+                  id="analytics-to-date"
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => handleToDateChange(e.target.value)}
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#4f46e5] focus:outline-none transition-all shadow-2xs"
+                />
+              </div>
+
+              {(fromDate || toDate) && (
+                <button
+                  type="button"
+                  onClick={handleClearDates}
+                  title="Clear date filters"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/70 transition-colors shadow-2xs"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Clear</span>
+                </button>
+              )}
+
+              <span className="text-xs font-semibold text-slate-400 pl-1 hidden sm:inline">
+                ({filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} analyzed)
+              </span>
+            </div>
           </div>
         </div>
 
@@ -158,6 +360,7 @@ export const Analytics: React.FC = () => {
           {/* 1. Total Inventory Value */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover flex flex-col justify-between min-w-0">
             <div className="flex items-center justify-between gap-2 mb-4 min-w-0">
+
               <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#10b981] flex items-center justify-center shrink-0 shadow-2xs">
                 <TrendingUp className="w-5 h-5" />
               </div>
@@ -189,7 +392,7 @@ export const Analytics: React.FC = () => {
               </div>
               <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-50 text-[#4f46e5] text-xs font-bold shrink-0 border border-indigo-100/60">
                 <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
-                <span>+15% this quarter</span>
+                <span>{fromDate || toDate ? `${filteredOrders.length} in range` : '+15% this quarter'}</span>
               </div>
             </div>
             <div className="space-y-1 min-w-0">
@@ -198,10 +401,10 @@ export const Analytics: React.FC = () => {
               </p>
               <div className="min-w-0">
                 <span
-                  title={`${orders.length} orders`}
+                  title={`${filteredOrders.length} orders`}
                   className="text-2xl sm:text-[26px] font-black text-slate-900 tracking-tight leading-none truncate block"
                 >
-                  {orders.length}
+                  {filteredOrders.length}
                 </span>
               </div>
             </div>
@@ -267,14 +470,14 @@ export const Analytics: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Monthly Sales Trend</h3>
-                <p className="text-xs text-slate-500">Revenue over time</p>
+                <p className="text-xs text-slate-500">{fromDate || toDate ? 'Revenue for selected period' : 'Revenue over time'}</p>
               </div>
               <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 shadow-2xs">
                 <TrendingUp className="w-4 h-4" />
               </div>
             </div>
             <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={monthlySalesData}>
+              <AreaChart data={chartSalesData}>
                 <defs>
                   <linearGradient id="colorSales2" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3}/>
@@ -283,7 +486,7 @@ export const Analytics: React.FC = () => {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} />
-                <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} tickFormatter={(value) => `₱${value/1000}k`} />
+                <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} tickFormatter={(value) => value >= 1000 ? `₱${Math.round(value/1000)}k` : `₱${value}`} />
                 <Tooltip 
                   formatter={(value: number) => [formatCurrency(value), 'Sales']}
                   contentStyle={{
@@ -305,14 +508,14 @@ export const Analytics: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Orders per Month</h3>
-                <p className="text-xs text-slate-500">Order volume tracking</p>
+                <p className="text-xs text-slate-500">{fromDate || toDate ? 'Order volume for selected period' : 'Order volume tracking'}</p>
               </div>
               <div className="w-9 h-9 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0 shadow-2xs">
                 <Package className="w-4 h-4" />
               </div>
             </div>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={monthlySalesData}>
+              <BarChart data={chartSalesData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} />
                 <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} />
@@ -339,8 +542,12 @@ export const Analytics: React.FC = () => {
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-base sm:text-lg font-bold text-slate-900">Top Selling Items Annual</h3>
-                <p className="text-xs text-slate-500">Annual most purchased materials (Top 5)</p>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">
+                  {fromDate || toDate ? 'Top Selling Items' : 'Top Selling Items Annual'}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {fromDate || toDate ? 'Top 5 purchased materials in selected range' : 'Annual most purchased materials (Top 5)'}
+                </p>
               </div>
               <div className="w-9 h-9 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0 shadow-2xs">
                 <Package className="w-4 h-4" />

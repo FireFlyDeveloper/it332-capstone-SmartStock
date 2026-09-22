@@ -20,12 +20,16 @@ import {
   Download,
   ShoppingBag,
   Compass,
+  Calendar,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
 import type { Order, OrderItem } from '../types';
-import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
+import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
+
+type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
+
 
 // ── Order progress steps ──────────────────────────────────────────
 const pickupSteps = [
@@ -93,6 +97,53 @@ export const Orders: React.FC = () => {
   const [refundReason, setRefundReason] = useState('');
   const [refundType, setRefundType] = useState<'full' | 'partial'>('partial');
 
+  // ── Date filter state ────────────────────────────────────────────
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+
+  const latestOrderDate = useMemo(() => {
+    if (!orders || orders.length === 0) return new Date();
+    const timestamps = orders.map(o => new Date(o.date).getTime()).filter(t => !isNaN(t));
+    return timestamps.length > 0 ? new Date(Math.max(...timestamps)) : new Date();
+  }, [orders]);
+
+  const handleDatePreset = (preset: '7d' | '30d' | 'all') => {
+    setDatePreset(preset);
+    if (preset === 'all') {
+      setFromDate('');
+      setToDate('');
+      toast.info('Showing all-time orders.');
+    } else {
+      const end = new Date(latestOrderDate);
+      const start = new Date(latestOrderDate);
+      const days = preset === '7d' ? 7 : 30;
+      start.setDate(start.getDate() - days);
+      const startStr = formatDateInput(start);
+      const endStr = formatDateInput(end);
+      setFromDate(startStr);
+      setToDate(endStr);
+      toast.success(`Filtered orders to last ${days} days (${startStr} to ${endStr})`);
+    }
+  };
+
+  const handleFromDateChange = (val: string) => {
+    setFromDate(val);
+    setDatePreset('custom');
+  };
+
+  const handleToDateChange = (val: string) => {
+    setToDate(val);
+    setDatePreset('custom');
+  };
+
+  const handleClearDates = () => {
+    setFromDate('');
+    setToDate('');
+    setDatePreset('all');
+    toast.info('Date filters cleared.');
+  };
+
   // ── Filtered list ────────────────────────────────────────────────
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
@@ -101,9 +152,11 @@ export const Orders: React.FC = () => {
                             order.id.toLowerCase().includes(q) ||
                             order.referenceNumber.toLowerCase().includes(q);
       const matchesStatus = statusFilter === 'all' || order.orderStatus === statusFilter;
-      return matchesSearch && matchesStatus;
+      const matchesFrom = !fromDate || order.date >= fromDate;
+      const matchesTo = !toDate || order.date <= toDate;
+      return matchesSearch && matchesStatus && matchesFrom && matchesTo;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [orders, searchTerm, statusFilter]);
+  }, [orders, searchTerm, statusFilter, fromDate, toDate]);
 
   // ── Order status transitions ─────────────────────────────────────
   const getNextStatus = (order: Order): Order['orderStatus'] | null => {
@@ -283,7 +336,7 @@ export const Orders: React.FC = () => {
   };
 
   // ── Stats helpers ────────────────────────────────────────────────
-  const inProgressCount = orders.filter(o =>
+  const inProgressCount = filteredOrders.filter(o =>
     ['pending', 'packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)
   ).length;
 
@@ -301,7 +354,8 @@ export const Orders: React.FC = () => {
       { key: 'paidAmount', header: 'Paid (PHP)' },
       { key: 'date', header: 'Date' },
     ]);
-    downloadCSV(`orders-${new Date().toISOString().split('T')[0]}.csv`, csv);
+    const dateRangeSlug = fromDate || toDate ? `_${fromDate || 'start'}_to_${toDate || 'end'}` : '';
+    downloadCSV(`orders-${new Date().toISOString().split('T')[0]}${dateRangeSlug}.csv`, csv);
     toast.success(`Exported ${filteredOrders.length} orders to CSV`);
   };
 
@@ -377,6 +431,87 @@ export const Orders: React.FC = () => {
           </div>
         </div>
 
+        {/* Date filter toolbar */}
+        <div className="bg-white rounded-[24px] sm:rounded-[28px] p-4 sm:p-5 border border-[#f1f5f9] shadow-sm">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            {/* Quick Presets */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
+                <Calendar className="w-4 h-4 text-slate-400" />
+                <span>Date Range:</span>
+              </div>
+              {(['all', '30d', '7d'] as const).map((key) => {
+                const label = key === 'all' ? 'All time' : key === '30d' ? 'Last 30 days' : 'Last 7 days';
+                const isActive = datePreset === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleDatePreset(key)}
+                    className={`rounded-2xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+                      isActive
+                        ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/70'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              {datePreset === 'custom' && (
+                <span className="rounded-2xl px-3.5 py-1.5 text-xs font-bold bg-indigo-50 text-[#4f46e5] border border-indigo-100">
+                  Custom Range
+                </span>
+              )}
+            </div>
+
+            {/* Specific Date From -> To */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="orders-from-date" className="text-xs font-bold text-slate-500 whitespace-nowrap">
+                  From:
+                </label>
+                <input
+                  id="orders-from-date"
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => handleFromDateChange(e.target.value)}
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#4f46e5] focus:outline-none transition-all shadow-2xs"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="orders-to-date" className="text-xs font-bold text-slate-500 whitespace-nowrap">
+                  To:
+                </label>
+                <input
+                  id="orders-to-date"
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => handleToDateChange(e.target.value)}
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#4f46e5] focus:outline-none transition-all shadow-2xs"
+                />
+              </div>
+
+              {(fromDate || toDate) && (
+                <button
+                  type="button"
+                  onClick={handleClearDates}
+                  title="Clear date filters"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/70 transition-colors shadow-2xs"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Clear</span>
+                </button>
+              )}
+
+              <span className="text-xs font-semibold text-slate-400 pl-1 hidden sm:inline">
+                ({filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found)
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* Status filter pills */}
         <div className="flex flex-wrap gap-2">
           {statusPills.map((pill) => (
@@ -399,11 +534,11 @@ export const Orders: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Orders</p>
-            <p className="text-2xl font-black text-slate-900 mt-1">{orders.length}</p>
+            <p className="text-2xl font-black text-slate-900 mt-1">{filteredOrders.length}</p>
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Pending</p>
-            <p className="text-2xl font-black text-[#f59e0b] mt-1">{orders.filter(o => o.orderStatus === 'pending').length}</p>
+            <p className="text-2xl font-black text-[#f59e0b] mt-1">{filteredOrders.filter(o => o.orderStatus === 'pending').length}</p>
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">In Progress</p>
@@ -411,7 +546,7 @@ export const Orders: React.FC = () => {
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Completed</p>
-            <p className="text-2xl font-black text-[#10b981] mt-1">{orders.filter(o => o.orderStatus === 'completed').length}</p>
+            <p className="text-2xl font-black text-[#10b981] mt-1">{filteredOrders.filter(o => o.orderStatus === 'completed').length}</p>
           </div>
         </div>
 

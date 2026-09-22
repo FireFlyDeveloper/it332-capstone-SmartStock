@@ -16,7 +16,7 @@ import {
   Filter
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
-import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
+import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
 import { apiFetchBlob, type ApiError } from '../api';
@@ -32,12 +32,6 @@ const EXPORT_TYPE_LABELS: Record<ExportType, string> = {
   spending: 'Spending Report',
 };
 
-const formatDateInput = (date: Date): string => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-};
 
 interface ReportCardProps {
   title: string;
