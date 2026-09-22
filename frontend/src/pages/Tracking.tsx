@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { 
   Search, 
   Package, 
@@ -9,18 +9,14 @@ import {
   User, 
   ShoppingBag, 
   Truck, 
-  Compass, 
-  ArrowLeft, 
   Copy, 
   Printer, 
   MapPin, 
   ShieldCheck, 
   RefreshCw, 
-  AlertCircle,
-  LogIn
+  AlertCircle
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
-import { useAuth } from '../components/AuthContext';
 import { apiFetch } from '../api';
 import type { Order } from '../types';
 import { formatCurrency, formatDate } from '../utils/helpers';
@@ -53,8 +49,6 @@ export const TrackingPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryRef = searchParams.get('ref') || searchParams.get('order') || '';
   
-  const navigate = useNavigate();
-  const { user } = useAuth();
   const { orders } = useData();
 
   const [referenceInput, setReferenceInput] = useState(urlRef || queryRef || '');
@@ -234,52 +228,6 @@ export const TrackingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col font-sans">
-      {/* ── Standalone Public Header ────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#f1f5f9] shadow-2xs print:hidden">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          {/* Logo & Brand */}
-          <Link to="/" className="flex items-center gap-3.5 group">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-indigo-600/25 group-hover:scale-105 transition-transform">
-              <Compass className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-black text-lg text-slate-900 tracking-tight">SMARTSTOCK</span>
-                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-600 border border-emerald-100">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live Portal
-                </span>
-              </div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                Glassram Glass &amp; Aluminum Supply
-              </p>
-            </div>
-          </Link>
-
-          {/* Right actions: Back to Dashboard (if logged in) or Staff Login */}
-          <div className="flex items-center gap-3">
-            {user ? (
-              <button
-                type="button"
-                onClick={() => navigate('/')}
-                className="btn-primary flex items-center gap-2 text-xs font-bold py-2.5 px-4 rounded-xl shadow-sm"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Back to Dashboard</span>
-              </button>
-            ) : (
-              <Link
-                to="/login"
-                className="btn-secondary flex items-center gap-1.5 text-xs font-bold py-2 px-3.5 rounded-xl shadow-2xs text-slate-700"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>Staff Login</span>
-              </Link>
-            )}
-          </div>
-        </div>
-      </header>
-
       {/* ── Main Public Body ────────────────────────────────────────── */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
         {/* Hero Title & Intro */}
