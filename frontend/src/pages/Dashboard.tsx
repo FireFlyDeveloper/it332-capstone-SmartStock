@@ -183,16 +183,19 @@ export const Dashboard: React.FC = () => {
   const distributionData: DonutSegment[] = [
     {
       label: 'Float & Tempered Glass',
+      shortLabel: 'Glass',
       value: glassTotalStock || 540,
       color: '#10b981', // Emerald
     },
     {
       label: 'Aluminum Profiles',
+      shortLabel: 'Aluminum',
       value: aluminumTotalStock || 360,
       color: '#4f46e5', // Indigo
     },
     {
       label: 'Hardware & Accessories',
+      shortLabel: 'Hardware',
       value: 140,
       color: '#f59e0b', // Amber
     },
@@ -425,7 +428,7 @@ export const Dashboard: React.FC = () => {
               <InteractiveDonut
                 data={distributionData}
                 totalLabel="ITEMS"
-                size={175}
+                size={185}
               />
             </div>
 
@@ -608,36 +611,38 @@ export const Dashboard: React.FC = () => {
               </h3>
 
               {/* Centered Donut Gauge */}
-              <div className="flex flex-col items-center justify-center my-2">
-                <div className="relative w-28 h-28 flex items-center justify-center">
+              <div className="flex flex-col items-center justify-center my-3">
+                <div className="relative w-32 h-32 flex items-center justify-center">
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                     <circle
                       cx="50"
                       cy="50"
-                      r="40"
+                      r="42"
                       stroke="#f1f5f9"
-                      strokeWidth="8"
+                      strokeWidth="7"
                       fill="none"
                     />
                     <circle
                       cx="50"
                       cy="50"
-                      r="40"
+                      r="42"
                       stroke="#10b981"
-                      strokeWidth="8"
-                      strokeDasharray="251.2"
-                      strokeDashoffset="30"
+                      strokeWidth="7"
+                      strokeDasharray="263.89"
+                      strokeDashoffset="31.67"
                       strokeLinecap="round"
                       fill="none"
+                      className="transition-all duration-700 ease-out"
                     />
                   </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-2xl font-black text-slate-900 leading-none">88%</span>
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mt-0.5">
-                      Overall Score
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                    <span className="text-3xl font-black text-slate-900 leading-none tracking-tight">88%</span>
+                    <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 mt-1">
+                      SCORE
                     </span>
                   </div>
                 </div>
+                <span className="text-xs font-semibold text-slate-500 mt-2">Overall Health Index</span>
               </div>
 
               {/* Percentage breakdown */}

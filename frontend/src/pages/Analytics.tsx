@@ -30,7 +30,8 @@ import {
   Bar,
   Cell,
   PieChart as RechartsPieChart,
-  Pie
+  Pie,
+  Legend
 } from 'recharts';
 import { 
   monthlySalesData, 
@@ -285,24 +286,38 @@ export const Analytics: React.FC = () => {
               </div>
               <AlertTriangle className="w-5 h-5 text-yellow-600" />
             </div>
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={260}>
               <RechartsPieChart>
                 <Pie
                   data={stockDistribution}
                   cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={90}
-                  paddingAngle={2}
+                  cy="45%"
+                  innerRadius={55}
+                  outerRadius={85}
+                  paddingAngle={3}
                   dataKey="value"
-                  label={({ name, value }) => `${name}: ${value}`}
-                  labelLine={false}
                 >
                   {stockDistribution.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip
+                  formatter={(value: number, name: string) => [`${value} items`, name]}
+                  contentStyle={{
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #f1f5f9',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.08)',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                  }}
+                />
+                <Legend
+                  verticalAlign="bottom"
+                  iconType="circle"
+                  iconSize={8}
+                  formatter={(value) => <span className="text-xs font-medium text-slate-600 ml-1">{value}</span>}
+                />
               </RechartsPieChart>
             </ResponsiveContainer>
           </div>

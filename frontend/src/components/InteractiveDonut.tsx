@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 export interface DonutSegment {
   label: string;
+  shortLabel?: string;
   value: number;
   color: string;
   percentage?: number;
@@ -114,14 +115,24 @@ export const InteractiveDonut: React.FC<InteractiveDonutProps> = ({
           })}
         </svg>
 
-        {/* Center content: Large number (3xl) and small 'Total' label (10px uppercase) */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-          <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-            {currentHovered ? currentHovered.label : totalLabel}
-          </span>
-          <span className="text-3xl font-black text-slate-900 tracking-tight leading-none mt-0.5">
-            {currentHovered ? `${currentHovered.percent}%` : displayTotal}
-          </span>
+        {/* Center content: Constrained width, large number (3xl) and concise label */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none p-4">
+          <div className="flex flex-col items-center justify-center text-center max-w-[105px] w-full">
+            <span
+              className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate max-w-full leading-tight"
+              title={currentHovered ? currentHovered.label : totalLabel}
+            >
+              {currentHovered ? (currentHovered.shortLabel || currentHovered.label) : totalLabel}
+            </span>
+            <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none mt-1">
+              {currentHovered ? `${currentHovered.percent}%` : (typeof displayTotal === 'number' ? displayTotal.toLocaleString() : displayTotal)}
+            </span>
+            {currentHovered && (
+              <span className="text-[10px] font-semibold text-slate-400 leading-tight mt-1 truncate max-w-full">
+                {currentHovered.value.toLocaleString()} items
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
