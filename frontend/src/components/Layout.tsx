@@ -7,11 +7,9 @@
  * - Grouped navigation under uppercase labels (GESTION, FINANCES)
  * - Navigation items: 13px font, text-slate-400, right-aligned chevron
  * - Active state: Background #4f46e5, white text, shadow-[0_10px_15px_-3px_rgba(79,70,229,0.4)]
- * - Specialized Help card (#1e293b with border) at bottom
  * - Sticky Header: 80px height, #ffffff, border-bottom 1px solid #f1f5f9
  * - Search bar 400px width, #f8fafc bg, rounded-2xl, leading search icon
- * - Right icon group: notifications with red dot, messages, dark mode toggle
- * - Language selector with flag icon
+ * - Right icon group: notifications with red dot
  * - Profile component: Avatar + Name + Role
  */
 
@@ -28,14 +26,9 @@ import {
   ChevronRight,
   Search,
   Bell,
-  MessageSquare,
-  Moon,
-  Sun,
-  HelpCircle,
   LogOut,
   Menu,
   X,
-  ExternalLink,
   ChevronDown,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
@@ -79,17 +72,11 @@ export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [currentLang, setCurrentLang] = useState<'EN' | 'FR'>('EN');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
-  };
-
-  const toggleLanguage = () => {
-    setCurrentLang((prev) => (prev === 'EN' ? 'FR' : 'EN'));
   };
 
   return (
@@ -199,31 +186,7 @@ export function Layout({ children }: LayoutProps) {
             ))}
           </div>
 
-          {/* Bottom Specialized Help Card */}
-          <div className="p-4 border-t border-[#1e293b]">
-            <div className="bg-[#1e293b] border border-[#334155]/60 rounded-2xl p-4 shadow-sm relative overflow-hidden group">
-              <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl pointer-events-none" />
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center flex-shrink-0 text-indigo-400">
-                  <HelpCircle className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-extrabold text-xs text-white">Help Center</h4>
-                  <p className="text-[11px] text-slate-400 mt-1 leading-snug">
-                    User guides &amp; 24/7 Glassram support.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => window.open('https://github.com/FireFlyDeveloper/it332-capstone-SmartStock', '_blank')}
-                    className="mt-2.5 inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
-                  >
-                    Documentation
-                    <ExternalLink className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+
         </div>
       </aside>
 
@@ -256,59 +219,17 @@ export function Layout({ children }: LayoutProps) {
             </div>
           </div>
 
-          {/* Right: Icon Group + Language Selector + Profile */}
+          {/* Right: Notifications + Profile */}
           <div className="flex items-center gap-3 lg:gap-4">
-            {/* Icon Group */}
-            <div className="flex items-center gap-1 sm:gap-2">
-              {/* Notifications with red dot badge */}
-              <button
-                type="button"
-                className="relative p-2.5 rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-                title="Notifications"
-                aria-label="Notifications"
-              >
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#f43f5e] ring-2 ring-white" />
-              </button>
-
-              {/* Messages button */}
-              <button
-                type="button"
-                className="p-2.5 rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-                title="Team Messages"
-                aria-label="Messages"
-              >
-                <MessageSquare className="w-5 h-5" />
-              </button>
-
-              {/* Dark mode toggle */}
-              <button
-                type="button"
-                onClick={() => setIsDarkMode(!isDarkMode)}
-                className="p-2.5 rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-                title="Toggle dark mode"
-                aria-label="Dark mode"
-              >
-                {isDarkMode ? (
-                  <Sun className="w-5 h-5 text-amber-500" />
-                ) : (
-                  <Moon className="w-5 h-5" />
-                )}
-              </button>
-            </div>
-
-            {/* Language Selector with Flag Icon */}
+            {/* Notifications with red dot badge */}
             <button
               type="button"
-              onClick={toggleLanguage}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
-              title="Change language"
+              className="relative p-2.5 rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+              title="Notifications"
+              aria-label="Notifications"
             >
-              <span className="text-sm leading-none" role="img" aria-label="Language">
-                {currentLang === 'EN' ? '🇺🇸' : '🇫🇷'}
-              </span>
-              <span>{currentLang}</span>
-              <ChevronDown className="w-3 h-3 text-slate-400" />
+              <Bell className="w-5 h-5" />
+              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#f43f5e] ring-2 ring-white" />
             </button>
 
             {/* Divider */}
