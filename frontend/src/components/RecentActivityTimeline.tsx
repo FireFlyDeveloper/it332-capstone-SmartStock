@@ -73,24 +73,29 @@ export const RecentActivityTimeline: React.FC<RecentActivityTimelineProps> = ({
         </div>
 
         {/* Vertical Timeline with connecting line */}
-        <div className="relative pl-6 space-y-5 before:absolute before:left-3 before:top-2 before:bottom-3 before:w-0.5 before:bg-slate-100">
-          {activities.map((item) => {
+        <div className="space-y-5">
+          {activities.map((item, idx) => {
             const Icon = item.icon;
             return (
               <div key={item.id} className="relative flex items-start gap-3.5 group">
+                {/* Connecting line to next item */}
+                {idx < activities.length - 1 && (
+                  <div className="absolute left-[15px] top-8 bottom-0 w-0.5 -mb-5 bg-slate-100" />
+                )}
+
                 {/* Node icon */}
                 <div
-                  className={`absolute -left-6 top-0 w-6 h-6 rounded-full ${item.iconBg} flex items-center justify-center ring-4 ring-white shadow-2xs`}
+                  className={`relative z-10 w-8 h-8 rounded-full ${item.iconBg} flex items-center justify-center shrink-0 ring-4 ring-white shadow-2xs group-hover:scale-105 transition-transform`}
                 >
-                  <Icon className="w-3.5 h-3.5" />
+                  <Icon className="w-4 h-4" />
                 </div>
 
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 pt-0.5">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-bold text-slate-800 truncate group-hover:text-indigo-600 transition-colors">
                       {item.title}
                     </p>
-                    <span className="text-[10px] text-slate-400 whitespace-nowrap font-medium">
+                    <span className="text-[10px] text-slate-400 whitespace-nowrap font-medium shrink-0">
                       {item.time}
                     </span>
                   </div>
