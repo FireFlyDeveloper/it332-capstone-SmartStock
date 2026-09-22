@@ -62,10 +62,10 @@ export const KpiSparkline: React.FC<KpiSparklineProps> = ({
   const gradientId = `spark-grad-${Math.abs(color.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0))}`;
 
   return (
-    <div className="w-full h-[40px] overflow-hidden">
+    <div className="w-full h-[36px] overflow-hidden">
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="w-full h-full overflow-visible"
+        className="w-full h-full overflow-hidden block"
         preserveAspectRatio="none"
       >
         <defs>

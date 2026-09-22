@@ -14,7 +14,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
-import { formatCurrency } from '../utils/helpers';
+import { formatCurrency, formatCurrencyWhole } from '../utils/helpers';
 import { monthlySalesData, topItemsData } from '../data/mockData';
 import { KpiSparkline } from '../components/KpiSparkline';
 import { InteractiveDonut, type DonutSegment } from '../components/InteractiveDonut';
@@ -37,6 +37,7 @@ import {
 interface KpiCardProps {
   label: string;
   value: string | number;
+  unit?: string;
   change: string;
   isPositive?: boolean;
   icon: React.ElementType;
@@ -51,16 +52,17 @@ interface KpiCardProps {
 /**
  * 5-Column KPI Card
  * Spec:
- * - White background, 24px padding, rounded-3xl (or 40px / 2.5rem radius)
+ * - White background, responsive padding, rounded-3xl (28px radius)
  * - Icon in colored background box (12px radius)
- * - Label in 10px bold uppercase, tracking 0.1em
- * - Value in 24px-32px extra-bold / black (weight 900)
+ * - Label in 10px bold uppercase, tracking 0.08em
+ * - Value sized to fit comfortably without clipping or overflowing
  * - Percentage change badge (emerald-50 bg for positive)
- * - Bottom SVG sparkline path smoothly interpolating 7-10 points across width
+ * - Bottom SVG sparkline smoothly interpolating points across width
  */
 const KpiCard: React.FC<KpiCardProps> = ({
   label,
   value,
+  unit,
   change,
   isPositive = true,
   icon: Icon,
@@ -72,45 +74,55 @@ const KpiCard: React.FC<KpiCardProps> = ({
   badgeColor = isPositive ? 'text-[#10b981]' : 'text-[#f43f5e]',
 }) => {
   return (
-    <div className="bg-white rounded-[40px] p-6 border border-[#f1f5f9] shadow-[0_4px_6px_-1px_rgb(0_0_0/0.05)] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:scale-[1.02] hover:shadow-md flex flex-col justify-between group">
-      <div>
+    <div className="bg-white rounded-[28px] p-4 sm:p-5 border border-[#f1f5f9] shadow-[0_2px_4px_-1px_rgb(0_0_0/0.04)] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:scale-[1.02] hover:shadow-md flex flex-col justify-between group min-w-0 overflow-hidden">
+      <div className="min-w-0">
         {/* Top Icon Box + Change Badge */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between gap-2 mb-3 min-w-0">
           <div
-            className={`w-11 h-11 rounded-[12px] ${iconBoxBg} ${iconColor} flex items-center justify-center transition-transform group-hover:scale-105 shadow-2xs`}
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${iconBoxBg} ${iconColor} flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 shadow-2xs`}
           >
-            <Icon className="w-5 h-5" />
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
 
           <div
-            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full ${badgeBg} ${badgeColor} text-[11px] font-bold`}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${badgeBg} ${badgeColor} text-[10px] sm:text-[11px] font-bold shrink-0 whitespace-nowrap`}
           >
             {isPositive ? (
-              <ArrowUpRight className="w-3.5 h-3.5" />
+              <ArrowUpRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
             ) : (
-              <ArrowDownRight className="w-3.5 h-3.5" />
+              <ArrowDownRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
             )}
             <span>{change}</span>
           </div>
         </div>
 
         {/* Label & KPI Value */}
-        <div className="space-y-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
+        <div className="space-y-1 min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400 truncate">
             {label}
           </p>
-          <p className="text-2xl xl:text-3xl font-black text-slate-900 tracking-tight leading-tight">
-            {value}
-          </p>
+          <div className="flex items-baseline gap-1.5 min-w-0">
+            <span
+              title={typeof value === 'string' ? value : undefined}
+              className="text-xl sm:text-2xl xl:text-[22px] 2xl:text-2xl font-black text-slate-900 tracking-tight leading-none truncate"
+            >
+              {value}
+            </span>
+            {unit && (
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
+                {unit}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Bottom Sparkline (40px height, smoothly interpolating) */}
-      <div className="mt-4 pt-2">
+      {/* Bottom Sparkline (36px height, smoothly interpolating) */}
+      <div className="mt-3.5 pt-1 w-full overflow-hidden">
         <KpiSparkline
           data={sparklineData}
           color={sparklineColor}
-          height={40}
+          height={36}
         />
       </div>
     </div>
@@ -229,11 +241,11 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* ── 2. 5-Column KPI Row ─────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3.5 sm:gap-4 2xl:gap-5">
         {/* KPI 1: Inventory Value (Indigo) */}
         <KpiCard
           label="INVENTORY VALUE"
-          value={formatCurrency(totalInventoryValue || 2845000)}
+          value={formatCurrencyWhole(totalInventoryValue || 2845000)}
           change="+8.4%"
           isPositive={true}
           icon={Package}
@@ -246,7 +258,7 @@ export const Dashboard: React.FC = () => {
         {/* KPI 2: Monthly Revenue (Emerald) */}
         <KpiCard
           label="MONTHLY SALES"
-          value={formatCurrency(320000)}
+          value={formatCurrencyWhole(320000)}
           change="+18.2%"
           isPositive={true}
           icon={TrendingUp}
@@ -260,6 +272,7 @@ export const Dashboard: React.FC = () => {
         <KpiCard
           label="ACTIVE ORDERS"
           value={activeOrders || 19}
+          unit="orders"
           change="+12.0%"
           isPositive={true}
           icon={ShoppingBag}
@@ -272,7 +285,8 @@ export const Dashboard: React.FC = () => {
         {/* KPI 4: In-Transit Deliveries (Amber) */}
         <KpiCard
           label="IN TRANSIT"
-          value={`${inTransitDeliveries || 6} trucks`}
+          value={inTransitDeliveries || 6}
+          unit="trucks"
           change="+5.0%"
           isPositive={true}
           icon={Truck}
@@ -285,8 +299,9 @@ export const Dashboard: React.FC = () => {
         {/* KPI 5: Low Stock Alerts (Rose) */}
         <KpiCard
           label="LOW STOCK"
-          value={`${lowStockItems || 5} items`}
-          change="-2 critical"
+          value={lowStockItems || 5}
+          unit="alerts"
+          change="-4.2%"
           isPositive={false}
           icon={AlertTriangle}
           iconBoxBg="bg-rose-50"

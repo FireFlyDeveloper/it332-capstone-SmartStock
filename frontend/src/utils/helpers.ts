@@ -23,6 +23,16 @@ export const formatCurrency = (amount: number): string => {
   }).format(amount)
 }
 
+// Format currency without decimal cents (clean for KPI cards)
+export const formatCurrencyWhole = (amount: number): string => {
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+  }).format(amount)
+}
+
 // Format date
 export const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString('en-PH', {
