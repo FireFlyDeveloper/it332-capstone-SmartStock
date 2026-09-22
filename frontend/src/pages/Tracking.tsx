@@ -609,7 +609,7 @@ export const TrackingPage: React.FC = () => {
             &copy; {new Date().getFullYear()} Glassram Supply. All rights reserved. Real-time delivery and dispatch tracking network.
           </p>
           <p className="text-[11px] text-slate-400">
-            Need urgent assistance? Customer Support Hotline: <strong className="text-slate-600">(02) 8123-4567</strong> (Mon–Sat 8AM–5PM)
+            Need urgent assistance? Customer Support Hotline: <strong className="text-slate-600">+63 917 123 4567</strong> (Mobile) &bull; <strong className="text-slate-600">+63 (2) 8123-4567</strong> (Landline) (Mon–Sat 8AM–5PM)
           </p>
         </div>
       </footer>
