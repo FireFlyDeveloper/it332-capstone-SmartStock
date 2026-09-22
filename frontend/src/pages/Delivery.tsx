@@ -225,17 +225,27 @@ export const DeliveryPage: React.FC = () => {
                   {/* Progress Timeline */}
                   <div className="pt-4 border-t border-gray-100">
                     <p className="text-sm font-medium text-gray-700 mb-3">Delivery Progress</p>
-                    <div className="flex items-center justify-between">
-                      {deliverySteps.map((step, index) => {
+                    <div className="flex items-start w-full relative">
+                      {deliverySteps.map((step, index, arr) => {
                         const isCompleted = index <= currentStep;
                         const isCurrent = index === currentStep;
                         
                         return (
-                          <div key={step.key} className="flex flex-col items-center">
+                          <div key={step.key} className="relative flex-1 flex flex-col items-center">
+                            {/* Connecting line to next step */}
+                            {index < arr.length - 1 && (
+                              <div className="absolute top-4 left-1/2 w-full h-0.5 -translate-y-1/2 bg-gray-200 z-0">
+                                <div
+                                  className="h-full bg-[#4f46e5] transition-all duration-500"
+                                  style={{ width: index < currentStep ? '100%' : '0%' }}
+                                />
+                              </div>
+                            )}
+
                             <div className={`
-                              w-8 h-8 rounded-full flex items-center justify-center
-                              ${isCompleted ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-400'}
-                              ${isCurrent ? 'ring-4 ring-primary-100' : ''}
+                              relative z-10 w-8 h-8 rounded-full flex items-center justify-center
+                              ${isCompleted ? 'bg-[#4f46e5] text-white' : 'bg-gray-200 text-gray-400'}
+                              ${isCurrent ? 'ring-4 ring-indigo-100' : ''}
                             `}>
                               {isCurrent ? (
                                 <Loader className="w-4 h-4 animate-spin" />
@@ -245,7 +255,7 @@ export const DeliveryPage: React.FC = () => {
                                 <Circle className="w-4 h-4" />
                               )}
                             </div>
-                            <span className={`text-xs mt-1 hidden sm:block ${isCompleted ? 'text-gray-900' : 'text-gray-400'}`}>
+                            <span className={`text-xs mt-1 text-center px-1 hidden sm:block ${isCompleted ? 'text-gray-900 font-medium' : 'text-gray-400'}`}>
                               {step.label}
                             </span>
                           </div>

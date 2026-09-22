@@ -708,28 +708,40 @@ export const Orders: React.FC = () => {
                   <h4 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
                     <Clock className="w-4 h-4 text-gray-400" /> Order Progress
                   </h4>
-                  <div className="flex items-center justify-between relative">
-                    <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-gray-200 -translate-y-1/2" />
-                    <div
-                      className="absolute top-1/2 left-4 h-0.5 bg-blue-600 -translate-y-1/2 transition-all duration-500"
-                      style={{
-                        width: `${(getCurrentStep(viewOrder.orderStatus, viewOrder.orderType) / Math.max(getSteps(viewOrder.orderType).length - 1, 1)) * 100}%`,
-                      }}
-                    />
-                    {getSteps(viewOrder.orderType).map((step, i) => {
+                  <div className="flex items-start w-full relative">
+                    {getSteps(viewOrder.orderType).map((step, i, arr) => {
                       const current = getCurrentStep(viewOrder.orderStatus, viewOrder.orderType);
                       const done = i <= current;
                       const isCurrent = i === current;
                       return (
-                        <div key={step.key} className="relative flex flex-col items-center z-10">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                            done ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-400'
-                          } ${isCurrent ? 'ring-4 ring-blue-100' : ''}`}>
+                        <div key={step.key} className="relative flex-1 flex flex-col items-center">
+                          {/* Segment connector line to next step */}
+                          {i < arr.length - 1 && (
+                            <div className="absolute top-4 left-1/2 w-full h-0.5 -translate-y-1/2 bg-gray-200 z-0">
+                              <div
+                                className="h-full bg-blue-600 transition-all duration-500"
+                                style={{
+                                  width: i < current ? '100%' : '0%',
+                                }}
+                              />
+                            </div>
+                          )}
+
+                          {/* Step Node Circle */}
+                          <div
+                            className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                              done ? 'bg-blue-600 text-white shadow-2xs' : 'bg-gray-200 text-gray-400'
+                            } ${isCurrent ? 'ring-4 ring-blue-100' : ''}`}
+                          >
                             {done ? <CheckCircle className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
                           </div>
-                          <p className={`mt-1.5 text-[10px] font-medium text-center whitespace-nowrap ${
-                            isCurrent ? 'text-blue-700' : done ? 'text-gray-900' : 'text-gray-400'
-                          }`}>
+
+                          {/* Step Label */}
+                          <p
+                            className={`mt-2 text-[11px] font-medium text-center px-1 leading-tight ${
+                              isCurrent ? 'text-blue-700 font-bold' : done ? 'text-gray-900 font-semibold' : 'text-gray-400'
+                            }`}
+                          >
                             {step.label}
                           </p>
                         </div>

@@ -268,21 +268,24 @@ const TrackingPage: React.FC = () => {
             <h3 className="text-lg font-black text-slate-900 mb-6">Order Progress</h3>
             
             {/* Steps */}
-            <div className="flex items-center justify-between relative px-2">
-              {/* Progress Line */}
-              <div className="absolute top-5 left-6 right-6 h-1 bg-slate-100 -translate-y-1/2" />
-              <div 
-                className="absolute top-5 left-6 h-1 bg-[#4f46e5] -translate-y-1/2 transition-all duration-500"
-                style={{ width: `${Math.max(0, (currentStepIndex / Math.max(1, progressSteps.length - 1)) * 100)}%` }}
-              />
-              
-              {progressSteps.map((step, index) => {
+            <div className="flex items-start w-full relative">
+              {progressSteps.map((step, index, arr) => {
                 const isCompleted = index <= currentStepIndex;
                 const isCurrent = index === currentStepIndex;
                 
                 return (
-                  <div key={step.key} className="relative flex flex-col items-center z-10">
-                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+                  <div key={step.key} className="relative flex-1 flex flex-col items-center">
+                    {/* Connecting line to next step */}
+                    {index < arr.length - 1 && (
+                      <div className="absolute top-5 left-1/2 w-full h-1 -translate-y-1/2 bg-slate-100 z-0">
+                        <div 
+                          className="h-full bg-[#4f46e5] transition-all duration-500"
+                          style={{ width: index < currentStepIndex ? '100%' : '0%' }}
+                        />
+                      </div>
+                    )}
+
+                    <div className={`relative z-10 w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-300 ${
                       isCompleted 
                         ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20' 
                         : 'bg-slate-100 text-slate-400'
@@ -293,7 +296,7 @@ const TrackingPage: React.FC = () => {
                         <Clock className="w-5 h-5" />
                       )}
                     </div>
-                    <p className={`mt-2 text-xs font-bold text-center ${
+                    <p className={`mt-2 text-xs font-bold text-center px-1 leading-tight ${
                       isCurrent ? 'text-[#4f46e5]' : isCompleted ? 'text-slate-900' : 'text-slate-400'
                     }`}>
                       {step.label}
