@@ -19,6 +19,7 @@ import {
   RotateCcw,
   Download,
   ShoppingBag,
+  Compass,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
 import type { Order, OrderItem } from '../types';
@@ -691,6 +692,15 @@ export const Orders: React.FC = () => {
                 <p className="text-sm text-gray-500">{viewOrder.referenceNumber} · {viewOrder.id}</p>
               </div>
               <div className="flex items-center gap-2">
+                <a
+                  href={`/tracking/${encodeURIComponent(viewOrder.referenceNumber)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 hover:bg-indigo-50 rounded-lg text-gray-500 hover:text-[#4f46e5] transition-colors"
+                  title="Open Live Public Tracking in new tab"
+                >
+                  <Compass className="w-5 h-5" />
+                </a>
                 <button onClick={() => openEdit(viewOrder)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-blue-600" title="Edit Order">
                   <Edit3 className="w-5 h-5" />
                 </button>

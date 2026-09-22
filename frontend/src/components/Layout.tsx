@@ -25,13 +25,13 @@ import {
   FileText,
   ChevronRight,
   Search,
-  Bell,
   LogOut,
   Menu,
   X,
   ChevronDown,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
+import { NotificationDropdown } from './NotificationDropdown';
 
 interface LayoutProps {
   children: ReactNode;
@@ -221,16 +221,8 @@ export function Layout({ children }: LayoutProps) {
 
           {/* Right: Notifications + Profile */}
           <div className="flex items-center gap-3 lg:gap-4">
-            {/* Notifications with red dot badge */}
-            <button
-              type="button"
-              className="relative p-2.5 rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-              title="Notifications"
-              aria-label="Notifications"
-            >
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#f43f5e] ring-2 ring-white" />
-            </button>
+            {/* Notification Dropdown */}
+            <NotificationDropdown />
 
             {/* Divider */}
             <div className="h-6 w-px bg-slate-200" />
