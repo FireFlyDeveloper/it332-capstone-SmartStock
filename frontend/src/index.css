@@ -168,22 +168,24 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Soft Professional Inputs (16px border-radius) */
-.input {
-  display: block;
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 0.625rem 1rem;
-  font-size: 0.875rem;
-  color: #0f172a;
-  outline: none;
-  transition: all 200ms ease;
-  font-family: 'Inter', sans-serif;
-}
+@layer components {
+  .input {
+    display: block;
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    color: #0f172a;
+    outline: none;
+    transition: all 200ms ease;
+    font-family: 'Inter', sans-serif;
+  }
 
-.input:focus {
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+  .input:focus {
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+  }
 }
 
 /* Custom sleek scrollbar */
