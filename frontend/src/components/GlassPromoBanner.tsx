@@ -33,16 +33,16 @@ export const GlassPromoBanner: React.FC = () => {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md border border-white/20 text-indigo-100 text-[11px] font-bold tracking-wider uppercase">
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>SmartStock AI Analytics · Glassram</span>
+            <span>SmartStock AI Intelligence · Glassram</span>
           </div>
 
           {/* Heading: White, Extra Bold */}
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-[-0.02em] leading-tight text-white">
-            Anticipez vos stocks &amp; optimisez vos tournées en temps réel
+            Forecast Inventory &amp; Streamline Fleet Dispatch in Real-Time
           </h2>
 
           <p className="text-sm sm:text-base text-indigo-100/90 leading-relaxed max-w-xl font-normal">
-            Le modèle d'IA intégré analyse la vélocité des commandes de verre float, verre trempé et profilés aluminium pour prédire les réapprovisionnements et éviter toute rupture.
+            Integrated AI analyzes historical order velocity for float glass, tempered glass, and aluminum channels to recommend automatic reorders and avoid costly stockouts.
           </p>
 
           <div className="pt-2 flex flex-wrap items-center gap-4">
@@ -52,7 +52,7 @@ export const GlassPromoBanner: React.FC = () => {
               onClick={() => navigate('/analytics')}
               className="px-7 py-3.5 rounded-2xl bg-white text-[#4f46e5] font-extrabold text-sm shadow-2xl shadow-indigo-950/40 hover:shadow-white/20 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center gap-2"
             >
-              <span>Explorer les Prévisions IA</span>
+              <span>Explore AI Forecasts</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
@@ -61,7 +61,7 @@ export const GlassPromoBanner: React.FC = () => {
               onClick={() => navigate('/inventory')}
               className="px-5 py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-sm backdrop-blur-sm transition-all duration-300"
             >
-              Gérer l'Inventaire
+              Manage Inventory
             </button>
           </div>
         </div>
@@ -94,25 +94,25 @@ export const GlassPromoBanner: React.FC = () => {
               <div className="bg-white/10 rounded-2xl p-3 border border-white/15">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-200">
-                    Prévision Réassort
+                    Reorder Prediction
                   </span>
                   <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300">
                     Urgent
                   </span>
                 </div>
                 <p className="font-extrabold text-sm text-white mt-1">
-                  Miroir 6mm &amp; DGU
+                  Mirror 6mm &amp; DGU
                 </p>
                 <div className="flex items-center justify-between mt-2 text-[11px] text-indigo-100">
-                  <span>Recommandé: +24 u</span>
-                  <span className="font-extrabold text-amber-300">Évite ₱56k de pertes</span>
+                  <span>Recommended: +24 units</span>
+                  <span className="font-extrabold text-amber-300">Avoid ₱56k in lost sales</span>
                 </div>
               </div>
 
               {/* Confidence badge */}
               <div className="flex items-center justify-between px-1 text-xs">
                 <span className="text-indigo-200 flex items-center gap-1 text-[11px] font-medium">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" /> Précision modèle
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" /> Model Confidence
                 </span>
                 <span className="font-extrabold text-emerald-300 text-sm">96.8%</span>
               </div>

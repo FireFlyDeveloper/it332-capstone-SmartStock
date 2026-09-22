@@ -214,19 +214,19 @@ export const Inventory: React.FC = () => {
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Articles</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Products</p>
             <p className="text-2xl font-black text-slate-900 mt-1">{products.length}</p>
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Verre Vitrage</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Glass Products</p>
             <p className="text-2xl font-black text-[#3b82f6] mt-1">{products.filter(p => p.category === 'glass').length}</p>
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Profilés Aluminium</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Aluminum Profiles</p>
             <p className="text-2xl font-black text-[#10b981] mt-1">{products.filter(p => p.category === 'aluminum').length}</p>
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Stock Critique</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Low Stock</p>
             <p className="text-2xl font-black text-[#f43f5e] mt-1">{products.filter(p => checkStockStatus(p.stock, p.threshold) !== 'healthy').length}</p>
           </div>
         </div>

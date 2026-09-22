@@ -18,36 +18,36 @@ export const RecentActivityTimeline: React.FC<RecentActivityTimelineProps> = ({
   const activities = [
     {
       id: 'act-1',
-      title: 'Commande validée & prête',
+      title: 'Order confirmed & packed',
       desc: `${orders[0]?.customerName || 'John Construction'} · ${formatCurrency(orders[0]?.total || 58500)}`,
-      time: 'Il y a 14 min',
+      time: '14 mins ago',
       icon: CheckCircle2,
       iconBg: 'bg-emerald-50 text-[#10b981]',
       type: 'success',
     },
     {
       id: 'act-2',
-      title: 'Camion en transit',
-      desc: `${deliveries[0]?.truckNumber || 'Truck-101'} · Chauffeur ${deliveries[0]?.driver || 'Juan'}`,
-      time: 'Il y a 32 min',
+      title: 'Truck in transit',
+      desc: `${deliveries[0]?.truckNumber || 'Truck-101'} · Driver ${deliveries[0]?.driver || 'Juan'}`,
+      time: '32 mins ago',
       icon: Truck,
       iconBg: 'bg-amber-50 text-[#f59e0b]',
       type: 'warning',
     },
     {
       id: 'act-3',
-      title: 'Alerte stock bas détectée',
-      desc: `${products.find((p) => p.stock <= p.threshold)?.name || 'Miroir 6mm'} (seuil critique)`,
-      time: 'Il y a 1h',
+      title: 'Low stock alert detected',
+      desc: `${products.find((p) => p.stock <= p.threshold)?.name || 'Mirror 6mm'} (critical threshold)`,
+      time: '1 hr ago',
       icon: AlertTriangle,
       iconBg: 'bg-rose-50 text-[#f43f5e]',
       type: 'danger',
     },
     {
       id: 'act-4',
-      title: 'Réapprovisionnement verre',
-      desc: 'Clear Float Glass 4mm (+100 m² réceptionnés)',
-      time: 'Il y a 2h',
+      title: 'Glass restock received',
+      desc: 'Clear Float Glass 4mm (+100 sqm received)',
+      time: '2 hrs ago',
       icon: PackagePlus,
       iconBg: 'bg-indigo-50 text-[#4f46e5]',
       type: 'primary',
@@ -60,15 +60,15 @@ export const RecentActivityTimeline: React.FC<RecentActivityTimelineProps> = ({
         <div className="flex items-center justify-between mb-5">
           <div>
             <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-              FLUX EN DIRECT
+              LIVE FEED
             </span>
             <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em]">
-              Activité Récente
+              Recent Activity
             </h3>
           </div>
           <span className="flex items-center gap-1 text-[11px] font-bold text-slate-400">
             <Clock className="w-3.5 h-3.5" />
-            Temps réel
+            Real-time
           </span>
         </div>
 
@@ -105,9 +105,9 @@ export const RecentActivityTimeline: React.FC<RecentActivityTimelineProps> = ({
       </div>
 
       <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-        <span className="text-slate-400 font-medium">Toutes les opérations synchronisées</span>
+        <span className="text-slate-400 font-medium">All operations synchronized</span>
         <span className="font-extrabold text-emerald-600 flex items-center gap-1 text-[11px]">
-          ● Système actif
+          ● System active
         </span>
       </div>
     </div>

@@ -127,10 +127,10 @@ export const Reports: React.FC = () => {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
-              Rapports &amp; Bilan Financier
+              Financial Reports &amp; Statement
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Généré le: <span className="font-mono text-slate-700">{generatedAt}</span>
+              Generated on: <span className="font-mono text-slate-700">{generatedAt}</span>
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2" aria-label="Date range">

@@ -99,10 +99,10 @@ export const Analytics: React.FC = () => {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
-              Analytique &amp; Prévisions IA
+              AI Analytics &amp; Forecasting
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Modélisation prédictive DeepSeek pour le stock de verre, profilés et flux de commandes.
+              DeepSeek predictive modeling for glass, aluminum profiles, and order flow.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2" aria-label="Date range">
@@ -129,7 +129,7 @@ export const Analytics: React.FC = () => {
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Valeur Totale Stock</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Inventory Value</p>
                 <p className="text-2xl font-black text-slate-900 mt-1">{formatCurrency(totalInventoryValue)}</p>
               </div>
               <div className="w-12 h-12 rounded-[12px] bg-emerald-50 text-[#10b981] flex items-center justify-center">
@@ -138,14 +138,14 @@ export const Analytics: React.FC = () => {
             </div>
             <div className="flex items-center gap-1 mt-3 text-xs font-bold text-emerald-600">
               <ArrowUpRight className="w-4 h-4" />
-              <span>+8.2% ce mois</span>
+              <span>+8.2% this month</span>
             </div>
           </div>
 
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Volume Commandes</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Order Volume</p>
                 <p className="text-2xl font-black text-slate-900 mt-1">{orders.length}</p>
               </div>
               <div className="w-12 h-12 rounded-[12px] bg-indigo-50 text-[#4f46e5] flex items-center justify-center">
@@ -154,14 +154,14 @@ export const Analytics: React.FC = () => {
             </div>
             <div className="flex items-center gap-1 mt-3 text-xs font-bold text-[#4f46e5]">
               <ArrowUpRight className="w-4 h-4" />
-              <span>+15% ce trimestre</span>
+              <span>+15% this quarter</span>
             </div>
           </div>
 
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Panier Moyen</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Average Order Value</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
                   {formatCurrency(orders.length > 0 ? orders.reduce((sum, o) => sum + o.total, 0) / orders.length : 0)}
                 </p>

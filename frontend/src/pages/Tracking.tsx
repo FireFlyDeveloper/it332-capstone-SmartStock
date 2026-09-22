@@ -88,10 +88,10 @@ const TrackingPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
-            Suivi des Expéditions en Direct
+            Live Shipment &amp; Delivery Tracking
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Entrez le numéro de référence pour localiser une commande et son statut de livraison.
+            Enter your reference number to track an order and its real-time delivery status.
           </p>
         </div>
       </div>
@@ -105,7 +105,7 @@ const TrackingPage: React.FC = () => {
               type="text"
               value={referenceNumber}
               onChange={(e) => setReferenceNumber(e.target.value)}
-              placeholder="Ex: SS-2026-00001 ou ORD-001"
+              placeholder="e.g. SS-2026-00001 or ORD-001"
               className="w-full pl-12 pr-4 py-3 bg-[#f8fafc] border border-slate-200/80 rounded-2xl focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none text-sm text-slate-800 font-medium"
               onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
             />
@@ -115,7 +115,7 @@ const TrackingPage: React.FC = () => {
             disabled={loading}
             className="btn-primary"
           >
-            {loading ? 'Recherche...' : 'Localiser la commande'}
+            {loading ? 'Searching...' : 'Track Order'}
           </button>
         </div>
         {error && (
@@ -277,23 +277,23 @@ const TrackingPage: React.FC = () => {
           <div className="bg-white rounded-[32px] shadow-sm border border-[#f1f5f9] p-8 text-center">
             <Search className="w-12 h-12 text-slate-300 mx-auto mb-4" />
             <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em] mb-2">
-              Comment suivre votre commande ?
+              How to track your order?
             </h3>
             <p className="text-slate-500 text-sm mb-4">
-              Saisissez le numéro de référence figurant sur votre bon de commande ou SMS de confirmation.
+              Enter the reference number found on your order confirmation email, invoice, or SMS.
             </p>
             <ul className="text-left text-slate-600 text-xs space-y-2.5 max-w-md mx-auto">
               <li className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                Email de confirmation de commande SmartStock
+                SmartStock order confirmation email
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                Notification SMS envoyée au client
+                SMS notification sent to recipient
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                Bordereau de livraison remis par le chauffeur
+                Delivery dispatch note or receipt from driver
               </li>
             </ul>
           </div>

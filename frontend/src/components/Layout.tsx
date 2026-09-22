@@ -56,20 +56,20 @@ interface NavGroup {
 
 const navGroups: NavGroup[] = [
   {
-    label: 'GESTION',
+    label: 'MANAGEMENT',
     items: [
-      { icon: LayoutDashboard, label: 'Tableau de bord', path: '/' },
-      { icon: Package, label: 'Inventaire', path: '/inventory' },
-      { icon: ShoppingBag, label: 'Commandes', path: '/orders' },
-      { icon: Truck, label: 'Livraisons', path: '/delivery' },
+      { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+      { icon: Package, label: 'Inventory', path: '/inventory' },
+      { icon: ShoppingBag, label: 'Orders', path: '/orders' },
+      { icon: Truck, label: 'Deliveries', path: '/delivery' },
     ],
   },
   {
-    label: 'FINANCES & ANALYTIQUE',
+    label: 'FINANCES & ANALYTICS',
     items: [
-      { icon: Compass, label: 'Suivi en direct', path: '/tracking' },
-      { icon: BarChart3, label: 'Analytique IA', path: '/analytics' },
-      { icon: FileText, label: 'Rapports & Ventes', path: '/reports' },
+      { icon: Compass, label: 'Live Tracking', path: '/tracking' },
+      { icon: BarChart3, label: 'AI Analytics', path: '/analytics' },
+      { icon: FileText, label: 'Reports & Sales', path: '/reports' },
     ],
   },
 ];
@@ -80,7 +80,7 @@ export function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [currentLang, setCurrentLang] = useState<'FR' | 'EN'>('FR');
+  const [currentLang, setCurrentLang] = useState<'EN' | 'FR'>('EN');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const handleLogout = () => {
@@ -89,7 +89,7 @@ export function Layout({ children }: LayoutProps) {
   };
 
   const toggleLanguage = () => {
-    setCurrentLang((prev) => (prev === 'FR' ? 'EN' : 'FR'));
+    setCurrentLang((prev) => (prev === 'EN' ? 'FR' : 'EN'));
   };
 
   return (
@@ -136,7 +136,7 @@ export function Layout({ children }: LayoutProps) {
               type="button"
               onClick={() => setIsMobileMenuOpen(false)}
               className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-              aria-label="Fermer le menu"
+              aria-label="Close menu"
             >
               <X className="w-5 h-5" />
             </button>
@@ -208,9 +208,9 @@ export function Layout({ children }: LayoutProps) {
                   <HelpCircle className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-extrabold text-xs text-white">Centre d'aide</h4>
+                  <h4 className="font-extrabold text-xs text-white">Help Center</h4>
                   <p className="text-[11px] text-slate-400 mt-1 leading-snug">
-                    Guide d'utilisation &amp; support Glassram 24/7.
+                    User guides &amp; 24/7 Glassram support.
                   </p>
                   <button
                     type="button"
@@ -232,7 +232,7 @@ export function Layout({ children }: LayoutProps) {
                 </div>
                 <div className="truncate">
                   <p className="text-xs font-bold text-slate-300 truncate">
-                    {user?.name || 'Administrateur'}
+                    {user?.name || 'Administrator'}
                   </p>
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider">
                     {user?.role || 'Admin'}
@@ -242,7 +242,7 @@ export function Layout({ children }: LayoutProps) {
               <button
                 type="button"
                 onClick={handleLogout}
-                title="Déconnexion"
+                title="Sign out"
                 className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
               >
                 <LogOut className="w-4 h-4" />
@@ -262,7 +262,7 @@ export function Layout({ children }: LayoutProps) {
               type="button"
               onClick={() => setIsMobileMenuOpen(true)}
               className="lg:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
-              aria-label="Ouvrir le menu"
+              aria-label="Open menu"
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -272,7 +272,7 @@ export function Layout({ children }: LayoutProps) {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="Rechercher des articles, commandes, camions..."
+                placeholder="Search products, orders, trucks, SKUs..."
                 className="w-full h-11 pl-10 pr-12 text-xs bg-[#f8fafc] border border-slate-200/80 rounded-2xl text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] transition-all font-medium"
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-bold text-slate-400 bg-white border border-slate-200 rounded-md shadow-2xs">
@@ -300,7 +300,7 @@ export function Layout({ children }: LayoutProps) {
               <button
                 type="button"
                 className="p-2.5 rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-                title="Messages d'équipe"
+                title="Team Messages"
                 aria-label="Messages"
               >
                 <MessageSquare className="w-5 h-5" />
@@ -311,8 +311,8 @@ export function Layout({ children }: LayoutProps) {
                 type="button"
                 onClick={() => setIsDarkMode(!isDarkMode)}
                 className="p-2.5 rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-                title="Basculer le mode sombre"
-                aria-label="Mode sombre"
+                title="Toggle dark mode"
+                aria-label="Dark mode"
               >
                 {isDarkMode ? (
                   <Sun className="w-5 h-5 text-amber-500" />
@@ -327,10 +327,10 @@ export function Layout({ children }: LayoutProps) {
               type="button"
               onClick={toggleLanguage}
               className="flex items-center gap-1.5 px-3 py-2 rounded-2xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
-              title="Changer de langue"
+              title="Change language"
             >
-              <span className="text-sm leading-none" role="img" aria-label="Langue">
-                {currentLang === 'FR' ? '🇫🇷' : '🇬🇧'}
+              <span className="text-sm leading-none" role="img" aria-label="Language">
+                {currentLang === 'EN' ? '🇺🇸' : '🇫🇷'}
               </span>
               <span>{currentLang}</span>
               <ChevronDown className="w-3 h-3 text-slate-400" />
@@ -379,7 +379,7 @@ export function Layout({ children }: LayoutProps) {
                       className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 rounded-xl transition-colors flex items-center gap-2"
                     >
                       <BarChart3 className="w-3.5 h-3.5 text-slate-400" />
-                      Statistiques générales
+                      General Analytics
                     </button>
                     <button
                       type="button"
@@ -387,7 +387,7 @@ export function Layout({ children }: LayoutProps) {
                       className="w-full text-left px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors flex items-center gap-2"
                     >
                       <LogOut className="w-3.5 h-3.5" />
-                      Se déconnecter
+                      Sign out
                     </button>
                   </div>
                 </div>

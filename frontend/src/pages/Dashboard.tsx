@@ -170,17 +170,17 @@ export const Dashboard: React.FC = () => {
 
   const distributionData: DonutSegment[] = [
     {
-      label: 'Verre Vitrage & Trempé',
+      label: 'Float & Tempered Glass',
       value: glassTotalStock || 540,
       color: '#10b981', // Emerald
     },
     {
-      label: 'Profilés Aluminium',
+      label: 'Aluminum Profiles',
       value: aluminumTotalStock || 360,
       color: '#4f46e5', // Indigo
     },
     {
-      label: 'Accessoires & Fixations',
+      label: 'Hardware & Accessories',
       value: 140,
       color: '#f59e0b', // Amber
     },
@@ -189,7 +189,7 @@ export const Dashboard: React.FC = () => {
   // Custom tooltips
   const customTooltipFormatter = (value: number) => [
     formatCurrency(value),
-    'Chiffre d’affaires',
+    'Revenue',
   ];
 
   return (
@@ -199,7 +199,7 @@ export const Dashboard: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
-              Bonjour, Kim <span className="inline-block animate-wave">👋</span>
+              Hello, Kim <span className="inline-block animate-wave">👋</span>
             </h1>
             <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-[#4f46e5] text-xs font-bold border border-indigo-100/80">
               <Sparkles className="w-3.5 h-3.5" />
@@ -207,7 +207,7 @@ export const Dashboard: React.FC = () => {
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 font-normal">
-            Voici l'activité en temps réel de vos stocks de verre, aluminium et expéditions.
+            Real-time overview of your glass, aluminum inventory, and dispatch operations.
           </p>
         </div>
 
@@ -215,12 +215,12 @@ export const Dashboard: React.FC = () => {
         <div className="flex items-center gap-2.5 self-start sm:self-auto">
           <div className="flex items-center gap-2 px-3.5 py-2 bg-white rounded-2xl border border-[#f1f5f9] shadow-2xs text-xs font-bold text-slate-700">
             <Calendar className="w-4 h-4 text-slate-400" />
-            <span>Mardi, 22 Septembre 2026</span>
+            <span>Tuesday, September 22, 2026</span>
           </div>
           <button
             type="button"
             onClick={() => window.location.reload()}
-            title="Rafraîchir les données"
+            title="Refresh data"
             className="p-2 rounded-2xl bg-white border border-[#f1f5f9] text-slate-500 hover:text-indigo-600 hover:bg-indigo-50/50 shadow-2xs transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
@@ -232,7 +232,7 @@ export const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-6">
         {/* KPI 1: Inventory Value (Indigo) */}
         <KpiCard
-          label="VALEUR DU STOCK"
+          label="INVENTORY VALUE"
           value={formatCurrency(totalInventoryValue || 2845000)}
           change="+8.4%"
           isPositive={true}
@@ -245,7 +245,7 @@ export const Dashboard: React.FC = () => {
 
         {/* KPI 2: Monthly Revenue (Emerald) */}
         <KpiCard
-          label="VENTES DU MOIS"
+          label="MONTHLY SALES"
           value={formatCurrency(320000)}
           change="+18.2%"
           isPositive={true}
@@ -258,7 +258,7 @@ export const Dashboard: React.FC = () => {
 
         {/* KPI 3: Active Orders (Blue/Info) */}
         <KpiCard
-          label="COMMANDES ACTIVES"
+          label="ACTIVE ORDERS"
           value={activeOrders || 19}
           change="+12.0%"
           isPositive={true}
@@ -271,8 +271,8 @@ export const Dashboard: React.FC = () => {
 
         {/* KPI 4: In-Transit Deliveries (Amber) */}
         <KpiCard
-          label="EN TRANSIT"
-          value={`${inTransitDeliveries || 6} camions`}
+          label="IN TRANSIT"
+          value={`${inTransitDeliveries || 6} trucks`}
           change="+5.0%"
           isPositive={true}
           icon={Truck}
@@ -284,9 +284,9 @@ export const Dashboard: React.FC = () => {
 
         {/* KPI 5: Low Stock Alerts (Rose) */}
         <KpiCard
-          label="ALERTES STOCK"
-          value={`${lowStockItems || 5} articles`}
-          change="-2 critiques"
+          label="LOW STOCK"
+          value={`${lowStockItems || 5} items`}
+          change="-2 critical"
           isPositive={false}
           icon={AlertTriangle}
           iconBoxBg="bg-rose-50"
@@ -306,10 +306,10 @@ export const Dashboard: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
                 <div>
                   <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                    ANALYSE FINANCIÈRE
+                    FINANCIAL OVERVIEW
                   </span>
                   <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em]">
-                    Tendance des Ventes Mensuelles
+                    Monthly Sales &amp; Demand Trend
                   </h3>
                 </div>
 
@@ -391,8 +391,8 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span>Croissance continue sur le verre trempé et profilés</span>
-              <span className="font-extrabold text-emerald-600">+24.5% en pic trimestriel</span>
+              <span>Steady demand for tempered glass &amp; aluminum profiles</span>
+              <span className="font-extrabold text-emerald-600">+24.5% quarterly peak</span>
             </div>
           </div>
 
@@ -400,22 +400,22 @@ export const Dashboard: React.FC = () => {
           <div className="lg:col-span-3 bg-white rounded-[40px] p-6 sm:p-8 border border-[#f1f5f9] shadow-[0_4px_6px_-1px_rgb(0_0_0/0.05)] transition-all duration-300 hover:scale-[1.01] hover:shadow-md flex flex-col justify-between">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                RÉPARTITION
+                DISTRIBUTION
               </span>
               <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em] mb-4">
-                Catégories de Stock
+                Inventory Categories
               </h3>
 
               {/* Spec: Interactive Donut Chart with Centered Metrics & Legend */}
               <InteractiveDonut
                 data={distributionData}
-                totalLabel="ARTICLES"
+                totalLabel="ITEMS"
                 size={175}
               />
             </div>
 
             <div className="pt-3 border-t border-slate-100 text-[11px] text-slate-400 text-center font-medium">
-              Mis à jour en temps réel selon le registre
+              Synchronized in real-time with inventory ledger
             </div>
           </div>
 
@@ -425,10 +425,10 @@ export const Dashboard: React.FC = () => {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                    TOP VENTES
+                    TOP SELLERS
                   </span>
                   <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em]">
-                    Articles Phares
+                    Featured Items
                   </h3>
                 </div>
                 <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center">
@@ -474,7 +474,7 @@ export const Dashboard: React.FC = () => {
                       <span className="font-black text-xs text-slate-900">
                         {item.quantity}
                       </span>
-                      <p className="text-[10px] text-slate-400 font-medium">unités</p>
+                      <p className="text-[10px] text-slate-400 font-medium">units</p>
                     </div>
                   </div>
                 ))}
@@ -482,8 +482,8 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-              <span className="text-slate-500 font-medium">Rotation rapide</span>
-              <span className="font-extrabold text-[#4f46e5]">Top 4 Produits</span>
+              <span className="text-slate-500 font-medium">Fast turnover</span>
+              <span className="font-extrabold text-[#4f46e5]">Top 4 Products</span>
             </div>
           </div>
         </div>
@@ -506,10 +506,10 @@ export const Dashboard: React.FC = () => {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                    PERFORMANCE GLOBALE
+                    OVERALL PERFORMANCE
                   </span>
                   <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Chiffre d'Affaires Trimestriel
+                    Quarterly Revenue Performance
                   </p>
                   {/* Large Currency Total */}
                   <div className="flex items-baseline gap-3 mt-2">
@@ -577,8 +577,8 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span>Moyenne mensuelle: ₱246k</span>
-              <span className="font-extrabold text-slate-800">7 Mois Documentés</span>
+              <span>Monthly average: ₱246k</span>
+              <span className="font-extrabold text-slate-800">7 Months Recorded</span>
             </div>
           </div>
 
@@ -586,10 +586,10 @@ export const Dashboard: React.FC = () => {
           <div className="lg:col-span-3 bg-white rounded-[40px] p-6 sm:p-8 border border-[#f1f5f9] shadow-[0_4px_6px_-1px_rgb(0_0_0/0.05)] transition-all duration-300 hover:scale-[1.01] hover:shadow-md flex flex-col justify-between">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                SANTÉ SYSTÈME
+                SYSTEM HEALTH
               </span>
               <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em] mb-3">
-                État Opérationnel
+                Operational Status
               </h3>
 
               {/* Centered Donut Gauge */}
@@ -619,7 +619,7 @@ export const Dashboard: React.FC = () => {
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <span className="text-2xl font-black text-slate-900 leading-none">88%</span>
                     <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mt-0.5">
-                      Score Global
+                      Overall Score
                     </span>
                   </div>
                 </div>
@@ -631,7 +631,7 @@ export const Dashboard: React.FC = () => {
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="font-medium text-slate-600 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                      Livrées à temps
+                      Delivered on-time
                     </span>
                     <span className="font-black text-slate-900">94%</span>
                   </div>
@@ -644,7 +644,7 @@ export const Dashboard: React.FC = () => {
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="font-medium text-slate-600 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                      Santé du stock
+                      Stock health
                     </span>
                     <span className="font-black text-slate-900">82%</span>
                   </div>
@@ -657,7 +657,7 @@ export const Dashboard: React.FC = () => {
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="font-medium text-slate-600 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-amber-500" />
-                      Efficacité trajets
+                      Route efficiency
                     </span>
                     <span className="font-black text-slate-900">88%</span>
                   </div>
@@ -669,7 +669,7 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="pt-3 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
-              <span>Fiabilité Glassram</span>
+              <span>Glassram Reliability</span>
               <span className="font-extrabold text-emerald-600 flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Optimal
               </span>

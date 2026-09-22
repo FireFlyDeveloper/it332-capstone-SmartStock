@@ -3,7 +3,7 @@ import { ShoppingBag, PackagePlus, Truck, FileSpreadsheet, ArrowUpRight } from '
 import { useNavigate } from 'react-router-dom';
 
 /**
- * QuickActionsGrid ('Actions Rapides')
+ * QuickActionsGrid ('Actions Rapides' / Quick Actions)
  * Spec:
  * - 2x2 grid of square cards with large centered icons and bold labels
  * - Soft Professional borders (1px solid #f1f5f9) and soft shadows
@@ -16,8 +16,8 @@ export const QuickActionsGrid: React.FC = () => {
   const actions = [
     {
       id: 'order',
-      title: 'Nouvelle Commande',
-      subtitle: 'Créer un bon de vente',
+      title: 'New Order',
+      subtitle: 'Create sales order',
       icon: ShoppingBag,
       path: '/orders',
       iconBg: 'bg-indigo-50 text-[#4f46e5]',
@@ -25,8 +25,8 @@ export const QuickActionsGrid: React.FC = () => {
     },
     {
       id: 'product',
-      title: 'Ajouter Matériau',
-      subtitle: 'Verre ou aluminium',
+      title: 'Add Material',
+      subtitle: 'Glass or aluminum',
       icon: PackagePlus,
       path: '/inventory',
       iconBg: 'bg-emerald-50 text-[#10b981]',
@@ -34,8 +34,8 @@ export const QuickActionsGrid: React.FC = () => {
     },
     {
       id: 'dispatch',
-      title: 'Suivi Tournées',
-      subtitle: 'Flotte de camions',
+      title: 'Track Dispatch',
+      subtitle: 'Truck fleet routes',
       icon: Truck,
       path: '/delivery',
       iconBg: 'bg-amber-50 text-[#f59e0b]',
@@ -43,8 +43,8 @@ export const QuickActionsGrid: React.FC = () => {
     },
     {
       id: 'report',
-      title: 'Exporter Rapport',
-      subtitle: 'Bilan & synthèse PDF',
+      title: 'Export Report',
+      subtitle: 'Sales & audit summary',
       icon: FileSpreadsheet,
       path: '/reports',
       iconBg: 'bg-blue-50 text-[#3b82f6]',
@@ -58,10 +58,10 @@ export const QuickActionsGrid: React.FC = () => {
       <div className="flex items-center justify-between mb-4">
         <div>
           <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-            RACCOURCIS
+            SHORTCUTS
           </span>
           <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em]">
-            Actions Rapides
+            Quick Actions
           </h3>
         </div>
       </div>
