@@ -32,14 +32,14 @@ const ReportCard: React.FC<{
   icon: React.ElementType;
   color: string;
 }> = ({ title, value, subtitle, icon: Icon, color }) => (
-  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
+  <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-6 micro-hover">
     <div className="flex items-center justify-between">
       <div>
-        <p className="text-sm text-gray-500">{title}</p>
-        <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-        {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
+        <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">{title}</p>
+        <p className="text-2xl font-black text-slate-900 mt-1">{value}</p>
+        {subtitle && <p className="text-xs text-slate-500 mt-1 font-medium">{subtitle}</p>}
       </div>
-      <div className={`p-3 rounded-xl ${color}`}>
+      <div className={`w-12 h-12 rounded-[12px] flex items-center justify-center ${color}`}>
         <Icon className="w-6 h-6" />
       </div>
     </div>
@@ -76,7 +76,7 @@ export const Reports: React.FC = () => {
       const matchesSearch = txn.reference.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesSearch;
     });
-  }, [searchTerm]);
+  }, [searchTerm, transactionHistory]);
 
   // Calculate summary stats
   const totalSales = orders.filter(o => o.orderStatus === 'completed').reduce((sum, o) => sum + o.total, 0);
@@ -113,11 +113,11 @@ export const Reports: React.FC = () => {
 
   const getTransactionColor = (type: 'sale' | 'restock' | 'return' | 'adjustment') => {
     switch (type) {
-      case 'sale': return 'bg-green-100 text-green-600';
-      case 'restock': return 'bg-blue-100 text-blue-600';
-      case 'return': return 'bg-red-100 text-red-600';
-      case 'adjustment': return 'bg-yellow-100 text-yellow-600';
-      default: return 'bg-gray-100 text-gray-600';
+      case 'sale': return 'bg-emerald-50 text-[#10b981]';
+      case 'restock': return 'bg-indigo-50 text-[#4f46e5]';
+      case 'return': return 'bg-rose-50 text-[#f43f5e]';
+      case 'adjustment': return 'bg-amber-50 text-[#f59e0b]';
+      default: return 'bg-slate-100 text-slate-600';
     }
   };
 
@@ -126,22 +126,24 @@ export const Reports: React.FC = () => {
         {/* Header — title + generated-at + date pills */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Generated at: <span className="font-mono text-gray-700">{generatedAt}</span>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
+              Rapports &amp; Bilan Financier
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Généré le: <span className="font-mono text-slate-700">{generatedAt}</span>
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2" aria-label="Date range">
-            <Calendar className="w-4 h-4 text-gray-400" aria-hidden="true" />
+            <Calendar className="w-4 h-4 text-slate-400" aria-hidden="true" />
             {DATE_PILLS.map((pill) => (
               <button
                 key={pill.key}
                 type="button"
                 onClick={() => handleDatePill(pill.key)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                className={`rounded-2xl px-3.5 py-1.5 text-xs font-bold transition-all ${
                   dateRange === pill.key
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
+                    : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
                 }`}
               >
                 {pill.label}

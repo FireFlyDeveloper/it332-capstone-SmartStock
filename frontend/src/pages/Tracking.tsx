@@ -83,49 +83,51 @@ const TrackingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-12 px-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
-            <Package className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Track Your Order</h1>
-          <p className="text-gray-600">Enter your reference number to track your order status</p>
+    <div className="space-y-6 animate-fadeIn max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
+            Suivi des Expéditions en Direct
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Entrez le numéro de référence pour localiser une commande et son statut de livraison.
+          </p>
         </div>
+      </div>
 
-        {/* Search Box */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                value={referenceNumber}
-                onChange={(e) => setReferenceNumber(e.target.value)}
-                placeholder="Enter reference number (e.g., SS-2024-00001)"
-                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-              />
-            </div>
-            <button
-              onClick={handleSearch}
-              disabled={loading}
-              className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
-            >
-              {loading ? 'Searching...' : 'Track Order'}
-            </button>
+      {/* Search Box */}
+      <div className="bg-white rounded-[32px] shadow-sm border border-[#f1f5f9] p-6 sm:p-8">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input
+              type="text"
+              value={referenceNumber}
+              onChange={(e) => setReferenceNumber(e.target.value)}
+              placeholder="Ex: SS-2026-00001 ou ORD-001"
+              className="w-full pl-12 pr-4 py-3 bg-[#f8fafc] border border-slate-200/80 rounded-2xl focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none text-sm text-slate-800 font-medium"
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+            />
           </div>
-          {error && (
-            <p className="mt-3 text-red-600 text-sm">{error}</p>
-          )}
+          <button
+            onClick={handleSearch}
+            disabled={loading}
+            className="btn-primary"
+          >
+            {loading ? 'Recherche...' : 'Localiser la commande'}
+          </button>
         </div>
+        {error && (
+          <p className="mt-3 text-rose-600 text-xs font-bold">{error}</p>
+        )}
+      </div>
 
-        {/* Results */}
-        {order && (
-          <div className="space-y-6">
-            {/* Order Info Card */}
-            <div className="bg-white rounded-2xl shadow-lg p-6">
+      {/* Results */}
+      {order && (
+        <div className="space-y-6">
+          {/* Order Info Card */}
+          <div className="bg-white rounded-[32px] shadow-sm border border-[#f1f5f9] p-6 sm:p-8">
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">Order Details</h2>
@@ -272,29 +274,30 @@ const TrackingPage: React.FC = () => {
 
         {/* Instructions */}
         {!order && !loading && (
-          <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-            <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">How to Track Your Order</h3>
-            <p className="text-gray-600 mb-4">
-              Enter the reference number from your order confirmation. You can find it in:
+          <div className="bg-white rounded-[32px] shadow-sm border border-[#f1f5f9] p-8 text-center">
+            <Search className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+            <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em] mb-2">
+              Comment suivre votre commande ?
+            </h3>
+            <p className="text-slate-500 text-sm mb-4">
+              Saisissez le numéro de référence figurant sur votre bon de commande ou SMS de confirmation.
             </p>
-            <ul className="text-left text-gray-600 space-y-2 max-w-md mx-auto">
+            <ul className="text-left text-slate-600 text-xs space-y-2.5 max-w-md mx-auto">
               <li className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                Your order confirmation email
+                <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                Email de confirmation de commande SmartStock
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                SMS notification sent to your phone
+                <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                Notification SMS envoyée au client
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                Receipt given at the store
+                <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                Bordereau de livraison remis par le chauffeur
               </li>
             </ul>
           </div>
         )}
-      </div>
     </div>
   );
 };

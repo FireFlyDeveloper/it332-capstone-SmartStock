@@ -98,20 +98,24 @@ export const Analytics: React.FC = () => {
         {/* Date range pills + page title */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-            <p className="text-sm text-gray-500 mt-1">AI-assisted insights across inventory, sales, and demand.</p>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
+              Analytique &amp; Prévisions IA
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Modélisation prédictive DeepSeek pour le stock de verre, profilés et flux de commandes.
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2" aria-label="Date range">
-            <Calendar className="w-4 h-4 text-gray-400" aria-hidden="true" />
+            <Calendar className="w-4 h-4 text-slate-400" aria-hidden="true" />
             {DATE_PILLS.map((pill) => (
               <button
                 key={pill.key}
                 type="button"
                 onClick={() => handleDatePill(pill.key)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                className={`rounded-2xl px-3.5 py-1.5 text-xs font-bold transition-all ${
                   dateRange === pill.key
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
+                    : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
                 }`}
               >
                 {pill.label}
@@ -122,42 +126,42 @@ export const Analytics: React.FC = () => {
 
         {/* Key Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Inventory Value</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(totalInventoryValue)}</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Valeur Totale Stock</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">{formatCurrency(totalInventoryValue)}</p>
               </div>
-              <div className="p-3 bg-green-100 rounded-xl">
-                <TrendingUp className="w-6 h-6 text-green-600" />
+              <div className="w-12 h-12 rounded-[12px] bg-emerald-50 text-[#10b981] flex items-center justify-center">
+                <TrendingUp className="w-6 h-6" />
               </div>
             </div>
-            <div className="flex items-center gap-1 mt-2 text-sm text-green-600">
+            <div className="flex items-center gap-1 mt-3 text-xs font-bold text-emerald-600">
               <ArrowUpRight className="w-4 h-4" />
-              <span>+8.2% from last month</span>
+              <span>+8.2% ce mois</span>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Orders</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{orders.length}</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Volume Commandes</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">{orders.length}</p>
               </div>
-              <div className="p-3 bg-blue-100 rounded-xl">
-                <Package className="w-6 h-6 text-blue-600" />
+              <div className="w-12 h-12 rounded-[12px] bg-indigo-50 text-[#4f46e5] flex items-center justify-center">
+                <Package className="w-6 h-6" />
               </div>
             </div>
-            <div className="flex items-center gap-1 mt-2 text-sm text-blue-600">
+            <div className="flex items-center gap-1 mt-3 text-xs font-bold text-[#4f46e5]">
               <ArrowUpRight className="w-4 h-4" />
-              <span>+15% this month</span>
+              <span>+15% ce trimestre</span>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Avg Order Value</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Panier Moyen</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
                   {formatCurrency(orders.length > 0 ? orders.reduce((sum, o) => sum + o.total, 0) / orders.length : 0)}
                 </p>

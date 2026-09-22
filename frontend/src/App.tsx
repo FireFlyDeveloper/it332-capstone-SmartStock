@@ -103,7 +103,9 @@ function AppRoutes() {
         path="/tracking"
         element={
           <DataProvider>
-            <TrackingPage />
+            <Layout>
+              <TrackingPage />
+            </Layout>
           </DataProvider>
         }
       />

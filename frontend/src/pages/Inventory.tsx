@@ -200,10 +200,10 @@ export const Inventory: React.FC = () => {
               key={pill.key}
               type="button"
               onClick={() => setStockFilter(pill.key)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-2xl px-4 py-1.5 text-xs font-bold transition-all ${
                 stockFilter === pill.key
-                  ? 'bg-amber-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
+                  : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
               }`}
             >
               {pill.label}
@@ -213,26 +213,26 @@ export const Inventory: React.FC = () => {
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Total Products</p>
-            <p className="text-2xl font-bold text-gray-900">{products.length}</p>
+          <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Articles</p>
+            <p className="text-2xl font-black text-slate-900 mt-1">{products.length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Glass Products</p>
-            <p className="text-2xl font-bold text-blue-600">{products.filter(p => p.category === 'glass').length}</p>
+          <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Verre Vitrage</p>
+            <p className="text-2xl font-black text-[#3b82f6] mt-1">{products.filter(p => p.category === 'glass').length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Aluminum Products</p>
-            <p className="text-2xl font-bold text-green-600">{products.filter(p => p.category === 'aluminum').length}</p>
+          <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Profilés Aluminium</p>
+            <p className="text-2xl font-black text-[#10b981] mt-1">{products.filter(p => p.category === 'aluminum').length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Low Stock</p>
-            <p className="text-2xl font-bold text-yellow-600">{products.filter(p => checkStockStatus(p.stock, p.threshold) !== 'healthy').length}</p>
+          <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Stock Critique</p>
+            <p className="text-2xl font-black text-[#f43f5e] mt-1">{products.filter(p => checkStockStatus(p.stock, p.threshold) !== 'healthy').length}</p>
           </div>
         </div>
 
         {/* Products Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-[32px] shadow-sm border border-[#f1f5f9] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">

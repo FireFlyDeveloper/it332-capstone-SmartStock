@@ -72,7 +72,7 @@ export function LoginForm() {
     }
   }
 
-  function useDemoCredential(creds: { email: string; password: string }) {
+  function fillDemoCredential(creds: { email: string; password: string }) {
     setEmail(creds.email)
     setPassword(creds.password)
     toast.info('Demo credentials filled in — press Sign in.')
@@ -184,7 +184,7 @@ export function LoginForm() {
                   <button
                     type="button"
                     className="login-form__demo-btn"
-                    onClick={() => useDemoCredential(c)}
+                    onClick={() => fillDemoCredential(c)}
                   >
                     Fill
                   </button>

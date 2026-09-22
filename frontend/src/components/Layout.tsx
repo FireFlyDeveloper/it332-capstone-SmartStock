@@ -1,167 +1,406 @@
 /**
- * Layout — app shell with sidebar + topbar + content area. Adapted from the
- * Capstone Layout: uses the IT332 useAuth() user for the profile section and
- * the local React Router instance for nav.
+ * Layout — Soft Professional App Shell
+ *
+ * Spec:
+ * - Fixed-width sidebar (280px), #0f172a background, 1px solid #1e293b borders
+ * - Top logo 40x40px rounded-xl box + brand title
+ * - Grouped navigation under uppercase labels (GESTION, FINANCES)
+ * - Navigation items: 13px font, text-slate-400, right-aligned chevron
+ * - Active state: Background #4f46e5, white text, shadow-[0_10px_15px_-3px_rgba(79,70,229,0.4)]
+ * - Specialized Help card (#1e293b with border) at bottom
+ * - Sticky Header: 80px height, #ffffff, border-bottom 1px solid #f1f5f9
+ * - Search bar 400px width, #f8fafc bg, rounded-2xl, leading search icon
+ * - Right icon group: notifications with red dot, messages, dark mode toggle
+ * - Language selector with flag icon
+ * - Profile component: Avatar + Name + Role
  */
 
-import { useState, type ReactNode } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { useState, type ReactNode } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
-  ShoppingCart,
+  ShoppingBag,
   Truck,
+  Compass,
   BarChart3,
   FileText,
+  ChevronRight,
+  Search,
+  Bell,
+  MessageSquare,
+  Moon,
+  Sun,
+  HelpCircle,
   LogOut,
   Menu,
-  User as UserIcon,
-  Sparkles,
-} from 'lucide-react'
-import { useAuth } from './AuthContext'
+  X,
+  ExternalLink,
+  ChevronDown,
+} from 'lucide-react';
+import { useAuth } from './AuthContext';
 
 interface LayoutProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
-const menuItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  { icon: Package, label: 'Inventory', path: '/inventory' },
-  { icon: ShoppingCart, label: 'Orders', path: '/orders' },
-  { icon: Truck, label: 'Delivery', path: '/delivery' },
-  { icon: BarChart3, label: 'Analytics', path: '/analytics' },
-  { icon: FileText, label: 'Reports', path: '/reports' },
-]
+interface NavGroup {
+  label: string;
+  items: {
+    icon: React.ElementType;
+    label: string;
+    path: string;
+    badge?: string;
+  }[];
+}
+
+const navGroups: NavGroup[] = [
+  {
+    label: 'GESTION',
+    items: [
+      { icon: LayoutDashboard, label: 'Tableau de bord', path: '/' },
+      { icon: Package, label: 'Inventaire', path: '/inventory' },
+      { icon: ShoppingBag, label: 'Commandes', path: '/orders' },
+      { icon: Truck, label: 'Livraisons', path: '/delivery' },
+    ],
+  },
+  {
+    label: 'FINANCES & ANALYTIQUE',
+    items: [
+      { icon: Compass, label: 'Suivi en direct', path: '/tracking' },
+      { icon: BarChart3, label: 'Analytique IA', path: '/analytics' },
+      { icon: FileText, label: 'Rapports & Ventes', path: '/reports' },
+    ],
+  },
+];
 
 export function Layout({ children }: LayoutProps) {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [currentLang, setCurrentLang] = useState<'FR' | 'EN'>('FR');
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const handleLogout = () => {
-    logout()
-    navigate('/login', { replace: true })
-  }
+    logout();
+    navigate('/login', { replace: true });
+  };
+
+  const toggleLanguage = () => {
+    setCurrentLang((prev) => (prev === 'FR' ? 'EN' : 'FR'));
+  };
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Mobile overlay */}
-      {isSidebarOpen && (
+    <div className="flex min-h-screen bg-[#f8fafc] text-slate-900 font-sans antialiased">
+      {/* Mobile Drawer Overlay */}
+      {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden transition-opacity"
+          onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* 280px Fixed-width Dark Navy Sidebar */}
       <aside
         className={`
-          fixed lg:static inset-y-0 left-0 z-50
-          w-64 bg-white border-r border-gray-200
-          transform transition-transform duration-300
-          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          fixed inset-y-0 left-0 z-50
+          w-[280px] min-w-[280px] bg-[#0f172a] border-r border-[#1e293b]
+          flex flex-col justify-between
+          transform transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
+          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          dark-scrollbar overflow-y-auto
         `}
       >
-        <div className="flex flex-col h-full">
-          {/* Logo */}
-          <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-200">
-            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-amber-700 rounded-lg flex items-center justify-center">
-              <Package className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">SMARTSTOCK</h1>
-              <p className="text-xs text-gray-500">Glass &amp; Aluminum</p>
-            </div>
+        <div className="flex flex-col flex-1">
+          {/* Top Logo & Brand Section */}
+          <div className="h-[80px] px-6 flex items-center justify-between border-b border-[#1e293b]">
+            <NavLink to="/" className="flex items-center gap-3 group">
+              {/* 40x40px rounded-xl logo box */}
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#4f46e5] to-[#6366f1] flex items-center justify-center shadow-lg shadow-indigo-950/60 group-hover:scale-105 transition-transform">
+                <Package className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex flex-col">
+                <span className="font-extrabold text-[17px] text-white tracking-[-0.02em] leading-tight">
+                  SMARTSTOCK
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
+                  Glass &amp; Aluminum
+                </span>
+              </div>
+            </NavLink>
+
+            {/* Close button for mobile */}
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              aria-label="Fermer le menu"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-            {menuItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                end={item.path === '/'}
-                onClick={() => setIsSidebarOpen(false)}
-                className={({ isActive }) =>
-                  `w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 text-left ${
-                    isActive
-                      ? 'bg-amber-50 text-amber-700 border-l-4 border-amber-600'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`
-                }
-              >
-                <item.icon className="w-5 h-5" />
-                <span className="font-medium">{item.label}</span>
-              </NavLink>
-            ))}
-          </nav>
+          {/* Grouped Navigation */}
+          <div className="px-4 py-6 space-y-6 flex-1">
+            {navGroups.map((group) => (
+              <div key={group.label} className="space-y-1.5">
+                {/* Group label */}
+                <p className="px-3 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400/80 mb-2">
+                  {group.label}
+                </p>
 
-          {/* User section */}
-          <div className="p-4 border-t border-gray-200">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                <UserIcon className="w-5 h-5 text-gray-600" />
+                {group.items.map((item) => {
+                  const isActive =
+                    item.path === '/'
+                      ? location.pathname === '/'
+                      : location.pathname.startsWith(item.path);
+
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`
+                        group flex items-center gap-3 px-3.5 py-2.5 rounded-2xl
+                        text-[13px] font-medium transition-all duration-300
+                        ${
+                          isActive
+                            ? 'bg-[#4f46e5] text-white shadow-[0_10px_15px_-3px_rgba(79,70,229,0.4)] font-semibold'
+                            : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+                        }
+                      `}
+                    >
+                      <item.icon
+                        className={`w-4 h-4 flex-shrink-0 transition-colors ${
+                          isActive
+                            ? 'text-white'
+                            : 'text-slate-400 group-hover:text-slate-200'
+                        }`}
+                      />
+                      <span className="flex-1 truncate">{item.label}</span>
+                      {item.badge && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold">
+                          {item.badge}
+                        </span>
+                      )}
+                      <ChevronRight
+                        className={`w-3.5 h-3.5 transition-all ${
+                          isActive
+                            ? 'text-white opacity-100 translate-x-0'
+                            : 'text-slate-500 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5'
+                        }`}
+                      />
+                    </NavLink>
+                  );
+                })}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-900 truncate">
-                  {user?.name || 'Guest'}
-                </p>
-                <p className="text-xs text-gray-500 capitalize">
-                  {user?.role || 'Not logged in'}
-                </p>
+            ))}
+          </div>
+
+          {/* Bottom Specialized Help Card */}
+          <div className="p-4 border-t border-[#1e293b]">
+            <div className="bg-[#1e293b] border border-[#334155]/60 rounded-2xl p-4 shadow-sm relative overflow-hidden group">
+              <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl pointer-events-none" />
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center flex-shrink-0 text-indigo-400">
+                  <HelpCircle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-extrabold text-xs text-white">Centre d'aide</h4>
+                  <p className="text-[11px] text-slate-400 mt-1 leading-snug">
+                    Guide d'utilisation &amp; support Glassram 24/7.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => window.open('https://github.com/FireFlyDeveloper/it332-capstone-SmartStock', '_blank')}
+                    className="mt-2.5 inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
+                  >
+                    Documentation
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="font-medium">Logout</span>
-            </button>
+
+            {/* Quick user status & logout */}
+            <div className="mt-3 pt-3 flex items-center justify-between px-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
+                  {user?.name ? user.name[0].toUpperCase() : 'A'}
+                </div>
+                <div className="truncate">
+                  <p className="text-xs font-bold text-slate-300 truncate">
+                    {user?.name || 'Administrateur'}
+                  </p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+                    {user?.role || 'Admin'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                title="Déconnexion"
+                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </aside>
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar */}
-        <header className="flex items-center justify-between px-4 lg:px-8 py-4 bg-white border-b border-gray-200">
-          <button
-            onClick={() => setIsSidebarOpen(true)}
-            className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
-            aria-label="Open menu"
-          >
-            <Menu className="w-6 h-6 text-gray-600" />
-          </button>
-
-          <div className="flex items-center gap-4">
-            <h2 className="text-lg font-semibold text-gray-800">
-              SmartStock
-            </h2>
-            <span
-              title="This is a demo build. Data is mock data."
-              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 rounded-full border border-amber-200"
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col lg:pl-[280px] min-w-0">
+        {/* Sticky Header: 80px height, #ffffff, border-bottom #f1f5f9 */}
+        <header className="sticky top-0 z-30 h-[80px] bg-white border-b border-[#f1f5f9] px-4 lg:px-8 flex items-center justify-between shadow-[0_1px_3px_rgb(0_0_0/0.02)]">
+          {/* Left: Mobile Toggle + 400px Search Bar */}
+          <div className="flex items-center gap-4 flex-1 max-w-xl">
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
+              aria-label="Ouvrir le menu"
             >
-              <Sparkles className="w-3 h-3" />
-              Demo build
-            </span>
+              <Menu className="w-5 h-5" />
+            </button>
+
+            {/* 400px Search Bar with #f8fafc background, rounded-2xl */}
+            <div className="relative w-full max-w-[400px] hidden sm:block">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Rechercher des articles, commandes, camions..."
+                className="w-full h-11 pl-10 pr-12 text-xs bg-[#f8fafc] border border-slate-200/80 rounded-2xl text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] transition-all font-medium"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-bold text-slate-400 bg-white border border-slate-200 rounded-md shadow-2xs">
+                ⌘K
+              </span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:block text-right">
-              <p className="text-sm font-medium text-gray-900">
-                {user?.name || 'Guest'}
-              </p>
-              <p className="text-xs text-gray-500 capitalize">
-                {user?.role || ''}
-              </p>
+          {/* Right: Icon Group + Language Selector + Profile */}
+          <div className="flex items-center gap-3 lg:gap-4">
+            {/* Icon Group */}
+            <div className="flex items-center gap-1 sm:gap-2">
+              {/* Notifications with red dot badge */}
+              <button
+                type="button"
+                className="relative p-2.5 rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                title="Notifications"
+                aria-label="Notifications"
+              >
+                <Bell className="w-5 h-5" />
+                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#f43f5e] ring-2 ring-white" />
+              </button>
+
+              {/* Messages button */}
+              <button
+                type="button"
+                className="p-2.5 rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                title="Messages d'équipe"
+                aria-label="Messages"
+              >
+                <MessageSquare className="w-5 h-5" />
+              </button>
+
+              {/* Dark mode toggle */}
+              <button
+                type="button"
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                className="p-2.5 rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                title="Basculer le mode sombre"
+                aria-label="Mode sombre"
+              >
+                {isDarkMode ? (
+                  <Sun className="w-5 h-5 text-amber-500" />
+                ) : (
+                  <Moon className="w-5 h-5" />
+                )}
+              </button>
+            </div>
+
+            {/* Language Selector with Flag Icon */}
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+              title="Changer de langue"
+            >
+              <span className="text-sm leading-none" role="img" aria-label="Langue">
+                {currentLang === 'FR' ? '🇫🇷' : '🇬🇧'}
+              </span>
+              <span>{currentLang}</span>
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            </button>
+
+            {/* Divider */}
+            <div className="h-6 w-px bg-slate-200" />
+
+            {/* Profile Component: Avatar + Name + Role */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                className="flex items-center gap-3 p-1 rounded-2xl hover:bg-slate-50 transition-colors group"
+              >
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-emerald-400 p-0.5 shadow-sm">
+                  <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center font-extrabold text-sm text-[#4f46e5]">
+                    {user?.name ? user.name[0].toUpperCase() : 'K'}
+                  </div>
+                </div>
+                <div className="hidden md:flex flex-col text-left">
+                  <span className="font-extrabold text-[13px] text-slate-900 leading-tight">
+                    {user?.name || 'Kim Saludes'}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    {user?.role ? `${user.role} Manager` : 'Super Admin'}
+                  </span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden md:block group-hover:translate-y-0.5 transition-transform" />
+              </button>
+
+              {/* Profile dropdown */}
+              {showProfileMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-[#f1f5f9] shadow-xl p-2 z-50 animate-fadeIn">
+                  <div className="px-3 py-2 border-b border-slate-100">
+                    <p className="text-xs font-bold text-slate-900">{user?.name || 'Kim Saludes'}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{user?.email || 'admin@smartstock.local'}</p>
+                  </div>
+                  <div className="py-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        navigate('/analytics');
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 rounded-xl transition-colors flex items-center gap-2"
+                    >
+                      <BarChart3 className="w-3.5 h-3.5 text-slate-400" />
+                      Statistiques générales
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="w-full text-left px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors flex items-center gap-2"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      Se déconnecter
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>
 
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-8">{children}</main>
+        {/* Fluid Workspace Body */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1720px] w-full mx-auto">
+          {children}
+        </main>
       </div>
     </div>
-  )
+  );
 }

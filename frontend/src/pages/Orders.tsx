@@ -383,10 +383,10 @@ export const Orders: React.FC = () => {
               key={pill.key}
               type="button"
               onClick={() => setStatusFilter(pill.key)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-2xl px-4 py-1.5 text-xs font-bold transition-all ${
                 statusFilter === pill.key
-                  ? 'bg-amber-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
+                  : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
               }`}
             >
               {pill.label}
@@ -396,32 +396,32 @@ export const Orders: React.FC = () => {
 
         {/* ── Stats ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Total Orders</p>
-            <p className="text-2xl font-bold text-gray-900">{orders.length}</p>
+          <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Commandes</p>
+            <p className="text-2xl font-black text-slate-900 mt-1">{orders.length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600">{orders.filter(o => o.orderStatus === 'pending').length}</p>
+          <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">En Attente</p>
+            <p className="text-2xl font-black text-[#f59e0b] mt-1">{orders.filter(o => o.orderStatus === 'pending').length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">In Progress</p>
-            <p className="text-2xl font-bold text-blue-600">{inProgressCount}</p>
+          <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">En Cours</p>
+            <p className="text-2xl font-black text-[#3b82f6] mt-1">{inProgressCount}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Completed</p>
-            <p className="text-2xl font-bold text-green-600">{orders.filter(o => o.orderStatus === 'completed').length}</p>
+          <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Livrées</p>
+            <p className="text-2xl font-black text-[#10b981] mt-1">{orders.filter(o => o.orderStatus === 'completed').length}</p>
           </div>
         </div>
 
         {/* ── Order cards ────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredOrders.map(order => {
             const remaining = order.total - order.paidAmount;
             return (
               <div
                 key={order.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+                className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] hover:shadow-md transition-all duration-300 hover:scale-[1.01] cursor-pointer"
                 onClick={() => setViewOrder(order)}
               >
                 {/* Card header */}

@@ -32,41 +32,41 @@ export const formatDate = (dateString: string): string => {
   })
 }
 
-// Get status color
+// Get status color matching Soft Professional theme (Emerald, Amber, Rose, Indigo, Blue)
 export const getStatusColor = (status: string): string => {
   const colors: Record<string, string> = {
     // Product status
-    active: 'bg-green-100 text-green-800',
-    discontinued: 'bg-gray-100 text-gray-800',
+    active: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60',
+    discontinued: 'bg-slate-100 text-slate-700 border border-slate-200/60',
     // Stock status
-    healthy: 'bg-green-100 text-green-800',
-    low: 'bg-yellow-100 text-yellow-800',
-    critical: 'bg-red-100 text-red-800',
-    out_of_stock: 'bg-gray-100 text-gray-800',
+    healthy: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60',
+    low: 'bg-amber-50 text-amber-700 border border-amber-200/60',
+    critical: 'bg-rose-50 text-rose-700 border border-rose-200/60',
+    out_of_stock: 'bg-slate-100 text-slate-700 border border-slate-200/60',
     // Order status
-    pending: 'bg-yellow-100 text-yellow-800',
-    confirmed: 'bg-blue-100 text-blue-800',
-    packed: 'bg-purple-100 text-purple-800',
-    out_for_delivery: 'bg-orange-100 text-orange-800',
-    completed: 'bg-green-100 text-green-800',
-    cancelled: 'bg-red-100 text-red-800',
-    ready_for_pickup: 'bg-blue-100 text-blue-800',
+    pending: 'bg-amber-50 text-amber-700 border border-amber-200/60',
+    confirmed: 'bg-blue-50 text-blue-700 border border-blue-200/60',
+    packed: 'bg-indigo-50 text-indigo-700 border border-indigo-200/60',
+    out_for_delivery: 'bg-amber-50 text-amber-700 border border-amber-200/60',
+    completed: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60',
+    cancelled: 'bg-rose-50 text-rose-700 border border-rose-200/60',
+    ready_for_pickup: 'bg-blue-50 text-blue-700 border border-blue-200/60',
     // Payment status
-    paid: 'bg-green-100 text-green-800',
-    partial: 'bg-orange-100 text-orange-800',
-    refunded: 'bg-red-100 text-red-800',
+    paid: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60',
+    partial: 'bg-amber-50 text-amber-700 border border-amber-200/60',
+    refunded: 'bg-rose-50 text-rose-700 border border-rose-200/60',
     // Delivery status
-    not_required: 'bg-gray-100 text-gray-800',
-    scheduled: 'bg-blue-100 text-blue-800',
-    in_transit: 'bg-orange-100 text-orange-800',
-    delivered: 'bg-green-100 text-green-800',
+    not_required: 'bg-slate-100 text-slate-700 border border-slate-200/60',
+    scheduled: 'bg-blue-50 text-blue-700 border border-blue-200/60',
+    in_transit: 'bg-amber-50 text-amber-700 border border-amber-200/60',
+    delivered: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60',
     // Delivery detail status
-    assigned: 'bg-blue-100 text-blue-800',
-    picked_up: 'bg-purple-100 text-purple-800',
-    arrived: 'bg-orange-100 text-orange-800',
-    failed: 'bg-red-100 text-red-800',
+    assigned: 'bg-blue-50 text-blue-700 border border-blue-200/60',
+    picked_up: 'bg-indigo-50 text-indigo-700 border border-indigo-200/60',
+    arrived: 'bg-amber-50 text-amber-700 border border-amber-200/60',
+    failed: 'bg-rose-50 text-rose-700 border border-rose-200/60',
   }
-  return colors[status] || 'bg-gray-100 text-gray-800'
+  return colors[status] || 'bg-slate-100 text-slate-700 border border-slate-200/60'
 }
 
 // Check stock status

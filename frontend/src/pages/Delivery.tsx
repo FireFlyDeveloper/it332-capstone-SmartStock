@@ -123,21 +123,21 @@ export const DeliveryPage: React.FC = () => {
       <div className="space-y-6 animate-fadeIn">
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Total Deliveries</p>
-            <p className="text-2xl font-bold text-gray-900">{deliveries.length}</p>
+          <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Livraisons</p>
+            <p className="text-2xl font-black text-slate-900 mt-1">{deliveries.length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600">{deliveries.filter(d => d.status === 'pending').length}</p>
+          <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">En Attente</p>
+            <p className="text-2xl font-black text-[#f59e0b] mt-1">{deliveries.filter(d => d.status === 'pending').length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">In Transit</p>
-            <p className="text-2xl font-bold text-blue-600">{deliveries.filter(d => ['assigned', 'picked_up', 'in_transit', 'arrived'].includes(d.status)).length}</p>
+          <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">En Transit</p>
+            <p className="text-2xl font-black text-[#3b82f6] mt-1">{deliveries.filter(d => ['assigned', 'picked_up', 'in_transit', 'arrived'].includes(d.status)).length}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <p className="text-sm text-gray-500">Delivered</p>
-            <p className="text-2xl font-bold text-green-600">{deliveries.filter(d => d.status === 'delivered').length}</p>
+          <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Livrées</p>
+            <p className="text-2xl font-black text-[#10b981] mt-1">{deliveries.filter(d => d.status === 'delivered').length}</p>
           </div>
         </div>
 
@@ -149,10 +149,10 @@ export const DeliveryPage: React.FC = () => {
                 key={pill.key}
                 type="button"
                 onClick={() => setFilterStatus(pill.key)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                className={`rounded-2xl px-4 py-1.5 text-xs font-bold transition-all ${
                   filterStatus === pill.key
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
+                    : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
                 }`}
               >
                 {pill.label}
@@ -163,14 +163,14 @@ export const DeliveryPage: React.FC = () => {
             type="button"
             onClick={handleExportCSV}
             disabled={filteredDeliveries.length === 0}
-            className="inline-flex items-center gap-2 self-start rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
+            className="inline-flex items-center gap-2 self-start rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
           >
             <Download className="h-4 w-4" /> Export CSV
           </button>
         </div>
 
         {/* Deliveries Grid */}
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 gap-5">
           {filteredDeliveries.map((delivery) => {
             const order = orders.find(o => o.id === delivery.orderId);
             const currentStep = getStepIndex(delivery.status);
@@ -178,21 +178,21 @@ export const DeliveryPage: React.FC = () => {
             return (
               <div 
                 key={delivery.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow"
+                className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] overflow-hidden hover:shadow-md transition-all duration-300"
               >
                 {/* Header */}
-                <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-primary-50 to-white">
+                <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-indigo-50/50 via-white to-white">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-primary-100 rounded-lg">
-                        <Truck className="w-5 h-5 text-primary-600" />
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center">
+                        <Truck className="w-5 h-5" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-gray-900">{delivery.id}</h3>
-                        <p className="text-sm text-gray-500">Order: {delivery.orderId}</p>
+                        <h3 className="font-extrabold text-slate-900">{delivery.id}</h3>
+                        <p className="text-xs text-slate-400">Order: {delivery.orderId}</p>
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(delivery.status)}`}>
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(delivery.status)}`}>
                       {delivery.status.replace('_', ' ')}
                     </span>
                   </div>
