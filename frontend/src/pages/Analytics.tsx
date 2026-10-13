@@ -331,7 +331,7 @@ export const Analytics: React.FC = () => {
               AI Analytics &amp; Forecasting
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              DeepSeek predictive modeling for glass, aluminum profiles, and order flow.
+              DeepSeek AI analytics and demand forecasting for glass, aluminum profiles, and order flow.
             </p>
           </div>
           <button
@@ -861,9 +861,8 @@ export const Analytics: React.FC = () => {
                 <Brain className="w-5 h-5 text-violet-600" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <h3 className="text-lg font-bold text-slate-900">
                   AI Demand Forecasting
-                  <span className="px-2.5 py-0.5 bg-violet-100 text-violet-700 rounded-full text-xs font-bold">ML Powered</span>
                 </h3>
                 <p className="text-xs text-slate-600">Predicted demand based on historical patterns</p>
               </div>

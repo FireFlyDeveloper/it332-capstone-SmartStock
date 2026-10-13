@@ -15,8 +15,7 @@ import type {
   AIRecommendation,
 } from '../types'
 
-// Simulated AI Demand Forecasting
-// In production, this would use actual ML models
+// Production forecasting uses historical sales trends and safety stock parameters
 export const generateDemandForecast = (
   products: Product[],
   orders: Order[],

@@ -112,7 +112,7 @@ export const GlassPromoBanner: React.FC = () => {
               {/* Confidence badge */}
               <div className="flex items-center justify-between px-1 text-xs">
                 <span className="text-indigo-200 flex items-center gap-1 text-[11px] font-medium">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" /> Model Confidence
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" /> Forecast Confidence
                 </span>
                 <span className="font-extrabold text-emerald-300 text-sm">96.8%</span>
               </div>
