@@ -6,6 +6,14 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { isDbSyncActive } from '../db/syncState.js';
+import {
+  createProductDb,
+  updateProductDb,
+  deleteProductDb,
+  recordInboundStockDb,
+  recordOutboundStockDb,
+} from '../db/postgresStore.js';
 
 export type ProductCategory = 'glass' | 'aluminum';
 export type ProductStatus = 'active' | 'discontinued';
@@ -104,6 +112,11 @@ export function createProduct(input: ProductCreateInput): Product {
   const record = toRecord({ ...input, sku });
   products.set(record.id, record);
   bySku.set(record.sku, record.id);
+  if (isDbSyncActive()) {
+    createProductDb({ ...record, id: record.id }).catch((err) => {
+      console.error('[inventory/store] DB write error on createProduct:', err);
+    });
+  }
   return record;
 }
 
@@ -133,6 +146,11 @@ export function updateProduct(id: string, input: ProductUpdateInput): Product | 
     bySku.set(next.sku, id);
   }
   products.set(id, next);
+  if (isDbSyncActive()) {
+    updateProductDb(id, input).catch((err) => {
+      console.error('[inventory/store] DB write error on updateProduct:', err);
+    });
+  }
   return next;
 }
 
@@ -163,6 +181,11 @@ export function recordInboundStock(productId: string, input: StockMovementInput)
   const movement = createMovement(productId, 'inbound', input);
   const product: Product = { ...current, stock: current.stock + input.quantity };
   products.set(productId, product);
+  if (isDbSyncActive()) {
+    recordInboundStockDb(productId, { ...input, id: movement.id }).catch((err) => {
+      console.error('[inventory/store] DB write error on recordInboundStock:', err);
+    });
+  }
   return { product, movement };
 }
 
@@ -173,6 +196,11 @@ export function recordOutboundStock(productId: string, input: StockMovementInput
   const movement = createMovement(productId, 'outbound', input);
   const product: Product = { ...current, stock: current.stock - input.quantity };
   products.set(productId, product);
+  if (isDbSyncActive()) {
+    recordOutboundStockDb(productId, { ...input, id: movement.id }).catch((err) => {
+      console.error('[inventory/store] DB write error on recordOutboundStock:', err);
+    });
+  }
   return { product, movement };
 }
 
@@ -196,7 +224,32 @@ export function deleteProduct(id: string): boolean {
     movements.delete(movementId);
   }
   movementIdsByProduct.delete(id);
+  if (isDbSyncActive()) {
+    deleteProductDb(id).catch((err) => {
+      console.error('[inventory/store] DB write error on deleteProduct:', err);
+    });
+  }
   return true;
+}
+
+export function _hydrateInventory(loaded: Product[]): void {
+  products.clear();
+  bySku.clear();
+  for (const item of loaded) {
+    products.set(item.id, item);
+    bySku.set(item.sku, item.id);
+  }
+}
+
+export function _hydrateMovements(loaded: StockMovement[]): void {
+  movements.clear();
+  movementIdsByProduct.clear();
+  movementRefs.clear();
+  for (const m of loaded) {
+    movements.set(m.id, m);
+    movementRefs.set(m.referenceNo, m.id);
+    movementIdsByProduct.set(m.productId, [...(movementIdsByProduct.get(m.productId) ?? []), m.id]);
+  }
 }
 
 export function _resetInventoryStore(seed = true): void {

@@ -6,7 +6,7 @@
  */
 
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../auth/middleware.js';
+import { requireAuth, requireRole, requireStaffOrAdmin } from '../auth/middleware.js';
 import {
   createDeliveryController,
   deleteDeliveryController,
@@ -21,6 +21,6 @@ deliveryRoutes.use('*', requireAuth);
 deliveryRoutes.get('/', listDeliveriesController);
 deliveryRoutes.get('/:id', getDeliveryController);
 deliveryRoutes.post('/', requireRole('admin'), createDeliveryController);
-deliveryRoutes.put('/:id', requireRole('admin'), updateDeliveryController);
-deliveryRoutes.patch('/:id', requireRole('admin'), updateDeliveryController);
+deliveryRoutes.put('/:id', requireStaffOrAdmin, updateDeliveryController);
+deliveryRoutes.patch('/:id', requireStaffOrAdmin, updateDeliveryController);
 deliveryRoutes.delete('/:id', requireRole('admin'), deleteDeliveryController);

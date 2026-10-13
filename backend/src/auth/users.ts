@@ -7,6 +7,8 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { isDbSyncActive } from '../db/syncState.js';
+import { createUserDb, updateUserDb } from '../db/postgresStore.js';
 
 export type Role = 'admin' | 'staff';
 
@@ -51,6 +53,11 @@ export function createUser(input: {
   };
   users.set(record.id, record);
   byEmail.set(record.email, record.id);
+  if (isDbSyncActive()) {
+    createUserDb(input).catch((err) => {
+      console.error('[auth/users] DB write error on createUser:', err);
+    });
+  }
   return record;
 }
 
@@ -59,6 +66,11 @@ export function updateUser(id: string, updates: { name?: string; passwordHash?: 
   if (!user) return null;
   if (updates.name !== undefined) user.name = updates.name.trim();
   if (updates.passwordHash !== undefined) user.passwordHash = updates.passwordHash;
+  if (isDbSyncActive()) {
+    updateUserDb(id, updates).catch((err) => {
+      console.error('[auth/users] DB write error on updateUser:', err);
+    });
+  }
   return user;
 }
 
@@ -69,6 +81,15 @@ export function updateUser(id: string, updates: { name?: string; passwordHash?: 
  * Author: Hazel
  * Last touched: 2026-06-29
  */
+export function _hydrateUsers(loaded: UserRecord[]): void {
+  users.clear();
+  byEmail.clear();
+  for (const item of loaded) {
+    users.set(item.id, item);
+    byEmail.set(item.email.toLowerCase(), item.id);
+  }
+}
+
 export function _resetUserStore(): void {
   users.clear();
   byEmail.clear();

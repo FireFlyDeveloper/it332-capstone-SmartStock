@@ -38,11 +38,13 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
   await next();
 };
 
-export const requireRole = (role: 'admin'): MiddlewareHandler => {
+export const requireRole = (...roles: ('admin' | 'staff')[]): MiddlewareHandler => {
   return async (c, next) => {
     const user = c.get('user');
     if (!user) return c.json({ error: 'unauthorized' }, 401);
-    if (user.role !== role) return c.json({ error: 'forbidden' }, 403);
+    if (!roles.includes(user.role)) return c.json({ error: 'forbidden' }, 403);
     await next();
   };
 };
+
+export const requireStaffOrAdmin = requireRole('admin', 'staff');

@@ -6,6 +6,14 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { isDbSyncActive } from '../db/syncState.js';
+import {
+  createOrderDb,
+  updateOrderDb,
+  cancelOrderDb,
+  applyPaymentDb,
+  applyRefundDb,
+} from '../db/postgresStore.js';
 
 export type OrderStatus = 'processing' | 'in_transit' | 'delivered' | 'cancelled';
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid' | 'refunded';
@@ -133,6 +141,11 @@ export function createOrder(input: OrderCreateInput): Order {
     updatedAt: now,
   };
   orders.set(order.id, order);
+  if (isDbSyncActive()) {
+    createOrderDb({ ...input, id: order.id, referenceNumber: order.referenceNumber }).catch((err) => {
+      console.error('[orders/store] DB write error on createOrder:', err);
+    });
+  }
   return order;
 }
 
@@ -149,11 +162,22 @@ export function updateOrder(id: string, input: OrderUpdateInput): Order | null {
     updatedAt: new Date().toISOString(),
   };
   orders.set(id, next);
+  if (isDbSyncActive()) {
+    updateOrderDb(id, input).catch((err) => {
+      console.error('[orders/store] DB write error on updateOrder:', err);
+    });
+  }
   return next;
 }
 
 export function cancelOrder(id: string): Order | null {
-  return updateOrder(id, { orderStatus: 'cancelled' });
+  const result = updateOrder(id, { orderStatus: 'cancelled' });
+  if (result && isDbSyncActive()) {
+    cancelOrderDb(id).catch((err) => {
+      console.error('[orders/store] DB write error on cancelOrder:', err);
+    });
+  }
+  return result;
 }
 
 export function applyPayment(id: string, amount: number): Order | null {
@@ -167,6 +191,11 @@ export function applyPayment(id: string, amount: number): Order | null {
     updatedAt: new Date().toISOString(),
   };
   orders.set(id, next);
+  if (isDbSyncActive()) {
+    applyPaymentDb(id, amount).catch((err) => {
+      console.error('[orders/store] DB write error on applyPayment:', err);
+    });
+  }
   return next;
 }
 
@@ -185,7 +214,19 @@ export function applyRefund(id: string, amount: number, reason: string, type: Re
     updatedAt: new Date().toISOString(),
   };
   orders.set(id, next);
+  if (isDbSyncActive()) {
+    applyRefundDb(id, amount, reason, type).catch((err) => {
+      console.error('[orders/store] DB write error on applyRefund:', err);
+    });
+  }
   return next;
+}
+
+export function _hydrateOrders(loaded: Order[]): void {
+  orders.clear();
+  for (const item of loaded) {
+    orders.set(item.id, item);
+  }
 }
 
 export function _resetOrderStore(seed = true): void {

@@ -6,7 +6,7 @@
  */
 
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../auth/middleware.js';
+import { requireAuth, requireRole, requireStaffOrAdmin } from '../auth/middleware.js';
 import {
   createProductController,
   deleteProductController,
@@ -27,7 +27,7 @@ inventoryRoutes.get('/', listProductsController);
 inventoryRoutes.get('/:id', getProductController);
 inventoryRoutes.get('/:id/movements', listProductMovementsController);
 inventoryRoutes.post('/', requireRole('admin'), createProductController);
-inventoryRoutes.post('/:id/stock/inbound', requireRole('admin'), inboundStockController);
+inventoryRoutes.post('/:id/stock/inbound', requireStaffOrAdmin, inboundStockController);
 inventoryRoutes.post('/:id/stock/outbound', requireRole('admin'), outboundStockController);
 inventoryRoutes.put('/:id', requireRole('admin'), updateProductController);
 inventoryRoutes.patch('/:id', requireRole('admin'), updateProductController);

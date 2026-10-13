@@ -6,6 +6,12 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { isDbSyncActive } from '../db/syncState.js';
+import {
+  createDeliveryDb,
+  updateDeliveryDb,
+  deleteDeliveryDb,
+} from '../db/postgresStore.js';
 
 export interface DeliveryLocation {
   x: number;
@@ -91,6 +97,11 @@ export function findDeliveryById(id: string): Delivery | null {
 export function createDelivery(input: DeliveryCreateInput): Delivery {
   const record = toRecord(input);
   deliveries.set(record.id, record);
+  if (isDbSyncActive()) {
+    createDeliveryDb({ ...input, id: record.id }).catch((err) => {
+      console.error('[delivery/store] DB write error on createDelivery:', err);
+    });
+  }
   return record;
 }
 
@@ -115,11 +126,29 @@ export function updateDelivery(id: string, input: DeliveryUpdateInput): Delivery
   };
 
   deliveries.set(id, next);
+  if (isDbSyncActive()) {
+    updateDeliveryDb(id, input).catch((err) => {
+      console.error('[delivery/store] DB write error on updateDelivery:', err);
+    });
+  }
   return next;
 }
 
 export function deleteDelivery(id: string): boolean {
-  return deliveries.delete(id);
+  const ok = deliveries.delete(id);
+  if (ok && isDbSyncActive()) {
+    deleteDeliveryDb(id).catch((err) => {
+      console.error('[delivery/store] DB write error on deleteDelivery:', err);
+    });
+  }
+  return ok;
+}
+
+export function _hydrateDeliveries(loaded: Delivery[]): void {
+  deliveries.clear();
+  for (const item of loaded) {
+    deliveries.set(item.id, item);
+  }
 }
 
 export function _resetDeliveryStore(seed = true): void {

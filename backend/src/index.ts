@@ -9,6 +9,7 @@ import { trackingRoutes } from './tracking/routes.js'
 import { analyticsRoutes } from './analytics/routes.js'
 import { reportsRoutes } from './reports/routes.js'
 import { getDatabaseHealth } from './db/health.js'
+import { initDatabase } from './db/postgresStore.js'
 
 export const app = new Hono()
 
@@ -39,6 +40,7 @@ app.route('/reports', reportsRoutes)
 const port = Number(process.env.PORT) || 3000
 
 if (!process.env.VITEST) {
+  void initDatabase().catch((err) => console.error('[db] Initialization error:', err))
   console.log(`Server running on http://localhost:${port}`)
   serve({ fetch: app.fetch, port })
 }

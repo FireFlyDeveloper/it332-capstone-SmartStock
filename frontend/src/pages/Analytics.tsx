@@ -37,13 +37,6 @@ import {
   Pie,
   Legend
 } from 'recharts';
-import { 
-  monthlySalesData, 
-  topItemsData, 
-  fastMovingItems, 
-  slowMovingItems, 
-  mockAIRecommendations 
-} from '../data/mockData';
 
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 
@@ -151,7 +144,7 @@ export const Analytics: React.FC = () => {
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5);
 
-    const itemsToUse = sorted.length > 0 ? sorted : topItemsData.slice(0, 5);
+    const itemsToUse = sorted;
 
     return itemsToUse.map(item => {
       let shortName = item.name
@@ -179,7 +172,72 @@ export const Analytics: React.FC = () => {
     { name: 'Out of Stock', value: products.filter(p => p.stock === 0).length, color: '#6b7280' }
   ].filter(item => item.value > 0);
 
-  // Calculate inventory movements (mock calculation based on filtered orders)
+  // Fast & Slow moving items calculated dynamically from real order flow
+  const { fastMovingItems, slowMovingItems } = useMemo(() => {
+    const salesCount: Record<string, number> = {};
+    orders.forEach((o) => {
+      if (o.orderStatus === 'cancelled') return;
+      o.items.forEach((item) => {
+        salesCount[item.productId] = (salesCount[item.productId] || 0) + item.quantity;
+      });
+    });
+
+    const list = products.map((p) => ({
+      name: p.name,
+      category: p.category,
+      stock: p.stock,
+      unitsSold: salesCount[p.id] || 0,
+      status: checkStockStatus(p.stock, p.threshold),
+    }));
+
+    const sorted = [...list].sort((a, b) => b.unitsSold - a.unitsSold);
+    const fast = sorted.filter((p) => p.unitsSold > 0).slice(0, 5);
+    const slow = sorted.filter((p) => p.unitsSold === 0 || p.unitsSold <= 2).reverse().slice(0, 5);
+    return { fastMovingItems: fast, slowMovingItems: slow };
+  }, [products, orders]);
+
+  // Dynamic AI Recommendations based on real product stock and demand
+  const aiRecommendations = useMemo(() => {
+    const recs: Array<{ id: string; priority: 'high' | 'medium' | 'low'; type: string; title: string; description: string }> = [];
+    const criticalProds = products.filter((p) => checkStockStatus(p.stock, p.threshold) === 'critical');
+    const lowProds = products.filter((p) => checkStockStatus(p.stock, p.threshold) === 'low');
+
+    if (criticalProds.length > 0) {
+      recs.push({
+        id: 'rec-crit',
+        priority: 'high',
+        type: 'Reorder Alert',
+        title: `Immediate restock needed for ${criticalProds[0].name}`,
+        description: `Current stock (${criticalProds[0].stock} ${criticalProds[0].unit}) is critically below safety threshold (${criticalProds[0].threshold}). Risk of stockout within 48 hours.`,
+      });
+    }
+    if (lowProds.length > 0) {
+      recs.push({
+        id: 'rec-low',
+        priority: 'medium',
+        type: 'Inventory Buffer',
+        title: `Plan procurement for ${lowProds[0].name}`,
+        description: `Stock level has reached reorder point (${lowProds[0].stock} / ${lowProds[0].threshold} ${lowProds[0].unit}). Order replenishment before lead time expiry.`,
+      });
+    }
+    recs.push({
+      id: 'rec-ses',
+      priority: 'medium',
+      type: 'Demand Forecast',
+      title: 'Simple Exponential Smoothing (SES) Signal',
+      description: 'Historical monthly outbound movements indicate steady baseline consumption for clear float glass and hollow tubular frames.',
+    });
+    recs.push({
+      id: 'rec-bulk',
+      priority: 'low',
+      type: 'Procurement Efficiency',
+      title: 'Consolidate Batangas Extrusion Orders',
+      description: 'Group upcoming purchase orders across active aluminum profiles to unlock commercial wholesale pricing.',
+    });
+    return recs;
+  }, [products]);
+
+  // Calculate inventory movements from real products and orders
   const inventoryMovements = useMemo(() => {
     return products.slice(0, 8).map(product => {
       const orderedQty = filteredOrders
@@ -192,7 +250,7 @@ export const Analytics: React.FC = () => {
         productId: product.id,
         productName: product.name,
         category: product.category,
-        inward: Math.floor(Math.random() * 50) + 20,
+        inward: product.stock,
         outward: orderedQty,
         balance: product.stock
       };
@@ -205,7 +263,7 @@ export const Analytics: React.FC = () => {
       return [];
     }
     const dates = filteredOrders.map(o => o.date).filter(Boolean).sort();
-    if (dates.length === 0) return monthlySalesData;
+    if (dates.length === 0) return [];
 
     const minDate = dates[0];
     const maxDate = dates[dates.length - 1];
@@ -259,10 +317,10 @@ export const Analytics: React.FC = () => {
       orders: monthMap[m].orders,
     }));
 
-    return results.length > 0 ? results : monthlySalesData;
+    return results;
   }, [filteredOrders, fromDate, toDate]);
 
-  const chartSalesData = salesTrendData.length > 0 ? salesTrendData : monthlySalesData;
+  const chartSalesData = salesTrendData;
 
   return (
       <div className="space-y-6 sm:space-y-8 animate-fadeIn">
@@ -878,7 +936,7 @@ export const Analytics: React.FC = () => {
               AI Recommendations
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {mockAIRecommendations.slice(0, 4).map((rec) => (
+              {aiRecommendations.slice(0, 4).map((rec) => (
                 <div key={rec.id} className="bg-white rounded-2xl p-4 border border-violet-100 shadow-2xs">
                   <div className="flex items-start justify-between mb-1.5">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${

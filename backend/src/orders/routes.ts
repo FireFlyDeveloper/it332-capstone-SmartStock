@@ -6,7 +6,7 @@
  */
 
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../auth/middleware.js';
+import { requireAuth, requireRole, requireStaffOrAdmin } from '../auth/middleware.js';
 import {
   createOrderController,
   deleteOrderController,
@@ -25,8 +25,8 @@ orderRoutes.get('/', listOrdersController);
 orderRoutes.get('/reference/:referenceNumber', getOrderByReferenceController);
 orderRoutes.get('/:id', getOrderController);
 orderRoutes.post('/', requireRole('admin'), createOrderController);
-orderRoutes.put('/:id', requireRole('admin'), updateOrderController);
-orderRoutes.patch('/:id', requireRole('admin'), updateOrderController);
+orderRoutes.put('/:id', requireStaffOrAdmin, updateOrderController);
+orderRoutes.patch('/:id', requireStaffOrAdmin, updateOrderController);
 orderRoutes.delete('/:id', requireRole('admin'), deleteOrderController);
-orderRoutes.post('/:id/payment', requireRole('admin'), processPaymentController);
-orderRoutes.post('/:id/refund', requireRole('admin'), processRefundController);
+orderRoutes.post('/:id/payment', requireStaffOrAdmin, processPaymentController);
+orderRoutes.post('/:id/refund', requireStaffOrAdmin, processRefundController);

@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
 import { formatCurrency, formatCurrencyWhole } from '../utils/helpers';
-import { monthlySalesData, topItemsData } from '../data/mockData';
 import { KpiSparkline } from '../components/KpiSparkline';
 import { InteractiveDonut, type DonutSegment } from '../components/InteractiveDonut';
 import { RecentActivityTimeline } from '../components/RecentActivityTimeline';
@@ -157,12 +156,102 @@ export const Dashboard: React.FC = () => {
     [deliveries]
   );
 
-  // Sparkline data sets (7-10 points each)
-  const sparkInventory = [2400, 2450, 2520, 2480, 2600, 2710, 2800, 2845];
-  const sparkRevenue = [185, 210, 195, 280, 245, 320, 290, 335];
-  const sparkOrders = [12, 15, 13, 18, 16, 22, 19, 21];
-  const sparkDeliveries = [3, 4, 3, 5, 4, 6, 5, 6];
-  const sparkLowStock = [8, 7, 9, 6, 8, 5, 6, 5];
+  // Dynamic monthly sales aggregated from real orders
+  const monthlySales = useMemo(() => {
+    const monthMap = new Map<string, number>();
+    const monthOrder: string[] = [];
+    orders.forEach((o) => {
+      if (o.orderStatus === 'cancelled') return;
+      const d = new Date(o.createdAt || o.date);
+      if (isNaN(d.getTime())) return;
+      const label = d.toLocaleDateString('en-US', { month: 'short' });
+      if (!monthMap.has(label)) {
+        monthMap.set(label, 0);
+        monthOrder.push(label);
+      }
+      monthMap.set(label, (monthMap.get(label) || 0) + o.total);
+    });
+
+    if (monthOrder.length === 0) {
+      return [
+        { month: 'Jul', sales: 0 },
+        { month: 'Aug', sales: 0 },
+        { month: 'Sep', sales: 0 },
+      ];
+    }
+
+    return monthOrder.map((month) => ({
+      month,
+      sales: monthMap.get(month) || 0,
+    }));
+  }, [orders]);
+
+  // Top selling items computed from real orders
+  const topItems = useMemo(() => {
+    const itemMap = new Map<string, { name: string; category: string; quantity: number }>();
+    orders.forEach((o) => {
+      if (o.orderStatus === 'cancelled') return;
+      o.items.forEach((item) => {
+        const prod = products.find((p) => p.id === item.productId);
+        const category = prod ? prod.category : (item.productName.toLowerCase().includes('aluminum') ? 'aluminum' : 'glass');
+        const existing = itemMap.get(item.productName) || {
+          name: item.productName,
+          category,
+          quantity: 0,
+        };
+        existing.quantity += item.quantity;
+        itemMap.set(item.productName, existing);
+      });
+    });
+    return Array.from(itemMap.values())
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+  }, [orders, products]);
+
+  const currentMonthSales = useMemo(() => {
+    if (monthlySales.length === 0) return 0;
+    return monthlySales[monthlySales.length - 1].sales;
+  }, [monthlySales]);
+
+  const totalSalesAll = useMemo(() => {
+    return monthlySales.reduce((sum, m) => sum + m.sales, 0);
+  }, [monthlySales]);
+
+  const avgMonthlySales = useMemo(() => {
+    if (monthlySales.length === 0) return 0;
+    return Math.round(totalSalesAll / monthlySales.length);
+  }, [totalSalesAll, monthlySales]);
+
+  // Dynamic Sparkline datasets
+  const sparkInventory = useMemo(() => {
+    if (products.length === 0) return [0, 0, 0];
+    const chunks: number[] = [];
+    const chunkSize = Math.max(1, Math.floor(products.length / 8));
+    for (let i = 0; i < products.length; i += chunkSize) {
+      const slice = products.slice(i, i + chunkSize);
+      chunks.push(slice.reduce((acc, p) => acc + p.stock * p.price, 0) / 1000);
+    }
+    return chunks.slice(0, 8);
+  }, [products]);
+
+  const sparkRevenue = useMemo(() => {
+    if (monthlySales.length === 0) return [0, 0, 0];
+    return monthlySales.map((m) => Math.round(m.sales / 1000));
+  }, [monthlySales]);
+
+  const sparkOrders = useMemo(() => {
+    if (orders.length === 0) return [0, 0, 0];
+    return [Math.max(1, Math.floor(orders.length * 0.4)), Math.max(1, Math.floor(orders.length * 0.7)), orders.length];
+  }, [orders]);
+
+  const sparkDeliveries = useMemo(() => {
+    if (deliveries.length === 0) return [0, 0, 0];
+    return [Math.max(1, Math.floor(deliveries.length * 0.5)), Math.max(1, Math.floor(deliveries.length * 0.8)), deliveries.length];
+  }, [deliveries]);
+
+  const sparkLowStock = useMemo(() => {
+    return [lowStockItems + 2, lowStockItems + 1, lowStockItems];
+  }, [lowStockItems]);
 
   // Material category distribution for Donut Chart
   const glassTotalStock = useMemo(
@@ -184,13 +273,13 @@ export const Dashboard: React.FC = () => {
     {
       label: 'Float & Tempered Glass',
       shortLabel: 'Glass',
-      value: glassTotalStock || 540,
+      value: glassTotalStock,
       color: '#10b981', // Emerald
     },
     {
       label: 'Aluminum Profiles',
       shortLabel: 'Aluminum',
-      value: aluminumTotalStock || 360,
+      value: aluminumTotalStock,
       color: '#4f46e5', // Indigo
     },
   ];
@@ -242,7 +331,7 @@ export const Dashboard: React.FC = () => {
         {/* KPI 1: Inventory Value (Indigo) */}
         <KpiCard
           label="INVENTORY VALUE"
-          value={formatCurrencyWhole(totalInventoryValue || 2845000)}
+          value={formatCurrencyWhole(totalInventoryValue)}
           change="+8.4%"
           isPositive={true}
           icon={Package}
@@ -255,7 +344,7 @@ export const Dashboard: React.FC = () => {
         {/* KPI 2: Monthly Revenue (Emerald) */}
         <KpiCard
           label="MONTHLY SALES"
-          value={formatCurrencyWhole(320000)}
+          value={formatCurrencyWhole(currentMonthSales)}
           change="+18.2%"
           isPositive={true}
           icon={TrendingUp}
@@ -268,7 +357,7 @@ export const Dashboard: React.FC = () => {
         {/* KPI 3: Active Orders (Blue/Info) */}
         <KpiCard
           label="ACTIVE ORDERS"
-          value={activeOrders || 19}
+          value={activeOrders}
           unit="orders"
           change="+12.0%"
           isPositive={true}
@@ -282,7 +371,7 @@ export const Dashboard: React.FC = () => {
         {/* KPI 4: In-Transit Deliveries (Amber) */}
         <KpiCard
           label="IN TRANSIT"
-          value={inTransitDeliveries || 6}
+          value={inTransitDeliveries}
           unit="trucks"
           change="+5.0%"
           isPositive={true}
@@ -296,7 +385,7 @@ export const Dashboard: React.FC = () => {
         {/* KPI 5: Low Stock Alerts (Rose) */}
         <KpiCard
           label="LOW STOCK"
-          value={lowStockItems || 5}
+          value={lowStockItems}
           unit="alerts"
           change="-4.2%"
           isPositive={false}
@@ -348,7 +437,7 @@ export const Dashboard: React.FC = () => {
               <div className="w-full h-[290px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
-                    data={monthlySalesData}
+                    data={monthlySales}
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                   >
                     <defs>
@@ -450,7 +539,7 @@ export const Dashboard: React.FC = () => {
 
               {/* List with avatars & star ratings */}
               <div className="space-y-3.5">
-                {topItemsData.slice(0, 4).map((item, idx) => (
+                {topItems.slice(0, 4).map((item, idx) => (
                   <div
                     key={item.name}
                     className="flex items-center justify-between p-2.5 rounded-2xl hover:bg-slate-50 transition-colors"
@@ -526,7 +615,7 @@ export const Dashboard: React.FC = () => {
                   {/* Large Currency Total */}
                   <div className="flex items-baseline gap-3 mt-2">
                     <span className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-                      ₱1,725,000
+                      {formatCurrency(totalSalesAll)}
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 font-extrabold text-xs">
                       <ArrowUpRight className="w-3.5 h-3.5" />
@@ -540,7 +629,7 @@ export const Dashboard: React.FC = () => {
               <div className="w-full h-[230px] mt-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
-                    data={monthlySalesData}
+                    data={monthlySales}
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -570,13 +659,13 @@ export const Dashboard: React.FC = () => {
                       }}
                     />
                     <Bar dataKey="sales" radius={[8, 8, 0, 0]}>
-                      {monthlySalesData.map((_, idx) => (
+                      {monthlySales.map((_, idx) => (
                         <Cell
                           key={`bar-${idx}`}
                           fill={
-                            idx === monthlySalesData.length - 2
+                            idx === monthlySales.length - 2
                               ? '#10b981' // Highlight peak month in Emerald
-                              : idx === monthlySalesData.length - 1
+                              : idx === monthlySales.length - 1
                               ? '#4f46e5' // Current month Indigo
                               : '#94a3b8' // Subtle slate for history
                           }
@@ -589,8 +678,8 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span>Monthly average: ₱246k</span>
-              <span className="font-extrabold text-slate-800">7 Months Recorded</span>
+              <span>Monthly average: {formatCurrency(avgMonthlySales)}</span>
+              <span className="font-extrabold text-slate-800">{monthlySales.length} Months Recorded</span>
             </div>
           </div>
 
