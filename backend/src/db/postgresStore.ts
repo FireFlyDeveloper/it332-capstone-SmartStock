@@ -934,6 +934,53 @@ export async function listStaffUsersDb(): Promise<UserRecord[]> {
   return rows.map(rowToUser);
 }
 
+export interface StaffUsersDbPage {
+  users: UserRecord[];
+  totalCount: number;
+  hasMore: boolean;
+  nextCursor: { createdAt: string; id: string } | null;
+}
+
+export async function listStaffUsersPageDb(input: {
+  limit: number;
+  cursorCreatedAt: string | null;
+  cursorId: string | null;
+}): Promise<StaffUsersDbPage | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH staff AS MATERIALIZED (
+      SELECT * FROM users WHERE role = 'staff' AND deleted_at IS NULL
+    ), total AS (
+      SELECT COUNT(*)::int AS total_count FROM staff
+    ), page_rows AS (
+      SELECT * FROM staff
+      WHERE $1::timestamptz IS NULL
+        OR created_at < $1
+        OR (created_at = $1 AND id::text < $2::text)
+      ORDER BY created_at DESC, id::text DESC
+      LIMIT $3
+    )
+    SELECT total.total_count,
+      COALESCE((SELECT jsonb_agg(to_jsonb(page_rows) ORDER BY page_rows.created_at DESC, page_rows.id::text DESC) FROM page_rows), '[]'::jsonb) AS staff
+    FROM total
+  `, [input.cursorCreatedAt, input.cursorId, input.limit + 1]);
+  const row = rows[0];
+  if (!row) return null;
+  const rawUsers = (typeof row.staff === 'string' ? JSON.parse(row.staff) : row.staff ?? []) as Record<string, unknown>[];
+  const visibleRows = rawUsers.slice(0, input.limit);
+  const hasMore = rawUsers.length > input.limit;
+  const lastVisible = visibleRows[visibleRows.length - 1];
+  return {
+    users: visibleRows.map(rowToUser),
+    totalCount: Number(row.total_count ?? 0),
+    hasMore,
+    nextCursor: hasMore && lastVisible
+      ? { createdAt: String(lastVisible.created_at), id: String(lastVisible.id) }
+      : null,
+  };
+}
+
 export async function createUserDb(input: {
   email: string;
   name: string;

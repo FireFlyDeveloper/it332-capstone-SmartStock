@@ -8,7 +8,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { isDbSyncActive } from '../db/syncState.js';
-import { createUserDb, deleteUserDb, findUserByEmailDb, listStaffUsersDb, updateUserDb } from '../db/postgresStore.js';
+import { createUserDb, deleteUserDb, findUserByEmailDb, listStaffUsersDb, listStaffUsersPageDb, updateUserDb } from '../db/postgresStore.js';
 
 export type Role = 'admin' | 'staff';
 
@@ -108,6 +108,41 @@ export async function listStaffUserRecords(): Promise<UserRecord[]> {
     byEmail.set(record.email.toLowerCase(), record.id);
   }
   return records;
+}
+
+export async function listStaffUserPageRecords(input: {
+  limit: number;
+  cursorCreatedAt: string | null;
+  cursorId: string | null;
+}): Promise<{ staff: UserRecord[]; totalCount: number; hasMore: boolean; nextCursor: { createdAt: string; id: string } | null }> {
+  if (isDbSyncActive()) {
+    const page = await listStaffUsersPageDb(input);
+    if (!page) throw new Error('Database unavailable');
+    for (const record of page.users) {
+      users.set(record.id, record);
+      byEmail.set(record.email.toLowerCase(), record.id);
+    }
+    return { staff: page.users, totalCount: page.totalCount, hasMore: page.hasMore, nextCursor: page.nextCursor };
+  }
+
+  const staff = [...users.values()]
+    .filter((user) => user.role === 'staff')
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+  const totalCount = staff.length;
+  const afterCursor = input.cursorCreatedAt === null
+    ? staff
+    : staff.filter((user) => user.createdAt < input.cursorCreatedAt!
+      || (user.createdAt === input.cursorCreatedAt && user.id < (input.cursorId ?? '')));
+  const lookahead = afterCursor.slice(0, input.limit + 1)
+  const visible = lookahead.slice(0, input.limit);
+  const hasMore = lookahead.length > input.limit;
+  const lastVisible = visible[visible.length - 1];
+  return {
+    staff: visible,
+    totalCount,
+    hasMore,
+    nextCursor: hasMore && lastVisible ? { createdAt: lastVisible.createdAt, id: lastVisible.id } : null,
+  };
 }
 
 export async function updateUserRecord(

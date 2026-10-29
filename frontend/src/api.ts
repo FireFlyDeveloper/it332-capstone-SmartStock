@@ -276,7 +276,19 @@ export function getPolicyPerformance(): Promise<PolicyPerformanceResponse> {
   return apiFetch<PolicyPerformanceResponse>('/reports/policy-performance')
 }
 
-export async function getStaff(): Promise<ManagedStaff[]> { return (await apiFetch<{ staff: ManagedStaff[] }>('/auth/staff')).staff }
+export interface ManagedStaffPage {
+  staff: ManagedStaff[]
+  page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null }
+}
+
+export function getStaffPage(options: { limit?: number; cursor?: string | null } = {}): Promise<ManagedStaffPage> {
+  const params = new URLSearchParams()
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.cursor) params.set('cursor', options.cursor)
+  const search = params.toString()
+  const query = search ? `?${search}` : ''
+  return apiFetch<ManagedStaffPage>(`/auth/staff${query}`)
+}
 export async function createStaff(input: { email: string; name: string; password: string }): Promise<ManagedStaff> {
   return (await apiFetch<{ staff: ManagedStaff }>('/auth/staff', { method: 'POST', body: JSON.stringify(input) })).staff
 }

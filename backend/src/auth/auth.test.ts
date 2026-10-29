@@ -263,6 +263,37 @@ describe('auth routes', () => {
       expect((await app.request('/auth/staff/' + staff.id, { method: 'DELETE', headers })).status).toBe(404);
     });
 
+    it('pages staff records with stable cursors and validates page inputs', async () => {
+      const headers = await adminAuthHeaders();
+      const expectedIds = new Set([
+        (await seedUser(E1, 'staff-password')).id,
+        (await seedUser(E2, 'staff-password')).id,
+        (await seedUser(E3, 'staff-password')).id,
+      ]);
+      const collected = new Set<string>();
+      let cursor: string | null = null;
+      let pageCount = 0;
+      do {
+        const query = new URLSearchParams({ limit: '1' });
+        if (cursor) query.set('cursor', cursor);
+        const response = await app.request(`/auth/staff?${query.toString()}`, { headers });
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.page.totalCount).toBe(3);
+        expect(body.staff).toHaveLength(1);
+        const user = body.staff[0] as { id: string; passwordHash?: string };
+        expect(user.passwordHash).toBeUndefined();
+        collected.add(user.id);
+        cursor = body.page.nextCursor;
+        pageCount += 1;
+      } while (cursor && pageCount < 5);
+      expect(pageCount).toBe(3);
+      expect(collected).toEqual(expectedIds);
+
+      expect((await app.request('/auth/staff?limit=0', { headers })).status).toBe(400);
+      expect((await app.request('/auth/staff?cursor=invalid', { headers })).status).toBe(400);
+    });
+
     it('rejects invalid, duplicate, missing, and admin-target updates', async () => {
       const headers = await adminAuthHeaders();
       const staff = await seedUser(E1, 'staff-password');

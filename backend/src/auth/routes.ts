@@ -9,7 +9,7 @@ import { Hono } from 'hono';
 import { setCookie, deleteCookie } from 'hono/cookie';
 import { hashPassword, verifyPassword } from './hash.js';
 import { signToken } from './jwt.js';
-import { createUserRecord, findByEmail, findById, findUserByEmailRecord, updateUserRecord, listStaffUserRecords, deleteStaffUserRecord, type Role, type UserRecord } from './users.js';
+import { createUserRecord, findByEmail, findById, findUserByEmailRecord, updateUserRecord, listStaffUserPageRecords, deleteStaffUserRecord, type Role, type UserRecord } from './users.js';
 import { requireAuth, requireRole } from './middleware.js';
 
 export const authRoutes = new Hono();
@@ -128,10 +128,44 @@ function sanitizedStaff(user: UserRecord) {
   return { id: user.id, email: user.email, name: user.name, role: 'staff' as const, createdAt: user.createdAt };
 }
 
-authRoutes.get('/staff', requireAuth, requireRole('admin'), async (c) => {
+const DEFAULT_STAFF_PAGE_SIZE = 25;
+const MAX_STAFF_PAGE_SIZE = 100;
+
+function parseStaffCursor(value: string | undefined): { createdAt: string; id: string } | null | false {
+  if (!value) return null;
+  if (value.length > 512) return false;
   try {
-    const staff = await listStaffUserRecords();
-    return c.json({ staff: staff.map(sanitizedStaff) });
+    const parsed: unknown = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+    if (typeof parsed !== 'object' || parsed === null) return false;
+    const cursor = parsed as Record<string, unknown>;
+    if (typeof cursor.createdAt !== 'string' || !Number.isFinite(Date.parse(cursor.createdAt)) || typeof cursor.id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cursor.id)) return false;
+    return { createdAt: cursor.createdAt, id: cursor.id };
+  } catch {
+    return false;
+  }
+}
+
+authRoutes.get('/staff', requireAuth, requireRole('admin'), async (c) => {
+  const rawLimit = c.req.query('limit');
+  const limit = rawLimit === undefined ? DEFAULT_STAFF_PAGE_SIZE : Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_STAFF_PAGE_SIZE) {
+    return c.json({ error: `limit must be an integer between 1 and ${MAX_STAFF_PAGE_SIZE}` }, 400);
+  }
+  const cursor = parseStaffCursor(c.req.query('cursor'));
+  if (cursor === false) return c.json({ error: 'cursor is invalid' }, 400);
+  try {
+    const result = await listStaffUserPageRecords({
+      limit,
+      cursorCreatedAt: cursor?.createdAt ?? null,
+      cursorId: cursor?.id ?? null,
+    });
+    const nextCursor = result.nextCursor
+      ? Buffer.from(JSON.stringify(result.nextCursor)).toString('base64url')
+      : null;
+    return c.json({
+      staff: result.staff.map(sanitizedStaff),
+      page: { limit, totalCount: result.totalCount, hasMore: result.hasMore, nextCursor },
+    });
   } catch (error) {
     console.error('[auth] staff listing could not be loaded:', error);
     return c.json({ error: 'staff listing unavailable' }, 503);
