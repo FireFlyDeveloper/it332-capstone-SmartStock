@@ -23,7 +23,7 @@ import type { Order } from '../types';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
-import { apiFetchBlob, getAnalyticsPurchases, getDemandForecast, getPolicyPerformance, getOrdersPage, type ApiError, type PurchaseAnalyticsResponse, type DemandForecastProduct, type PolicyPerformanceResponse } from '../api';
+import { apiFetchBlob, getAnalyticsPurchases, getDemandForecastPage, getPolicyPerformance, getOrdersPage, type ApiError, type PurchaseAnalyticsResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformanceResponse } from '../api';
 import { toFrontendOrder } from '../components/orderMapper';
 import { useAuth } from '../components/AuthContext';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
@@ -111,8 +111,14 @@ export const Reports: React.FC = () => {
   const [purchaseLoading, setPurchaseLoading] = useState(true);
   const [purchaseError, setPurchaseError] = useState('');
   const [policyRows, setPolicyRows] = useState<DemandForecastProduct[]>([]);
+  const [policyPage, setPolicyPage] = useState<DemandForecastPageResponse['page'] | null>(null);
   const [policyLoading, setPolicyLoading] = useState(true);
   const [policyError, setPolicyError] = useState('');
+  const [policyLoadingMore, setPolicyLoadingMore] = useState(false);
+  const [policyLoadMoreError, setPolicyLoadMoreError] = useState('');
+  const policySentinelRef = useRef<HTMLDivElement | null>(null);
+  const policyRequestRef = useRef(0);
+  const policyLoadingMoreRef = useRef(false);
   const [observedPolicy, setObservedPolicy] = useState<PolicyPerformanceResponse | null>(null);
   const [observedPolicyLoading, setObservedPolicyLoading] = useState(true);
   const [observedPolicyError, setObservedPolicyError] = useState('');
@@ -206,12 +212,61 @@ export const Reports: React.FC = () => {
     return () => { active = false };
   }, [purchaseYear]);
   useEffect(() => {
-    let active = true; setPolicyLoading(true); setPolicyError('');
-    getDemandForecast(12).then(data => { if (active) setPolicyRows(data.products) })
-      .catch(error => { if (active) setPolicyError(error instanceof Error ? error.message : 'Could not load current stock-policy assessment.') })
-      .finally(() => { if (active) setPolicyLoading(false) });
-    return () => { active = false };
+    const requestId = ++policyRequestRef.current;
+    setPolicyRows([]);
+    setPolicyPage(null);
+    setPolicyLoading(true);
+    setPolicyError('');
+    setPolicyLoadMoreError('');
+    policyLoadingMoreRef.current = false;
+    setPolicyLoadingMore(false);
+    getDemandForecastPage({ historyMonths: 12, limit: 25 })
+      .then((data) => {
+        if (requestId !== policyRequestRef.current) return;
+        setPolicyRows(data.products);
+        setPolicyPage(data.page);
+      })
+      .catch((error) => {
+        if (requestId === policyRequestRef.current) setPolicyError(error instanceof Error ? error.message : 'Could not load current stock-policy assessment.');
+      })
+      .finally(() => {
+        if (requestId === policyRequestRef.current) setPolicyLoading(false);
+      });
+    return () => {
+      if (requestId === policyRequestRef.current) policyRequestRef.current += 1;
+    };
   }, []);
+
+  const loadMorePolicyRows = useCallback(async () => {
+    if (!policyPage?.hasMore || !policyPage.nextCursor || policyLoading || policyLoadingMoreRef.current) return;
+    const requestId = policyRequestRef.current;
+    policyLoadingMoreRef.current = true;
+    setPolicyLoadingMore(true);
+    setPolicyLoadMoreError('');
+    try {
+      const response = await getDemandForecastPage({ historyMonths: 12, limit: 25, cursor: policyPage.nextCursor });
+      if (requestId !== policyRequestRef.current) return;
+      setPolicyRows((current) => [...current, ...response.products]);
+      setPolicyPage(response.page);
+    } catch (error) {
+      if (requestId === policyRequestRef.current) setPolicyLoadMoreError(error instanceof Error ? error.message : 'Could not load more policy rows.');
+    } finally {
+      if (requestId === policyRequestRef.current) {
+        policyLoadingMoreRef.current = false;
+        setPolicyLoadingMore(false);
+      }
+    }
+  }, [policyPage, policyLoading]);
+
+  useEffect(() => {
+    const sentinel = policySentinelRef.current;
+    if (!sentinel || !policyPage?.hasMore || policyLoading || policyLoadingMore || policyLoadMoreError || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMorePolicyRows();
+    }, { rootMargin: '320px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [policyPage?.hasMore, policyLoading, policyLoadingMore, policyLoadMoreError, loadMorePolicyRows]);
   useEffect(() => {
     let active = true; setObservedPolicyLoading(true); setObservedPolicyError('');
     getPolicyPerformance().then(data => { if (active) setObservedPolicy(data) })
@@ -281,9 +336,8 @@ export const Reports: React.FC = () => {
     }));
   }, [historyOrders]);
   const filteredTransactions = transactionHistory;
-  const availablePolicyRows = useMemo(() => policyRows.filter((row) => row.forecastQuantity !== null), [policyRows]);
+  const availablePolicyRows = policyRows;
   const { visibleItems: visiblePurchaseGroups, sentinelRef: purchaseSentinelRef, hasMore: hasMorePurchaseGroups } = useInfiniteScroll(purchaseData?.groups ?? []);
-  const { visibleItems: visiblePolicyRows, sentinelRef: policySentinelRef, hasMore: hasMorePolicyRows } = useInfiniteScroll(availablePolicyRows);
   const { visibleItems: visibleObservedRows, sentinelRef: observedSentinelRef, hasMore: hasMoreObservedRows } = useInfiniteScroll(observedPolicy?.rows ?? []);
 
   // Calculate summary stats dynamically based on filtered orders
@@ -703,9 +757,19 @@ export const Reports: React.FC = () => {
         <section hidden={!policyLoading && !policyError && availablePolicyRows.length === 0} className="space-y-4 rounded-[28px] border border-violet-100 bg-violet-50/30 p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Current stock-policy assessment</h2><p className="max-w-3xl text-xs text-slate-600">This is a current assessment comparing present stock with the configured reorder threshold and next-month forecast. It does not measure historical policy decisions or causal effects.</p></div><div className="flex gap-2"><button onClick={() => void handleForecastExport('pdf')} className="btn-secondary text-xs">Download PDF</button><button onClick={() => void handleForecastExport('xlsx')} className="btn-secondary text-xs">Download XLSX</button></div></div>
           <p className="text-xs text-slate-500">Method: simple exponential smoothing (α=0.3), up to 12 complete UTC months of delivered-order sales, one-month horizon. A forecast requires at least three positive-quantity months; sparse histories remain unavailable.</p>
-          {policyLoading ? <p className="py-6 text-sm text-slate-500">Loading current policy assessment…</p> : policyError ? <p role="alert" className="py-6 text-sm text-rose-700">{policyError}</p> : availablePolicyRows.length === 0 ? null : <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-white text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3 text-right">Stock / threshold</th><th className="px-4 py-3 text-right">Next-month forecast</th><th className="px-4 py-3 text-right">Recommended order</th><th className="px-4 py-3">Assessment</th><th className="px-4 py-3">History</th></tr></thead><tbody className="divide-y divide-violet-100">{visiblePolicyRows.map(row=><tr key={row.productId}><td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">{row.sku}</span></td><td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.reorderPoint} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.forecastQuantity} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.recommendedOrderQuantity===null?'—':`${row.recommendedOrderQuantity} ${row.unit}`}</td><td className="px-4 py-3 text-sm capitalize">{row.policyAssessment.replaceAll('_',' ')}</td><td className="px-4 py-3 text-sm">{row.positiveMonths} positive months</td></tr>)}</tbody></table></div>}
+          {policyPage && <p className="text-xs text-slate-500">Showing {availablePolicyRows.length} of {policyPage.totalCount} products with sufficient history.</p>}
+          {policyLoading ? <p className="py-6 text-sm text-slate-500">Loading current policy assessment…</p> : policyError ? <p role="alert" className="py-6 text-sm text-rose-700">{policyError}</p> : availablePolicyRows.length === 0 ? null : <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-white text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3 text-right">Stock / threshold</th><th className="px-4 py-3 text-right">Next-month forecast</th><th className="px-4 py-3 text-right">Recommended order</th><th className="px-4 py-3">Assessment</th><th className="px-4 py-3">History</th></tr></thead><tbody className="divide-y divide-violet-100">{availablePolicyRows.map(row=><tr key={row.productId}><td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">{row.sku}</span></td><td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.reorderPoint} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.forecastQuantity} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.recommendedOrderQuantity===null?'—':`${row.recommendedOrderQuantity} ${row.unit}`}</td><td className="px-4 py-3 text-sm capitalize">{row.policyAssessment.replaceAll('_',' ')}</td><td className="px-4 py-3 text-sm">{row.positiveMonths} positive months</td></tr>)}</tbody></table></div>}
+          {policyLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more policy rows…</p>}
+          {policyLoadMoreError && <div role="alert" className="text-center text-sm text-rose-700"><p>{policyLoadMoreError}</p><button type="button" onClick={() => void loadMorePolicyRows()} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
         </section>
-        {hasMorePolicyRows && <div ref={policySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more policy rows…</div>}
+        {policyPage?.hasMore && <div ref={policySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more policy rows…</div>}
+        {policyPage?.hasMore && typeof IntersectionObserver === 'undefined' && (
+          <div className="py-3 text-center">
+            <button type="button" onClick={() => void loadMorePolicyRows()} disabled={policyLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">
+              {policyLoadingMore ? 'Loading…' : 'Load more policy rows'}
+            </button>
+          </div>
+        )}
 
         <section className="space-y-4 rounded-[28px] border border-emerald-100 bg-emerald-50/30 p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
