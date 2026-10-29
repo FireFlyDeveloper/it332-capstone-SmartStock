@@ -77,17 +77,17 @@ export type DeliveryStatusFlow =
 export interface Delivery {
   id: string;
   orderId: string;
-  driver: string;
-  truckNumber: string;
-  destination: string;
+  driver: string | null;
+  truckNumber: string | null;
+  destination: string | null;
   status: DeliveryStatusFlow;
-  location?: string;
+  location?: string | null;
   currentStep: number;
-  currentLocation: DeliveryLocation;
-  trafficLevel: 'low' | 'medium' | 'high';
-  predictedDelay: boolean;
-  routeEfficiencyScore: number;
-  notes?: string;
+  currentLocation: DeliveryLocation | null;
+  trafficLevel: 'low' | 'medium' | 'high' | null;
+  predictedDelay: boolean | null;
+  routeEfficiencyScore: number | null;
+  notes?: string | null;
 }
 
 // Analytics / reports shapes. Backend may return any of these from

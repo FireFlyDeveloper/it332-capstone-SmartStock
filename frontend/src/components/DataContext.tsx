@@ -366,22 +366,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // ── Delivery mutators ─────────────────────────────────────────────
   const updateDeliveryStatus = useCallback(
-    async (id: string, status: Delivery['status'], step: number) => {
-      setDeliveries((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, status, currentStep: step } : d)),
-      )
+    async (id: string, status: Delivery['status'], _step: number) => {
+      const delivery = deliveries.find((item) => item.id === id);
+      const orderId = delivery?.orderId ?? id;
+      const orderStatus = status === 'pending'
+        ? 'pending'
+        : status === 'in_transit'
+          ? 'out_for_delivery'
+          : status === 'delivered'
+            ? 'completed'
+            : null;
+      if (!orderStatus) throw new Error('Only pending, in-transit, and delivered order statuses are supported.');
       try {
-        const updated = await apiFetch<Delivery>(`/deliveries/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ status, currentStep: step }),
-        })
-        setDeliveries((prev) => prev.map((d) => (d.id === id ? updated : d)))
+        await updateOrder(orderId, { orderStatus });
+        await refreshDeliveries();
       } catch (err) {
-        await refreshDeliveries()
+        await refreshDeliveries().catch(() => undefined);
         throw err
       }
     },
-    [refreshDeliveries],
+    [deliveries, refreshDeliveries, updateOrder],
   )
 
   const value = useMemo<DataContextValue>(

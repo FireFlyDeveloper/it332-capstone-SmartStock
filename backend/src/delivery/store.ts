@@ -32,17 +32,17 @@ export type TrafficLevel = 'low' | 'medium' | 'high';
 export interface Delivery {
   id: string;
   orderId: string;
-  driver: string;
-  truckNumber: string;
-  destination: string;
+  driver: string | null;
+  truckNumber: string | null;
+  destination: string | null;
   status: DeliveryStatusFlow;
-  location?: string;
+  location?: string | null;
   currentStep: number;
-  currentLocation: DeliveryLocation;
-  trafficLevel: TrafficLevel;
-  predictedDelay: boolean;
-  routeEfficiencyScore: number;
-  notes?: string;
+  currentLocation: DeliveryLocation | null;
+  trafficLevel: TrafficLevel | null;
+  predictedDelay: boolean | null;
+  routeEfficiencyScore: number | null;
+  notes?: string | null;
 }
 
 export interface DeliveryCreateInput {

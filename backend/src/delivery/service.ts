@@ -6,6 +6,7 @@
  */
 
 import { sendNotificationEvent } from '../notifications/webhook.js';
+import { listOrders, type Order } from '../orders/store.js';
 import {
   createDelivery,
   deleteDelivery,
@@ -257,18 +258,52 @@ function assertLegalTransition(current: Delivery, next: DeliveryUpdateInput): Se
 
 export function listDeliveryRecords(filters: DeliveryFilters = {}): Delivery[] {
   const q = filters.q?.trim().toLowerCase();
-  return listDeliveries().filter((delivery) => {
-    if (filters.status && delivery.status !== filters.status) return false;
-    if (filters.trafficLevel && delivery.trafficLevel !== filters.trafficLevel) return false;
-    if (!q) return true;
-    return [delivery.id, delivery.orderId, delivery.driver, delivery.truckNumber, delivery.destination, delivery.location, delivery.notes]
+  const existingByOrderId = new Map<string, Delivery>();
+  for (const delivery of listDeliveries()) {
+    if (delivery.orderId) existingByOrderId.set(delivery.orderId, delivery);
+  }
+
+  const statusForOrder = (order: Order): DeliveryStatusFlow | null => {
+    if (order.deliveryAddress.trim().toLowerCase() === 'pickup') return null;
+    if (order.orderStatus === 'processing') return 'pending';
+    if (order.orderStatus === 'in_transit') return 'in_transit';
+    if (order.orderStatus === 'delivered') return 'delivered';
+    return null;
+  };
+
+  return listOrders().flatMap((order) => {
+    const status = statusForOrder(order);
+    if (!status) return [];
+    const existing = existingByOrderId.get(order.id);
+    const step = status === 'pending' ? 0 : status === 'in_transit' ? 1 : 2;
+    const delivery: Delivery = {
+      id: existing?.id ?? order.id,
+      orderId: order.id,
+      driver: existing?.driver ?? null,
+      truckNumber: existing?.truckNumber ?? null,
+      destination: order.deliveryAddress,
+      status,
+      location: existing?.location ?? null,
+      currentStep: step,
+      currentLocation: existing?.currentLocation ?? null,
+      trafficLevel: existing?.trafficLevel ?? null,
+      predictedDelay: existing?.predictedDelay ?? null,
+      routeEfficiencyScore: existing?.routeEfficiencyScore ?? null,
+      notes: existing?.notes ?? null,
+    };
+
+    if (filters.status && delivery.status !== filters.status) return [];
+    if (filters.trafficLevel && delivery.trafficLevel !== filters.trafficLevel) return [];
+    if (q && ![delivery.id, delivery.orderId, delivery.driver, delivery.truckNumber, delivery.destination, delivery.location, delivery.notes]
       .filter(Boolean)
-      .some((value) => value!.toLowerCase().includes(q));
+      .some((value) => value!.toLowerCase().includes(q))) return [];
+    return [delivery];
   });
 }
 
 export function getDeliveryRecord(id: string): ServiceResult<Delivery> {
-  const item = findDeliveryById(id);
+  const item = listDeliveryRecords().find((delivery) => delivery.id === id || delivery.orderId === id)
+    ?? findDeliveryById(id);
   return item ? { ok: true, data: item } : { ok: false, status: 404, error: 'delivery not found' };
 }
 

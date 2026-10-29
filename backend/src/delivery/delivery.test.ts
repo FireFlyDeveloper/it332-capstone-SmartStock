@@ -11,7 +11,8 @@ import { authRoutes } from '../auth/routes.js';
 import { createUser, _resetUserStore, type Role } from '../auth/users.js';
 import { hashPassword } from '../auth/hash.js';
 import { deliveryRoutes } from './routes.js';
-import { _resetDeliveryStore } from './store.js';
+import { _resetDeliveryStore, createDelivery } from './store.js';
+import { _resetOrderStore, createOrder, updateOrder } from '../orders/store.js';
 
 function buildApp() {
   const app = new Hono();
@@ -39,38 +40,99 @@ const AT = String.fromCharCode(64);
 const ADMIN = 'admin' + AT + 'smartstock.local';
 const STAFF = 'staff' + AT + 'smartstock.local';
 
+function seedOrder(address = '101 Test Street, Manila') {
+  return createOrder({
+    customerName: 'Test Customer',
+    customerPhone: '09170000000',
+    deliveryAddress: address,
+    deliveryDate: '2026-10-30',
+    items: [{ productId: 'PRD-TEST', name: 'Test Item', quantity: 1, unitPrice: 100 }],
+  });
+}
+
 describe('delivery routes', () => {
   let app: Hono;
 
   beforeEach(async () => {
     _resetUserStore();
-    _resetDeliveryStore();
+    _resetDeliveryStore(false);
+    _resetOrderStore(false);
     app = buildApp();
     await seedUser(ADMIN, 'admin');
     await seedUser(STAFF, 'staff');
   });
 
-  it('lists seeded deliveries for authenticated staff', async () => {
+  it('projects pending delivery orders even when no delivery row exists', async () => {
+    const order = seedOrder();
     const token = await login(app, STAFF);
     const res = await app.request('/deliveries', {
       headers: { authorization: 'Bearer ' + token },
     });
     expect(res.status).toBe(200);
-    const json = (await res.json()) as Array<{ orderId: string; status: string; currentStep: number }>;
-    expect(json.length).toBeGreaterThan(0);
-    expect(json[0]).toHaveProperty('orderId');
-    expect(json[0]).toHaveProperty('currentStep');
+    const json = (await res.json()) as Array<{ id: string; orderId: string; status: string; currentStep: number; driver: string | null }>;
+    expect(json).toEqual([
+      expect.objectContaining({
+        id: order.id,
+        orderId: order.id,
+        status: 'pending',
+        currentStep: 0,
+        driver: null,
+      }),
+    ]);
+  });
+
+  it('maps backend order states to pending, in-transit, and delivered', async () => {
+    const pending = seedOrder();
+    const inTransit = seedOrder();
+    const delivered = seedOrder();
+    const pickup = seedOrder('Pickup');
+    const cancelled = seedOrder();
+    updateOrder(inTransit.id, { orderStatus: 'in_transit' });
+    updateOrder(delivered.id, { orderStatus: 'delivered' });
+    updateOrder(cancelled.id, { orderStatus: 'cancelled' });
+
+    const token = await login(app, STAFF);
+    const res = await app.request('/deliveries', {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as Array<{ orderId: string; status: string }>;
+    expect(json.map(({ orderId, status }) => [orderId, status])).toEqual([
+      [pending.id, 'pending'],
+      [inTransit.id, 'in_transit'],
+      [delivered.id, 'delivered'],
+    ]);
+    expect(json.some((item) => item.orderId === pickup.id || item.orderId === cancelled.id)).toBe(false);
+
+    const get = await app.request('/deliveries/' + inTransit.id, {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(get.status).toBe(200);
+    expect(await get.json()).toEqual(expect.objectContaining({ orderId: inTransit.id, status: 'in_transit' }));
   });
 
   it('filters deliveries by status and traffic level', async () => {
+    const order = seedOrder();
+    updateOrder(order.id, { orderStatus: 'in_transit' });
+    await createDelivery({
+      orderId: order.id,
+      driver: 'Test Driver',
+      truckNumber: 'Truck-1',
+      destination: order.deliveryAddress,
+      status: 'in_transit',
+      currentStep: 3,
+      trafficLevel: 'medium',
+      predictedDelay: false,
+      routeEfficiencyScore: 90,
+    });
     const token = await login(app, STAFF);
     const res = await app.request('/deliveries?status=in_transit&trafficLevel=medium', {
       headers: { authorization: 'Bearer ' + token },
     });
     expect(res.status).toBe(200);
-    const json = (await res.json()) as Array<{ status: string; trafficLevel: string }>;
+    const json = (await res.json()) as Array<{ status: string; trafficLevel: string | null; currentStep: number }>;
     expect(json.length).toBeGreaterThan(0);
-    expect(json.every((item) => item.status === 'in_transit' && item.trafficLevel === 'medium')).toBe(true);
+    expect(json.every((item) => item.status === 'in_transit' && item.trafficLevel === 'medium' && item.currentStep === 1)).toBe(true);
   });
 
   it('blocks anonymous delivery access', async () => {
@@ -147,6 +209,14 @@ describe('delivery routes', () => {
     });
     expect(invalid.status).toBe(400);
 
+    const pendingOrder = seedOrder();
+    await createDelivery({
+      orderId: pendingOrder.id,
+      driver: 'Test Driver',
+      truckNumber: 'Truck-2',
+      destination: pendingOrder.deliveryAddress,
+      status: 'pending',
+    });
     const list = await app.request('/deliveries?status=pending', {
       headers: { authorization: 'Bearer ' + token },
     });

@@ -11,7 +11,6 @@ import {
   Loader,
   Download,
   Search,
-  X,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
 import type { Delivery } from '../types';
@@ -20,11 +19,8 @@ import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
 
 const deliverySteps = [
-  { key: 'pending', label: 'Placed', icon: Package },
-  { key: 'assigned', label: 'Assigned', icon: User },
-  { key: 'picked_up', label: 'Picked Up', icon: Package },
+  { key: 'pending', label: 'Pending', icon: Package },
   { key: 'in_transit', label: 'In Transit', icon: Truck },
-  { key: 'arrived', label: 'Arrived', icon: MapPin },
   { key: 'delivered', label: 'Delivered', icon: CheckCircle },
 ];
 
@@ -36,44 +32,24 @@ export const DeliveryPage: React.FC = () => {
   const filteredDeliveries = useMemo(() => {
     return deliveries.filter(d => {
       if (filterStatus === 'all') return true;
-      if (filterStatus === 'in_transit') return ['assigned', 'picked_up', 'in_transit', 'arrived'].includes(d.status);
+      if (filterStatus === 'in_transit') return d.status === 'in_transit';
       return d.status === filterStatus;
     });
   }, [deliveries, filterStatus]);
 
-  const unmatchedOutForDeliveryOrders = useMemo(() => {
-    const linkedOrderIds = new Set(deliveries.map((delivery) => delivery.orderId));
-    return orders.filter((order) =>
-      order.orderType === 'delivery' &&
-      order.orderStatus === 'out_for_delivery' &&
-      !linkedOrderIds.has(order.id),
-    );
-  }, [deliveries, orders]);
-
   const getNextStatus = (currentStatus: Delivery['status']): Delivery['status'] | null => {
-    const flow: Record<Delivery['status'], Delivery['status'] | null> = {
-      pending: 'assigned',
-      assigned: 'picked_up',
-      picked_up: 'in_transit',
-      in_transit: 'arrived',
-      arrived: 'delivered',
-      delivered: null,
-      failed: null
-    };
-    return flow[currentStatus];
+    if (currentStatus === 'pending') return 'in_transit';
+    if (currentStatus === 'in_transit') return 'delivered';
+    return null;
   };
 
   const getStepIndex = (status: Delivery['status']): number => {
-    const statusMap: Record<Delivery['status'], number> = {
+    const statusMap: Partial<Record<Delivery['status'], number>> = {
       pending: 0,
-      assigned: 1,
-      picked_up: 2,
-      in_transit: 3,
-      arrived: 4,
-      delivered: 5,
-      failed: -1
+      in_transit: 1,
+      delivered: 2,
     };
-    return statusMap[status] ?? 0;
+    return statusMap[status] ?? -1;
   };
 
   const handleUpdateStatus = async (deliveryId: string) => {
@@ -92,15 +68,6 @@ export const DeliveryPage: React.FC = () => {
     }
   };
 
-  const handleMarkFailed = async (deliveryId: string) => {
-    try {
-      await updateDeliveryStatus(deliveryId, 'failed', -1);
-      toast.success('Delivery marked as failed');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not mark delivery as failed.');
-    }
-  };
-
   const handleExportCSV = () => {
     if (ordersLoading) {
       toast.info('Order details are still loading; try exporting again shortly.');
@@ -116,13 +83,13 @@ export const DeliveryPage: React.FC = () => {
         id: d.id,
         orderId: d.orderId,
         customer: order?.customerName ?? '',
-        destination: d.destination,
-        driver: d.driver,
-        truckNumber: d.truckNumber,
+        destination: d.destination ?? '',
+        driver: d.driver ?? '',
+        truckNumber: d.truckNumber ?? '',
         status: d.status,
-        trafficLevel: d.trafficLevel,
-        predictedDelay: d.predictedDelay ? 'yes' : 'no',
-        routeEfficiency: d.routeEfficiencyScore,
+        trafficLevel: d.trafficLevel ?? '',
+        predictedDelay: d.predictedDelay == null ? '' : d.predictedDelay ? 'yes' : 'no',
+        routeEfficiency: d.routeEfficiencyScore ?? '',
       };
     });
     const csv = toCSV(rows, [
@@ -151,10 +118,7 @@ export const DeliveryPage: React.FC = () => {
   const hasNoDeliveries =
     !deliveriesLoading &&
     !deliveriesError &&
-    deliveries.length === 0 &&
-    !ordersLoading &&
-    !ordersError &&
-    unmatchedOutForDeliveryOrders.length === 0;
+    deliveries.length === 0;
 
   if (deliveriesLoading) {
     return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading delivery data from backend…</div>;
@@ -192,7 +156,7 @@ export const DeliveryPage: React.FC = () => {
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Deliveries</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Delivery Orders</p>
             <p className="text-2xl font-black text-slate-900 mt-1">{deliveries.length}</p>
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
@@ -201,49 +165,13 @@ export const DeliveryPage: React.FC = () => {
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">In Transit</p>
-            <p className="text-2xl font-black text-[#3b82f6] mt-1">{deliveries.filter(d => ['assigned', 'picked_up', 'in_transit', 'arrived'].includes(d.status)).length}</p>
+            <p className="text-2xl font-black text-[#3b82f6] mt-1">{deliveries.filter(d => d.status === 'in_transit').length}</p>
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Delivered</p>
             <p className="text-2xl font-black text-[#10b981] mt-1">{deliveries.filter(d => d.status === 'delivered').length}</p>
           </div>
         </div>
-
-        {!ordersLoading && !ordersError && unmatchedOutForDeliveryOrders.length > 0 && (
-          <section aria-labelledby="unmatched-delivery-orders" className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 id="unmatched-delivery-orders" className="text-sm font-extrabold text-amber-950">
-                  Orders out for delivery without a delivery record
-                </h2>
-                <p className="mt-1 max-w-3xl text-xs leading-relaxed text-amber-900">
-                  These orders are marked out for delivery in backend order data, but have no matching record from the deliveries endpoint. They are listed here for visibility; driver and truck updates are unavailable until a delivery record exists.
-                </p>
-              </div>
-              <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-bold text-amber-900">
-                {unmatchedOutForDeliveryOrders.length}
-              </span>
-            </div>
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {unmatchedOutForDeliveryOrders.map((order) => (
-                <article key={order.id} className="rounded-2xl border border-amber-200 bg-white p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-extrabold text-slate-900">{order.referenceNumber || order.id}</p>
-                      <p className="mt-1 truncate text-xs text-slate-600">{order.customerName}</p>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-900">
-                      Out for delivery
-                    </span>
-                  </div>
-                  <p className="mt-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Destination</p>
-                  <p className="text-xs font-medium text-slate-700">{order.address?.trim() || 'Address not provided'}</p>
-                  <p className="mt-2 text-[10px] text-slate-500">Delivery date: {order.date || 'Not provided'}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
 
         {/* Filter */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -279,7 +207,7 @@ export const DeliveryPage: React.FC = () => {
             const order = orders.find(o => o.id === delivery.orderId);
             const currentStep = getStepIndex(delivery.status);
             const isDelivered = delivery.status === 'delivered';
-            const isFailed = delivery.status === 'failed';
+
             
             return (
               <div 
@@ -294,7 +222,7 @@ export const DeliveryPage: React.FC = () => {
                         <Truck className="w-5 h-5" />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="font-extrabold text-slate-900 truncate">{delivery.id}</h3>
+                        <h3 className="font-extrabold text-slate-900 truncate">{order?.referenceNumber || delivery.id}</h3>
                         <p className="text-xs text-slate-400 truncate">Order: {delivery.orderId}</p>
                       </div>
                     </div>
@@ -326,17 +254,17 @@ export const DeliveryPage: React.FC = () => {
                         <MapPin className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
                         <div className="min-w-0 flex-1">
                           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Destination</p>
-                          <p className="font-semibold text-slate-800 truncate">{delivery.destination}</p>
+                          <p className="font-semibold text-slate-800 truncate">{delivery.destination || 'Address not provided'}</p>
                         </div>
                       </div>
 
                       <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs text-slate-500">
                         <span className="flex items-center gap-1.5 truncate">
                           <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate font-medium">{delivery.driver}</span>
+                          <span className="truncate font-medium">{delivery.driver || 'Not assigned'}</span>
                         </span>
                         <span className="font-bold text-slate-700 shrink-0 bg-slate-100 px-2 py-0.5 rounded-md text-[11px]">
-                          {delivery.truckNumber}
+                          {delivery.truckNumber || 'Not assigned'}
                         </span>
                       </div>
                     </div>
@@ -388,7 +316,7 @@ export const DeliveryPage: React.FC = () => {
 
                   {/* Actions / Status Footer */}
                   <div className="pt-3 border-t border-slate-100 mt-2">
-                    {!isDelivered && !isFailed ? (
+                    {!isDelivered ? (
                       <div className="space-y-2">
                         {getNextStatus(delivery.status) && (
                           <button
@@ -400,23 +328,11 @@ export const DeliveryPage: React.FC = () => {
                             Mark as {getNextStatus(delivery.status)?.replace('_', ' ')}
                           </button>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => handleMarkFailed(delivery.id)}
-                          className="w-full text-rose-600 hover:bg-rose-50 py-1.5 rounded-xl text-xs font-bold transition-colors"
-                        >
-                          Mark as Failed
-                        </button>
                       </div>
-                    ) : isDelivered ? (
+                    ) : (
                       <div className="py-2.5 px-3 bg-emerald-50 rounded-2xl flex items-center justify-center gap-2 text-xs font-extrabold text-emerald-700">
                         <CheckCircle className="w-4 h-4 text-emerald-600" />
                         <span>Successfully Delivered</span>
-                      </div>
-                    ) : (
-                      <div className="py-2.5 px-3 bg-rose-50 rounded-2xl flex items-center justify-center gap-2 text-xs font-extrabold text-rose-700">
-                        <X className="w-4 h-4 text-rose-600" />
-                        <span>Delivery Failed</span>
                       </div>
                     )}
                   </div>
@@ -432,20 +348,16 @@ export const DeliveryPage: React.FC = () => {
             </div>
           )}
 
-          {deliveries.length === 0 && !deliveriesLoading && !ordersLoading && !ordersError && unmatchedOutForDeliveryOrders.length > 0 && (
-            <div role="status" className="col-span-full rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center text-sm text-amber-900">
-              No delivery records are linked to these orders yet. The backend orders are listed above; delivery status controls require a matching delivery record.
-            </div>
-          )}
+
 
           {hasNoDeliveries && (
             <div className="col-span-full p-12 text-center">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
                 <Truck className="h-8 w-8 text-amber-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900">No deliveries scheduled</h3>
+              <h3 className="text-lg font-semibold text-gray-900">No delivery orders</h3>
               <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
-                When a delivery is created, it will appear here.
+                Delivery orders will appear here from backend order status.
               </p>
             </div>
           )}
