@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus,
   Search,
@@ -22,14 +22,15 @@ import {
   Compass,
   Calendar,
 } from 'lucide-react';
-import { useData } from '../components/DataContext';
+import { useData, toFrontendOrder } from '../components/DataContext';
+import { getOrdersPage } from '../api';
 import type { Order, OrderItem } from '../types';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
-import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
+const ORDERS_PAGE_SIZE = 25;
 
 
 // ── Order progress steps ──────────────────────────────────────────
@@ -86,6 +87,7 @@ export const Orders: React.FC = () => {
   const [productSearch, setProductSearch] = useState('');
   const [savingOrder, setSavingOrder] = useState(false);
   const [savingFinanceAction, setSavingFinanceAction] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   // ── Cancel confirmation ──────────────────────────────────────────
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
@@ -104,6 +106,18 @@ export const Orders: React.FC = () => {
   const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
+  const [pagedOrders, setPagedOrders] = useState<Order[]>([]);
+  const [pageNextCursor, setPageNextCursor] = useState<string | null>(null);
+  const [pageHasMore, setPageHasMore] = useState(false);
+  const [pageTotalCount, setPageTotalCount] = useState(0);
+  const [pageSummary, setPageSummary] = useState({ pendingCount: 0, inProgressCount: 0, completedCount: 0 });
+  const [pageLoading, setPageLoading] = useState(true);
+  const [pageError, setPageError] = useState('');
+  const [pageLoadingMore, setPageLoadingMore] = useState(false);
+  const [pageLoadingMoreError, setPageLoadingMoreError] = useState('');
+  const pageGeneration = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const ordersSentinelRef = useRef<HTMLDivElement | null>(null);
 
   const latestOrderDate = useMemo(() => {
     if (!orders || orders.length === 0) return new Date();
@@ -147,20 +161,80 @@ export const Orders: React.FC = () => {
     toast.info('Date filters cleared.');
   };
 
-  // ── Filtered list ────────────────────────────────────────────────
-  const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      const q = searchTerm.toLowerCase();
-      const matchesSearch = order.customerName.toLowerCase().includes(q) ||
-                            order.id.toLowerCase().includes(q) ||
-                            order.referenceNumber.toLowerCase().includes(q);
-      const matchesStatus = statusFilter === 'all' || order.orderStatus === statusFilter;
-      const matchesFrom = !fromDate || order.date >= fromDate;
-      const matchesTo = !toDate || order.date <= toDate;
-      return matchesSearch && matchesStatus && matchesFrom && matchesTo;
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [orders, searchTerm, statusFilter, fromDate, toDate]);
-  const { visibleItems: visibleOrders, sentinelRef, hasMore } = useInfiniteScroll(filteredOrders);
+  // ── Server-paginated order list ─────────────────────────────────
+  const loadFirstOrderPage = useCallback(async () => {
+    const requestId = ++pageGeneration.current;
+    loadingMoreRef.current = false;
+    setPageLoading(true);
+    setPageLoadingMore(false);
+    setPageError('');
+    setPageLoadingMoreError('');
+    setPagedOrders([]);
+    setPageNextCursor(null);
+    setPageHasMore(false);
+    setPageTotalCount(0);
+    setPageSummary({ pendingCount: 0, inProgressCount: 0, completedCount: 0 });
+    try {
+      const result = await getOrdersPage({
+        limit: ORDERS_PAGE_SIZE,
+        status: statusFilter,
+        search: searchTerm,
+        fromDate: fromDate || null,
+        toDate: toDate || null,
+      });
+      if (requestId !== pageGeneration.current) return;
+      setPagedOrders(result.orders.map(toFrontendOrder));
+      setPageNextCursor(result.page.nextCursor);
+      setPageHasMore(result.page.hasMore);
+      setPageTotalCount(result.page.totalCount);
+      setPageSummary(result.summary);
+    } catch (error) {
+      if (requestId === pageGeneration.current) setPageError(error instanceof Error ? error.message : 'Could not load order page.');
+    } finally {
+      if (requestId === pageGeneration.current) setPageLoading(false);
+    }
+  }, [searchTerm, statusFilter, fromDate, toDate]);
+
+  useEffect(() => { void loadFirstOrderPage() }, [loadFirstOrderPage, orders]);
+
+  const loadMoreOrders = useCallback(async () => {
+    if (!pageHasMore || !pageNextCursor || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setPageLoadingMore(true);
+    setPageLoadingMoreError('');
+    const requestId = pageGeneration.current;
+    try {
+      const result = await getOrdersPage({
+        limit: ORDERS_PAGE_SIZE,
+        cursor: pageNextCursor,
+        status: statusFilter,
+        search: searchTerm,
+        fromDate: fromDate || null,
+        toDate: toDate || null,
+      });
+      if (requestId !== pageGeneration.current) return;
+      setPagedOrders((current) => [...current, ...result.orders.map(toFrontendOrder)]);
+      setPageNextCursor(result.page.nextCursor);
+      setPageHasMore(result.page.hasMore);
+      setPageTotalCount(result.page.totalCount);
+      setPageSummary(result.summary);
+    } catch (error) {
+      if (requestId === pageGeneration.current) setPageLoadingMoreError(error instanceof Error ? error.message : 'Could not load more orders.');
+    } finally {
+      loadingMoreRef.current = false;
+      if (requestId === pageGeneration.current) setPageLoadingMore(false);
+    }
+  }, [pageHasMore, pageNextCursor, statusFilter, searchTerm, fromDate, toDate]);
+
+  useEffect(() => {
+    const sentinel = ordersSentinelRef.current;
+    if (!sentinel || !pageHasMore || pageLoading || pageLoadingMore || pageLoadingMoreError || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMoreOrders();
+    }, { rootMargin: '320px 0px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [pageHasMore, pageLoading, pageLoadingMore, pageLoadingMoreError, loadMoreOrders]);
 
   // ── Order status transitions ─────────────────────────────────────
   const getNextStatus = (order: Order): Order['orderStatus'] | null => {
@@ -385,31 +459,51 @@ export const Orders: React.FC = () => {
   };
 
   // ── Stats helpers ────────────────────────────────────────────────
-  const inProgressCount = filteredOrders.filter(o =>
-    ['pending', 'packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)
-  ).length;
+  const inProgressCount = pageSummary.inProgressCount;
 
   // ── CSV export ──────────────────────────────────────────────────
-  const handleExportCSV = () => {
-    const csv = toCSV(filteredOrders, [
-      { key: 'referenceNumber', header: 'Reference' },
-      { key: 'customerName', header: 'Customer' },
-      { key: 'contact', header: 'Contact' },
-      { key: 'address', header: 'Address' },
-      { key: 'orderType', header: 'Type' },
-      { key: 'orderStatus', header: 'Order Status' },
-      { key: 'paymentStatus', header: 'Payment' },
-      { key: 'total', header: 'Total (PHP)' },
-      { key: 'paidAmount', header: 'Paid (PHP)' },
-      { key: 'date', header: 'Date' },
-    ]);
-    const dateRangeSlug = fromDate || toDate ? `_${fromDate || 'start'}_to_${toDate || 'end'}` : '';
-    downloadCSV(`orders-${new Date().toISOString().split('T')[0]}${dateRangeSlug}.csv`, csv);
-    toast.success(`Exported ${filteredOrders.length} orders to CSV`);
+  const handleExportCSV = async () => {
+    setExportingCsv(true);
+    try {
+      const exportOrders: Order[] = [];
+      let cursor: string | null = null;
+      do {
+        const result = await getOrdersPage({
+          limit: 100,
+          cursor,
+          status: statusFilter,
+          search: searchTerm,
+          fromDate: fromDate || null,
+          toDate: toDate || null,
+        });
+        exportOrders.push(...result.orders.map(toFrontendOrder));
+        cursor = result.page.nextCursor;
+      } while (cursor);
+
+      const csv = toCSV(exportOrders, [
+        { key: 'referenceNumber', header: 'Reference' },
+        { key: 'customerName', header: 'Customer' },
+        { key: 'contact', header: 'Contact' },
+        { key: 'address', header: 'Address' },
+        { key: 'orderType', header: 'Type' },
+        { key: 'orderStatus', header: 'Order Status' },
+        { key: 'paymentStatus', header: 'Payment' },
+        { key: 'total', header: 'Total (PHP)' },
+        { key: 'paidAmount', header: 'Paid (PHP)' },
+        { key: 'date', header: 'Date' },
+      ]);
+      const dateRangeSlug = fromDate || toDate ? `_${fromDate || 'start'}_to_${toDate || 'end'}` : '';
+      downloadCSV(`orders-${new Date().toISOString().split('T')[0]}${dateRangeSlug}.csv`, csv);
+      toast.success(`Exported ${exportOrders.length} orders to CSV`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not export orders.');
+    } finally {
+      setExportingCsv(false);
+    }
   };
 
 
-  const isEmpty = !ordersLoading && orders.length === 0;
+  const isEmpty = !pageLoading && pageTotalCount === 0;
 
   // ── View modal item search ───────────────────────────────────────
   const filteredViewItems = useMemo(() => {
@@ -426,17 +520,20 @@ export const Orders: React.FC = () => {
     return products.filter(p => p.status === 'active' && p.name.toLowerCase().includes(q));
   }, [products, productSearch]);
 
-  if (productsLoading || ordersLoading) {
+  if (productsLoading || ordersLoading || pageLoading) {
     return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading orders and product data from backend…</div>;
   }
-  const sourceError = [productsError && `Products: ${productsError}`, ordersError && `Orders: ${ordersError}`].filter(Boolean).join('; ');
+  const sourceError = [productsError && `Products: ${productsError}`, ordersError && `Orders: ${ordersError}`, pageError && `Order page: ${pageError}`].filter(Boolean).join('; ');
   if (sourceError) {
     return (
       <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
         <p className="font-semibold text-rose-700">Could not load order source data: {sourceError}</p>
         <button
           type="button"
-          onClick={() => void Promise.allSettled([refreshProducts(), refreshOrders()])}
+          onClick={() => {
+            void loadFirstOrderPage();
+            void Promise.allSettled([refreshProducts(), refreshOrders()]);
+          }}
           className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
         >
           Retry
@@ -479,10 +576,10 @@ export const Orders: React.FC = () => {
             <button
               type="button"
               onClick={handleExportCSV}
-              disabled={filteredOrders.length === 0}
+              disabled={pageTotalCount === 0 || exportingCsv}
               className="inline-flex items-center gap-2 self-start rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
             >
-              <Download className="h-4 w-4" /> Export CSV
+              <Download className="h-4 w-4" /> {exportingCsv ? 'Exporting…' : 'Export CSV'}
             </button>
             <button onClick={openCreate} className="btn-primary flex items-center gap-2">
               <Plus className="w-5 h-5" /> New Order
@@ -557,7 +654,7 @@ export const Orders: React.FC = () => {
               )}
 
               <span className="text-xs font-semibold text-slate-400 pl-1 hidden sm:inline">
-                ({filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found)
+                ({pageTotalCount} {pageTotalCount === 1 ? 'order' : 'orders'} found)
               </span>
             </div>
           </div>
@@ -568,11 +665,11 @@ export const Orders: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Orders</p>
-            <p className="text-2xl font-black text-slate-900 mt-1">{filteredOrders.length}</p>
+            <p className="text-2xl font-black text-slate-900 mt-1">{pageTotalCount}</p>
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Pending</p>
-            <p className="text-2xl font-black text-[#f59e0b] mt-1">{filteredOrders.filter(o => o.orderStatus === 'pending').length}</p>
+            <p className="text-2xl font-black text-[#f59e0b] mt-1">{pageSummary.pendingCount}</p>
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">In Progress</p>
@@ -580,13 +677,13 @@ export const Orders: React.FC = () => {
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Completed</p>
-            <p className="text-2xl font-black text-[#10b981] mt-1">{filteredOrders.filter(o => o.orderStatus === 'completed').length}</p>
+            <p className="text-2xl font-black text-[#10b981] mt-1">{pageSummary.completedCount}</p>
           </div>
         </div>
 
         {/* ── Order cards ────────────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {visibleOrders.map(order => {
+          {pagedOrders.map(order => {
             const remaining = order.total - order.paidAmount;
             return (
               <div
@@ -633,7 +730,7 @@ export const Orders: React.FC = () => {
               </div>
             );
           })}
-          {filteredOrders.length === 0 && !isEmpty && (
+          {pagedOrders.length === 0 && !pageLoading && !isEmpty && (
             <div className="col-span-full p-12 text-center">
               <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500">No orders match the current filters.</p>
@@ -660,7 +757,20 @@ export const Orders: React.FC = () => {
             </div>
           )}
         </div>
-        {hasMore && <div ref={sentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more orders…</div>}
+        {pageHasMore && (
+          <div ref={ordersSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">
+            {pageLoadingMore ? 'Loading more orders…' : 'Scroll to load more orders…'}
+          </div>
+        )}
+        {pageLoadingMoreError && (
+          <div role="alert" className="flex items-center justify-center gap-3 py-3 text-sm text-rose-700">
+            <span>{pageLoadingMoreError}</span>
+            <button type="button" onClick={() => void loadMoreOrders()} className="font-semibold underline">Retry</button>
+          </div>
+        )}
+        {pageHasMore && typeof IntersectionObserver === 'undefined' && !pageLoadingMore && (
+          <button type="button" onClick={() => void loadMoreOrders()} className="mx-auto block rounded-lg border px-4 py-2 text-sm">Load more orders</button>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
@@ -1148,7 +1258,7 @@ export const Orders: React.FC = () => {
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-slideIn text-center">
             <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Cancel Order?</h3>
-            <p className="text-sm text-gray-500 mb-6">This will cancel the order, record a refund of {formatCurrency(orders.find(order => order.id === confirmCancel)?.paidAmount ?? 0)} from its remaining paid balance, and return the ordered items to inventory. This updates SmartStock&apos;s records only; any cash handoff must be completed separately. This cannot be undone.</p>
+            <p className="text-sm text-gray-500 mb-6">This will cancel the order, record a refund of {formatCurrency(pagedOrders.find(order => order.id === confirmCancel)?.paidAmount ?? 0)} from its remaining paid balance, and return the ordered items to inventory. This updates SmartStock&apos;s records only; any cash handoff must be completed separately. This cannot be undone.</p>
             <div className="flex gap-3">
               <button onClick={() => setConfirmCancel(null)} className="flex-1 btn-secondary">Keep Order</button>
               <button onClick={() => handleDelete(confirmCancel)} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-semibold">Yes, Cancel</button>

@@ -84,6 +84,31 @@ describe('order routes', () => {
     expect(json[0].referenceNumber).toMatch(/^SS-\d{4}-\d{5}$/);
   });
 
+  it('loads filtered order pages with cursor metadata and validates query input', async () => {
+    const token = await login(app, STAFF);
+    const headers = { authorization: 'Bearer ' + token };
+    const expectedCount = listOrders().length;
+    expect(expectedCount).toBeGreaterThanOrEqual(2);
+
+    const first = await app.request('/orders/page?limit=1&status=all', { headers });
+    expect(first.status).toBe(200);
+    const firstBody = await first.json();
+    expect(firstBody.page).toMatchObject({ limit: 1, totalCount: expectedCount, hasMore: true });
+    expect(firstBody.orders).toHaveLength(1);
+    expect(firstBody.summary).toEqual(expect.objectContaining({ pendingCount: 0 }));
+
+    const second = await app.request(`/orders/page?limit=1&status=all&cursor=${encodeURIComponent(firstBody.page.nextCursor)}`, { headers });
+    expect(second.status).toBe(200);
+    const secondBody = await second.json();
+    expect(secondBody.orders).toHaveLength(1);
+    expect(secondBody.orders[0].id).not.toBe(firstBody.orders[0].id);
+
+    expect((await app.request('/orders/page?limit=0', { headers })).status).toBe(400);
+    expect((await app.request('/orders/page?from=2026-02-30', { headers })).status).toBe(400);
+    expect((await app.request('/orders/page?from=2026-11-01&to=2026-10-01', { headers })).status).toBe(400);
+    expect((await app.request('/orders/page?cursor=not-a-cursor', { headers })).status).toBe(400);
+  });
+
   it('gets an order by id and reference number for authenticated staff', async () => {
     const token = await login(app, STAFF);
     const [seeded] = listOrders();

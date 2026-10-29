@@ -6,7 +6,7 @@
  */
 
 import { isDbSyncActive } from '../db/syncState.js';
-import { createOrderWithInventoryDb } from '../db/postgresStore.js';
+import { createOrderWithInventoryDb, listOrdersPageDb } from '../db/postgresStore.js';
 import { applyPaymentDb, applyRefundDb, cancelOrderDb, updateOrderDb } from '../db/postgresStore.js';
 import { _applyPersistedOrderStock, findProductById, listProducts, recordInboundStock, recordOutboundStock } from '../inventory/store.js';
 import { sendNotificationEvent } from '../notifications/webhook.js';
@@ -156,6 +156,58 @@ function parseUpdate(body: unknown): ServiceResult<OrderUpdateInput> {
 
 export function listOrderRecords(): Order[] {
   return listOrders();
+}
+
+export interface OrdersPageInput {
+  limit: number;
+  status: 'all' | 'pending' | 'ready_for_pickup' | 'packed' | 'out_for_delivery' | 'completed' | 'cancelled';
+  search: string;
+  fromDate: string | null;
+  toDate: string | null;
+  cursorCreatedAt: string | null;
+  cursorId: string | null;
+}
+
+export async function listOrderPageRecords(input: OrdersPageInput) {
+  if (isDbSyncActive()) {
+    const page = await listOrdersPageDb(input);
+    if (!page) throw new Error('Database unavailable');
+    return page;
+  }
+
+  const query = input.search.toLowerCase();
+  const filtered = listOrders().filter((order) => {
+    const matchesStatus = input.status === 'all'
+      || (input.status === 'packed' && order.orderStatus === 'processing')
+      || (input.status === 'out_for_delivery' && order.orderStatus === 'in_transit')
+      || (input.status === 'completed' && order.orderStatus === 'delivered')
+      || (input.status === 'cancelled' && order.orderStatus === 'cancelled');
+    const matchesSearch = !query || order.customerName.toLowerCase().includes(query)
+      || order.referenceNumber.toLowerCase().includes(query) || order.id.toLowerCase().includes(query);
+    const matchesFrom = !input.fromDate || order.deliveryDate >= input.fromDate;
+    const matchesTo = !input.toDate || order.deliveryDate <= input.toDate;
+    return matchesStatus && matchesSearch && matchesFrom && matchesTo;
+  }).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+
+  const inProgressCount = filtered.filter((order) => order.orderStatus === 'processing' || order.orderStatus === 'in_transit').length;
+  const completedCount = filtered.filter((order) => order.orderStatus === 'delivered').length;
+  const afterCursor = input.cursorCreatedAt === null
+    ? filtered
+    : filtered.filter((order) => order.createdAt < input.cursorCreatedAt!
+      || (order.createdAt === input.cursorCreatedAt && order.id < (input.cursorId ?? '')));
+  const lookahead = afterCursor.slice(0, input.limit + 1);
+  const orders = lookahead.slice(0, input.limit);
+  const hasMore = lookahead.length > input.limit;
+  const lastVisible = orders[orders.length - 1];
+  return {
+    orders,
+    totalCount: filtered.length,
+    pendingCount: 0,
+    inProgressCount,
+    completedCount,
+    hasMore,
+    nextCursor: hasMore && lastVisible ? { createdAt: lastVisible.createdAt, id: lastVisible.id } : null,
+  };
 }
 
 export function getOrderRecord(id: string): ServiceResult<Order> {

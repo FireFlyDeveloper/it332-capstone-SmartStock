@@ -400,6 +400,76 @@ export async function listOrdersDb(): Promise<Order[]> {
   return rows.map(rowToOrder);
 }
 
+export interface OrdersDbPage {
+  orders: Order[];
+  totalCount: number;
+  pendingCount: number;
+  inProgressCount: number;
+  completedCount: number;
+  hasMore: boolean;
+  nextCursor: { createdAt: string; id: string } | null;
+}
+
+export async function listOrdersPageDb(input: {
+  limit: number;
+  status: string;
+  search: string;
+  fromDate: string | null;
+  toDate: string | null;
+  cursorCreatedAt: string | null;
+  cursorId: string | null;
+}): Promise<OrdersDbPage | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH filtered_orders AS MATERIALIZED (
+      SELECT * FROM orders o
+      WHERE o.deleted_at IS NULL
+        AND ($1::text = 'all'
+          OR ($1 = 'packed' AND o.order_status = 'processing')
+          OR ($1 = 'out_for_delivery' AND o.order_status = 'in_transit')
+          OR ($1 = 'completed' AND o.order_status = 'delivered')
+          OR ($1 = 'cancelled' AND o.order_status = 'cancelled'))
+        AND ($2::text = '' OR POSITION(LOWER($2) IN LOWER(COALESCE(o.customer_name, ''))) > 0
+          OR POSITION(LOWER($2) IN LOWER(COALESCE(o.order_no, ''))) > 0
+          OR POSITION(LOWER($2) IN LOWER(o.id::text)) > 0)
+        AND ($3::date IS NULL OR o.delivery_date >= $3::date)
+        AND ($4::date IS NULL OR o.delivery_date <= $4::date)
+    ), summary AS (
+      SELECT COUNT(*)::int AS total_count,
+        COUNT(*) FILTER (WHERE order_status = 'pending')::int AS pending_count,
+        COUNT(*) FILTER (WHERE order_status IN ('processing', 'in_transit'))::int AS in_progress_count,
+        COUNT(*) FILTER (WHERE order_status = 'delivered')::int AS completed_count
+      FROM filtered_orders
+    ), page_rows AS (
+      SELECT * FROM filtered_orders
+      WHERE $5::timestamptz IS NULL
+        OR created_at < $5::timestamptz
+        OR (created_at = $5::timestamptz AND id::text < $6::text)
+      ORDER BY created_at DESC, id::text DESC
+      LIMIT $7
+    )
+    SELECT summary.total_count, summary.pending_count, summary.in_progress_count, summary.completed_count,
+      COALESCE((SELECT jsonb_agg(to_jsonb(page_rows) ORDER BY page_rows.created_at DESC, page_rows.id::text DESC) FROM page_rows), '[]'::jsonb) AS page_orders
+    FROM summary
+  `, [input.status, input.search, input.fromDate, input.toDate, input.cursorCreatedAt, input.cursorId, input.limit + 1]);
+  const row = rows[0];
+  if (!row) return null;
+  const rawOrders = (typeof row.page_orders === 'string' ? JSON.parse(row.page_orders) : row.page_orders ?? []) as Record<string, unknown>[];
+  const visibleRows = rawOrders.slice(0, input.limit);
+  const hasMore = rawOrders.length > input.limit;
+  const lastVisible = visibleRows[visibleRows.length - 1];
+  return {
+    orders: visibleRows.map(rowToOrder),
+    totalCount: Number(row.total_count ?? 0),
+    pendingCount: Number(row.pending_count ?? 0),
+    inProgressCount: Number(row.in_progress_count ?? 0),
+    completedCount: Number(row.completed_count ?? 0),
+    hasMore,
+    nextCursor: hasMore && lastVisible ? { createdAt: String(lastVisible.created_at), id: String(lastVisible.id) } : null,
+  };
+}
+
 export interface DailySalesDbPage {
   orderCount: number;
   cancelledOrderCount: number;

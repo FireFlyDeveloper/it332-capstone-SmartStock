@@ -10,6 +10,8 @@
  * Last touched: 2026-07-17
  */
 
+import type { BackendOrder } from './components/DataContext'
+
 const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined)?.trim().replace(/\/+$/, '')) ?? ''
 
 // Token store. Updated via setAuthToken(). The apiFetch helper reads this
@@ -304,6 +306,32 @@ export interface DailySalesPageOptions {
   cursor?: string | null
   status?: 'all' | DailySalesOrder['orderStatus']
   search?: string
+}
+
+export interface OrdersPageOptions {
+  limit?: number
+  cursor?: string | null
+  status?: 'all' | 'pending' | 'ready_for_pickup' | 'packed' | 'out_for_delivery' | 'completed' | 'cancelled'
+  search?: string
+  fromDate?: string | null
+  toDate?: string | null
+}
+
+export interface OrdersPageResponse {
+  orders: BackendOrder[]
+  page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null }
+  summary: { pendingCount: number; inProgressCount: number; completedCount: number }
+}
+
+export function getOrdersPage(options: OrdersPageOptions = {}): Promise<OrdersPageResponse> {
+  const params = new URLSearchParams()
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.cursor) params.set('cursor', options.cursor)
+  if (options.status) params.set('status', options.status)
+  if (options.search?.trim()) params.set('search', options.search.trim())
+  if (options.fromDate) params.set('from', options.fromDate)
+  if (options.toDate) params.set('to', options.toDate)
+  return apiFetch<OrdersPageResponse>(`/orders/page?${params.toString()}`)
 }
 
 export function getDailySales(date: string, options: DailySalesPageOptions = {}): Promise<DailySalesSummary> {

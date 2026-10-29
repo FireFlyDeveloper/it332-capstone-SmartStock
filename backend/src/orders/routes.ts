@@ -13,6 +13,7 @@ import {
   getOrderByReferenceController,
   getOrderController,
   listOrdersController,
+  listOrdersPageController,
   processPaymentController,
   processRefundController,
   updateOrderController,
@@ -22,6 +23,7 @@ export const orderRoutes = new Hono();
 
 orderRoutes.use('*', requireAuth);
 orderRoutes.get('/', listOrdersController);
+orderRoutes.get('/page', listOrdersPageController);
 orderRoutes.get('/reference/:referenceNumber', getOrderByReferenceController);
 orderRoutes.get('/:id', getOrderController);
 orderRoutes.post('/', requireStaffOrAdmin, createOrderController);

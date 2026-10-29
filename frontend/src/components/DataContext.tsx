@@ -30,7 +30,7 @@ interface BackendOrderItem {
   unitPrice: number
   lineTotal: number
 }
-interface BackendOrder {
+export interface BackendOrder {
   id: string
   referenceNumber: string
   customerName: string
@@ -68,7 +68,7 @@ function toFrontendOrderStatus(status: BackendOrderStatus): Order['orderStatus']
   return 'packed'
 }
 
-function toFrontendOrder(order: BackendOrder): Order {
+export function toFrontendOrder(order: BackendOrder): Order {
   return {
     id: order.id,
     referenceNumber: order.referenceNumber,
