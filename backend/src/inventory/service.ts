@@ -186,12 +186,20 @@ function parseStockMovement(body: unknown, type: 'inbound' | 'outbound'): Servic
   if (!createdBy.ok) return createdBy;
   const supplier = readString(input.supplier, 'supplier', type === 'inbound');
   if (!supplier.ok) return supplier;
+  let unitCost: number | undefined;
+  if (input.unitCost !== undefined) {
+    const parsedUnitCost = readNumber(input.unitCost, 'unitCost');
+    if (!parsedUnitCost.ok) return parsedUnitCost;
+    if (type !== 'inbound') return { ok: false, status: 400, error: 'unitCost is only valid for inbound movements' };
+    unitCost = parsedUnitCost.data;
+  }
 
   if (referenceNo.data === undefined) return { ok: false, status: 400, error: 'referenceNo is required' };
   return {
     ok: true,
     data: {
       quantity: quantity.data,
+      unitCost,
       referenceNo: referenceNo.data,
       supplier: supplier.data,
       occurredAt: occurredAt.data,

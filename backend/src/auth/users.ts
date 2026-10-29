@@ -8,7 +8,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { isDbSyncActive } from '../db/syncState.js';
-import { createUserDb, findUserByEmailDb, updateUserDb } from '../db/postgresStore.js';
+import { createUserDb, deleteUserDb, findUserByEmailDb, listStaffUsersDb, updateUserDb } from '../db/postgresStore.js';
 
 export type Role = 'admin' | 'staff';
 
@@ -73,7 +73,7 @@ export function createUser(input: {
   return record;
 }
 
-export function updateUser(id: string, updates: { name?: string; passwordHash?: string }): UserRecord | null {
+export function updateUser(id: string, updates: { email?: string; name?: string; passwordHash?: string }): UserRecord | null {
   const user = users.get(id);
   if (!user) return null;
   if (updates.name !== undefined) user.name = updates.name.trim();
@@ -94,16 +94,58 @@ export async function createUserRecord(input: {
   return record;
 }
 
+export async function listStaffUserRecords(): Promise<UserRecord[]> {
+  if (!isDbSyncActive()) return [...users.values()].filter((user) => user.role === 'staff');
+  const records = await listStaffUsersDb();
+  for (const [id, user] of users) {
+    if (user.role === 'staff') {
+      users.delete(id);
+      byEmail.delete(user.email.toLowerCase());
+    }
+  }
+  for (const record of records) {
+    users.set(record.id, record);
+    byEmail.set(record.email.toLowerCase(), record.id);
+  }
+  return records;
+}
+
 export async function updateUserRecord(
   id: string,
-  updates: { name?: string; passwordHash?: string },
+  updates: { email?: string; name?: string; passwordHash?: string },
 ): Promise<UserRecord | null> {
-  if (!isDbSyncActive()) return updateUser(id, updates);
+  if (!isDbSyncActive()) {
+    const current = users.get(id);
+    if (!current || current.role !== 'staff') return null;
+    if (updates.email !== undefined) {
+      const email = updates.email.trim().toLowerCase();
+      const existingId = byEmail.get(email);
+      if (existingId && existingId !== id) throw new Error('email already registered');
+      byEmail.delete(current.email.toLowerCase());
+      current.email = email;
+      byEmail.set(email, id);
+    }
+    return updateUser(id, updates);
+  }
   const record = await updateUserDb(id, updates);
   if (!record) return null;
+  const previous = users.get(id);
+  if (previous) byEmail.delete(previous.email.toLowerCase());
   users.set(record.id, record);
   byEmail.set(record.email.toLowerCase(), record.id);
   return record;
+}
+
+export async function deleteStaffUserRecord(id: string): Promise<boolean> {
+  const current = users.get(id);
+  if (!current || current.role !== 'staff') return false;
+  if (isDbSyncActive()) {
+    const deleted = await deleteUserDb(id);
+    if (!deleted) return false;
+  }
+  users.delete(id);
+  byEmail.delete(current.email.toLowerCase());
+  return true;
 }
 
 /**

@@ -16,6 +16,7 @@ import { analyticsRoutes } from './routes.js';
 import {
   buildAnnualPurchaseSummary,
   buildMonthlySalesTrend,
+  buildDemandForecast,
   classifyMovement,
   simpleExponentialSmoothingForecast,
 } from './analytics.js';
@@ -86,9 +87,9 @@ function seedDeterministicInventory() {
   const glass = createProduct({ sku: 'GLS-AN-01', name: 'Analytics Glass', category: 'glass', unit: 'sheet', stock: 0, price: 100, threshold: 5 });
   const aluminum = createProduct({ sku: 'ALU-AN-01', name: 'Analytics Aluminum', category: 'aluminum', unit: 'length', stock: 0, price: 50, threshold: 5 });
 
-  recordInboundStock(glass.id, { quantity: 10, referenceNo: 'PO-AN-001', supplier: 'Supplier A', occurredAt: '2026-01-10T00:00:00.000Z' });
-  recordInboundStock(glass.id, { quantity: 4, referenceNo: 'PO-AN-002', supplier: 'Supplier B', occurredAt: '2026-03-10T00:00:00.000Z' });
-  recordInboundStock(aluminum.id, { quantity: 6, referenceNo: 'PO-AN-003', supplier: 'Supplier A', occurredAt: '2026-01-12T00:00:00.000Z' });
+  recordInboundStock(glass.id, { quantity: 10, unitCost: 100, referenceNo: 'PO-AN-001', supplier: 'Supplier A', occurredAt: '2026-01-10T00:00:00.000Z' });
+  recordInboundStock(glass.id, { quantity: 4, unitCost: 100, referenceNo: 'PO-AN-002', supplier: 'Supplier B', occurredAt: '2026-03-10T00:00:00.000Z' });
+  recordInboundStock(aluminum.id, { quantity: 6, unitCost: 50, referenceNo: 'PO-AN-003', supplier: 'Supplier A', occurredAt: '2026-01-12T00:00:00.000Z' });
   recordOutboundStock(glass.id, { quantity: 7, referenceNo: 'SO-AN-001', occurredAt: '2026-02-01T00:00:00.000Z' });
   recordOutboundStock(aluminum.id, { quantity: 2, referenceNo: 'SO-AN-002', occurredAt: '2026-02-03T00:00:00.000Z' });
 }
@@ -110,17 +111,23 @@ describe('analytics pure functions', () => {
       { id: 'alum-1', name: 'Aluminum', category: 'aluminum' as const, unit: 'length', stock: 0, price: 50, threshold: 5, status: 'active' as const, sku: 'A-1' },
     ];
     const movements = [
-      { id: 'm1', productId: 'glass-1', type: 'inbound' as const, quantity: 10, referenceNo: 'PO-1', supplier: 'Supplier A', occurredAt: '2026-01-01T00:00:00.000Z', createdBy: 'system' },
-      { id: 'm2', productId: 'glass-1', type: 'inbound' as const, quantity: 4, referenceNo: 'PO-2', supplier: 'Supplier B', occurredAt: '2026-02-01T00:00:00.000Z', createdBy: 'system' },
-      { id: 'm3', productId: 'alum-1', type: 'inbound' as const, quantity: 6, referenceNo: 'PO-3', supplier: 'Supplier A', occurredAt: '2026-03-01T00:00:00.000Z', createdBy: 'system' },
+      { id: 'm1', productId: 'glass-1', type: 'inbound' as const, quantity: 10, unitCost: 100, referenceNo: 'PO-1', supplier: 'Supplier A', occurredAt: '2026-01-01T00:00:00.000Z', createdBy: 'system' },
+      { id: 'm2', productId: 'glass-1', type: 'inbound' as const, quantity: 4, unitCost: 100, referenceNo: 'PO-2', supplier: 'Supplier B', occurredAt: '2026-02-01T00:00:00.000Z', createdBy: 'system' },
+      { id: 'm3', productId: 'alum-1', type: 'inbound' as const, quantity: 6, unitCost: 50, referenceNo: 'PO-3', supplier: 'Supplier A', occurredAt: '2026-03-01T00:00:00.000Z', createdBy: 'system' },
       { id: 'm4', productId: 'glass-1', type: 'outbound' as const, quantity: 9, referenceNo: 'SO-1', occurredAt: '2026-03-01T00:00:00.000Z', createdBy: 'system' },
     ];
 
     expect(buildAnnualPurchaseSummary(movements, products, 2026)).toEqual([
-      { materialType: 'aluminum', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 6, totalCost: 300 },
-      { materialType: 'glass', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 10, totalCost: 1000 },
-      { materialType: 'glass', supplier: 'Supplier B', transactionCount: 1, totalQuantity: 4, totalCost: 400 },
+      { materialType: 'aluminum', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 6, totalCost: 300, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+      { materialType: 'glass', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 10, totalCost: 1000, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+      { materialType: 'glass', supplier: 'Supplier B', transactionCount: 1, totalQuantity: 4, totalCost: 400, unpricedReceiptCount: 0, unpricedQuantity: 0 },
     ]);
+  });
+
+  it('reports receipt costs only when unit cost was recorded', () => {
+    const products = [{ id: 'p', name: 'Item', category: 'glass' as const, unit: 'sheet', stock: 0, price: 999, threshold: 1, status: 'active' as const, sku: 'P' }];
+    const rows = buildAnnualPurchaseSummary([{ id: 'u', productId: 'p', type: 'inbound', quantity: 3, referenceNo: 'PO-U', supplier: 'S', occurredAt: '2026-01-01T00:00:00.000Z', createdBy: 'test' }], products, 2026);
+    expect(rows[0]).toMatchObject({ totalCost: 0, unpricedReceiptCount: 1, unpricedQuantity: 3 });
   });
 
   it('classifies monthly movement as fast or slow with deterministic threshold logic', () => {
@@ -131,6 +138,36 @@ describe('analytics pure functions', () => {
       { month: '2026-01', quantity: 12, classification: 'fast_moving' },
       { month: '2026-02', quantity: 8, classification: 'slow_moving' },
     ]);
+  });
+
+  it('builds UTC-complete-month demand, excludes non-delivered orders, and assesses current policy', () => {
+    _resetOrderStore(false);
+    const product = { id: 'P1', sku: 'S-1', name: 'Part', category: 'glass' as const, unit: 'sheet', stock: 4, price: 99, threshold: 5, status: 'active' as const };
+    const makeSale = (referenceNumber: string, createdAt: string, orderStatus: 'delivered' | 'processing' | 'in_transit' | 'cancelled', quantity: number) => {
+      const order = createOrder({ referenceNumber, customerName: 'Customer', customerPhone: '1', deliveryAddress: 'x', deliveryDate: createdAt.slice(0, 10), items: [{ productId: 'P1', name: 'Part', quantity, unitPrice: 1 }] });
+      order.createdAt = createdAt;
+      order.orderStatus = orderStatus;
+    };
+    makeSale('F-0', '2026-04-10T00:00:00.000Z', 'delivered', 2);
+    makeSale('F-1', '2026-04-30T23:30:00-02:00', 'delivered', 2); // UTC May
+    makeSale('F-2', '2026-05-10T00:00:00.000Z', 'delivered', 3);
+    makeSale('F-3', '2026-06-10T00:00:00.000Z', 'delivered', 4);
+    makeSale('F-4', '2026-06-12T00:00:00.000Z', 'cancelled', 20);
+    makeSale('F-5', '2026-06-13T00:00:00.000Z', 'processing', 20);
+    makeSale('F-6', '2026-06-14T00:00:00.000Z', 'in_transit', 20);
+    const result = buildDemandForecast(listOrders(), [product], 3, new Date('2026-07-01T00:00:00.000Z'));
+    const forecast = result.products[0];
+    expect(forecast.history).toEqual([{ month: '2026-04', quantity: 2 }, { month: '2026-05', quantity: 5 }, { month: '2026-06', quantity: 4 }]);
+    expect(forecast.forecastQuantity).toBe(3.23);
+    expect(forecast.policyAssessment).toBe('below_reorder_point');
+    expect(forecast.recommendedOrderQuantity).toBe(5);
+  });
+
+  it('leaves forecasts unknown when fewer than three positive months exist', () => {
+    const product = { id: 'sparse', sku: 'S', name: 'Sparse', category: 'glass' as const, unit: 'sheet', stock: 1, price: 50, threshold: 2, status: 'active' as const };
+    const result = buildDemandForecast([], [product], 12, new Date('2026-07-01T00:00:00.000Z'));
+    expect(result.products[0]).toMatchObject({ positiveMonths: 0, forecastQuantity: null, status: 'insufficient_history', recommendedOrderQuantity: null, policyAssessment: 'insufficient_history' });
+    expect(result.products[0].history).toHaveLength(12);
   });
 
   it('forecasts the next quantity using simple exponential smoothing and validates alpha', () => {
@@ -184,9 +221,9 @@ describe('analytics routes', () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([
-      { materialType: 'aluminum', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 6, totalCost: 300 },
-      { materialType: 'glass', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 10, totalCost: 1000 },
-      { materialType: 'glass', supplier: 'Supplier B', transactionCount: 1, totalQuantity: 4, totalCost: 400 },
+      { materialType: 'aluminum', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 6, totalCost: 300, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+      { materialType: 'glass', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 10, totalCost: 1000, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+      { materialType: 'glass', supplier: 'Supplier B', transactionCount: 1, totalQuantity: 4, totalCost: 400, unpricedReceiptCount: 0, unpricedQuantity: 0 },
     ]);
   });
 
@@ -199,6 +236,16 @@ describe('analytics routes', () => {
     expect(await res.json()).toEqual([
       { month: '2026-02', quantity: 9, classification: 'fast_moving' },
     ]);
+  });
+
+  it('returns authenticated demand forecasts with complete response metadata', async () => {
+    const token = await login(app, STAFF);
+    const res = await app.request('/analytics/demand-forecast?historyMonths=3', { headers: { authorization: 'Bearer ' + token } });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { method: string; historyMonths: number; products: Array<{ history: unknown[]; status: string }> };
+    expect(body).toMatchObject({ method: 'simple_exponential_smoothing', alpha: 0.3, horizonMonths: 1, minimumPositiveMonths: 3, historyMonths: 3 });
+    expect(body.products.every((product) => product.history.length === 3)).toBe(true);
+    expect((await app.request('/analytics/demand-forecast?historyMonths=61', { headers: { authorization: 'Bearer ' + token } })).status).toBe(400);
   });
 
   it('returns SES forecast for a known series', async () => {

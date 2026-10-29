@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 // Last touched: 2026-09-22 (interactive date filter toolbar matching Reports & Sales)
 import { 
@@ -8,8 +8,6 @@ import {
   AlertTriangle,
   ArrowUpRight,
   PieChart,
-  TrendingDown,
-  Minus,
   Calendar,
   X,
   Banknote
@@ -17,7 +15,7 @@ import {
 
 import { useData } from '../components/DataContext';
 import { formatCurrency, checkStockStatus, formatDateInput } from '../utils/helpers';
-import { generateDemandForecast } from '../utils/aiHelpers';
+import { getDemandForecast, type DemandForecastProduct } from '../api';
 import { toast } from 'sonner';
 import { 
   AreaChart, 
@@ -43,6 +41,9 @@ export const Analytics: React.FC = () => {
   const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
+  const [forecast, setForecast] = useState<DemandForecastProduct[]>([]);
+  const [forecastLoading, setForecastLoading] = useState(true);
+  const [forecastError, setForecastError] = useState('');
 
   // Anchor date: latest date in orders (or fallback to current date)
   const latestOrderDate = useMemo(() => {
@@ -96,11 +97,14 @@ export const Analytics: React.FC = () => {
     });
   }, [orders, fromDate, toDate]);
 
-  // Order-history demand estimates; no AI service is claimed here.
-  const demandEstimates = useMemo(
-    () => generateDemandForecast(products, filteredOrders),
-    [products, filteredOrders]
-  );
+  useEffect(() => {
+    let active = true;
+    setForecastLoading(true); setForecastError('');
+    getDemandForecast(12).then(result => { if (active) setForecast(result.products) })
+      .catch(error => { if (active) setForecastError(error instanceof Error ? error.message : 'Could not load demand forecast.') })
+      .finally(() => { if (active) setForecastLoading(false) });
+    return () => { active = false };
+  }, []);
 
   // Calculate inventory stats
   const totalInventoryValue = products.reduce((sum, p) => sum + (p.stock * p.price), 0);
@@ -828,69 +832,21 @@ export const Analytics: React.FC = () => {
                 <Package className="w-5 h-5 text-violet-600" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Demand Estimates from Order History</h3>
-                <p className="text-xs text-slate-600">Average completed-order demand across the latest 3 calendar months</p>
+                <h3 className="text-lg font-bold text-slate-900">Historical Demand Forecast</h3>
+                <p className="text-xs text-slate-600">Delivered-order sales by complete UTC month; estimates require at least three positive months</p>
               </div>
             </div>
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
               <Clock className="w-3.5 h-3.5 text-violet-500" />
-              <span>Completed orders only</span>
+              <span>Inventory movement history</span>
             </div>
           </div>
           
-          {/* Demand Estimate Table */}
-          <div className="bg-white rounded-2xl border border-violet-100/80 overflow-hidden mb-6 shadow-2xs">
-            <table className="w-full">
-              <thead className="bg-violet-50/70 border-b border-violet-100/80">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-violet-700 uppercase tracking-wider">Product</th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-violet-700 uppercase tracking-wider">Current Stock</th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-violet-700 uppercase tracking-wider">Predicted Demand</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-violet-700 uppercase tracking-wider">Estimated Days of Stock</th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-violet-700 uppercase tracking-wider">Suggested Reorder (1.5-month target)</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-violet-700 uppercase tracking-wider">Trend</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-violet-700 uppercase tracking-wider">History</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#f1f5f9]">
-                {demandEstimates.slice(0, 6).map((estimate) => (
-                  <tr key={estimate.productId} className="hover:bg-violet-50/30 transition-colors">
-                    <td className="px-4 py-3 text-sm text-slate-900 font-medium">{estimate.productName}</td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{estimate.currentStock}</td>
-                    <td className="px-4 py-3 text-right text-sm text-slate-600">{estimate.predictedDemand}/mo</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                        estimate.daysUntilStockout === null ? 'bg-slate-100 text-slate-600' :
-                        estimate.daysUntilStockout < 7 ? 'bg-rose-100 text-rose-700' :
-                        estimate.daysUntilStockout < 14 ? 'bg-amber-100 text-amber-700' :
-                        'bg-emerald-100 text-emerald-700'
-                      }`}>
-                        {estimate.daysUntilStockout === null ? 'Unavailable' : `${estimate.daysUntilStockout} days`}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-violet-700">{estimate.recommendedReorderQty} units</td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        {estimate.trend === 'up' && <TrendingUp className="w-4 h-4 text-emerald-500" />}
-                        {estimate.trend === 'down' && <TrendingDown className="w-4 h-4 text-rose-500" />}
-                        {estimate.trend === 'stable' && <Minus className="w-4 h-4 text-slate-400" />}
-                        <span className="text-xs font-semibold capitalize text-slate-600">
-                          {estimate.trend === 'insufficient_history' ? 'Limited history' : estimate.trend}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center text-xs font-semibold text-slate-600">{estimate.historyMonths} months</td>
-                  </tr>
-                ))}
-                {demandEstimates.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
-                      No estimate available. At least three calendar months of completed orders and recent product sales are required.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="mb-6 overflow-hidden rounded-2xl border border-violet-100/80 bg-white shadow-2xs">
+            <div className="border-b border-violet-100 bg-violet-50/60 p-4 text-xs text-slate-600">
+              Backend historical forecast: simple exponential smoothing (α=0.3), next-month horizon, up to 12 complete UTC months of delivered-order sales. At least 3 positive-quantity months are required; sparse-history products are shown without an estimate.
+            </div>
+            {forecastLoading ? <p className="p-8 text-center text-sm text-slate-500">Loading historical forecast…</p> : forecastError ? <div role="alert" className="p-8 text-center text-sm text-rose-700">{forecastError}</div> : forecast.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No forecast products are available.</p> : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-violet-50/70"><tr><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Product</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Stock / reorder point</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Forecast next month</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Suggested order</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Coverage</th><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Policy assessment</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">History</th></tr></thead><tbody className="divide-y divide-slate-100">{forecast.map(item => <tr key={item.productId}><td className="px-4 py-3"><p className="text-sm font-semibold text-slate-800">{item.name}</p><p className="text-xs text-slate-500">{item.sku} · {item.category}</p></td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.currentStock} / {item.reorderPoint} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-semibold text-slate-700">{item.forecastQuantity === null ? 'Unavailable' : `${item.forecastQuantity} ${item.unit}`}</td><td className="px-4 py-3 text-right text-sm font-bold text-violet-700">{item.recommendedOrderQuantity === null ? '—' : `${item.recommendedOrderQuantity} ${item.unit}`}</td><td className="px-4 py-3 text-right text-sm text-slate-600">{item.stockCoverageDays === null ? '—' : `${item.stockCoverageDays} days`}</td><td className="px-4 py-3 text-sm capitalize text-slate-700">{item.policyAssessment.replaceAll('_', ' ')}</td><td className="px-4 py-3 text-right text-xs text-slate-600">{item.positiveMonths} positive months</td></tr>)}</tbody></table></div>}
           </div>
           
           {/* Rule-based stock alerts */}

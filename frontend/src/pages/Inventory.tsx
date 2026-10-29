@@ -38,6 +38,7 @@ export const Inventory: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [restockProductId, setRestockProductId] = useState<string | null>(null);
   const [restockQuantity, setRestockQuantity] = useState(0);
+  const [purchaseUnitCost, setPurchaseUnitCost] = useState('');
   const [formData, setFormData] = useState<Omit<Product, 'id'>>(initialProductForm);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
@@ -95,6 +96,7 @@ export const Inventory: React.FC = () => {
   const handleRestock = (productId: string) => {
     setRestockProductId(productId);
     setRestockQuantity(0);
+    setPurchaseUnitCost('');
     setIsRestockModalOpen(true);
   };
 
@@ -102,7 +104,7 @@ export const Inventory: React.FC = () => {
     e.preventDefault();
     if (restockProductId && restockQuantity > 0) {
       try {
-        await restockProduct(restockProductId, restockQuantity);
+        await restockProduct(restockProductId, restockQuantity, purchaseUnitCost === '' ? undefined : Number(purchaseUnitCost));
         toast.success(`Restocked ${restockQuantity} units successfully`);
         setIsRestockModalOpen(false);
       } catch (err) {
@@ -513,6 +515,11 @@ export const Inventory: React.FC = () => {
                     min="1"
                     required
                   />
+                </div>
+                <div>
+                  <label className="label">Purchase cost per unit (₱, optional)</label>
+                  <input type="number" value={purchaseUnitCost} onChange={(e) => setPurchaseUnitCost(e.target.value)} className="input" min="0" step="0.01" placeholder="Leave blank if unknown" />
+                  <p className="mt-1 text-xs text-slate-500">Recorded acquisition cost for this receipt; this is not the product selling price.</p>
                 </div>
                 
                 <div className="flex gap-3 pt-4">

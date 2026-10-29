@@ -33,6 +33,7 @@ import {
   Bell,
   Sliders,
   Banknote,
+  Users,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { useData } from './DataContext';
@@ -63,6 +64,10 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: 'ADMINISTRATION',
+    items: [{ icon: Users, label: 'Staff Management', path: '/admin/staff' }],
+  },
+  {
     label: 'FINANCES & ANALYTICS',
     items: [
       { icon: BarChart3, label: 'Analytics', path: '/analytics' },
@@ -75,7 +80,7 @@ const navGroups: NavGroup[] = [
 
 
 export function Layout({ children }: LayoutProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const { error, refresh } = useData();
   const navigate = useNavigate();
   const location = useLocation();
@@ -139,7 +144,7 @@ export function Layout({ children }: LayoutProps) {
 
           {/* Grouped Navigation */}
           <div className="px-4 py-6 space-y-6 flex-1">
-            {navGroups.map((group) => (
+            {navGroups.filter((group) => group.label !== 'ADMINISTRATION' || isAdmin).map((group) => (
               <div key={group.label} className="space-y-1.5">
                 {/* Group label */}
                 <p className="px-3 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400/80 mb-2">

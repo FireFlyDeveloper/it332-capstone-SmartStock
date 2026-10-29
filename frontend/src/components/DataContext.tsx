@@ -142,7 +142,7 @@ interface DataContextValue {
   addProduct: (product: Omit<Product, 'id'>) => Promise<void>
   updateProduct: (id: string, product: Partial<Product>) => Promise<void>
   deleteProduct: (id: string) => Promise<void>
-  restockProduct: (id: string, quantity: number) => Promise<void>
+  restockProduct: (id: string, quantity: number, unitCost?: number) => Promise<void>
   listProductMovements: (id: string) => Promise<StockMovement[]>
 
   // Order mutators
@@ -270,7 +270,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [products, refreshProducts])
 
   const restockProduct = useCallback(
-    async (id: string, quantity: number) => {
+    async (id: string, quantity: number, unitCost?: number) => {
       const target = products.find((p) => p.id === id)
       if (!target) return
       const newStock = target.stock + quantity
@@ -282,6 +282,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             quantity,
             referenceNo: `RESTOCK-${Date.now()}-${id.slice(0, 8)}`,
             supplier: 'Manual restock',
+            ...(unitCost !== undefined ? { unitCost } : {}),
           }),
         })
         setProducts((prev) => prev.map((p) => (p.id === id ? result.product : p)))

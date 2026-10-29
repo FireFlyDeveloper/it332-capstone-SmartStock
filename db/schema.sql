@@ -146,7 +146,54 @@ CREATE INDEX IF NOT EXISTS idx_products_material ON products (material_id);
 CREATE INDEX IF NOT EXISTS idx_products_active   ON products (is_active) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_products_category ON products (category);
 
--- -----------------------------------------------------------------
+-- Forward-only observed inventory/policy history; fresh product INSERTs create baselines.
+CREATE TABLE IF NOT EXISTS inventory_policy_history (
+    id BIGSERIAL PRIMARY KEY,
+    product_id VARCHAR(64) NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    event_type VARCHAR(40) NOT NULL CHECK (event_type IN (
+        'baseline', 'stock_changed', 'threshold_changed', 'stock_and_threshold_changed'
+    )),
+    stock_before INTEGER,
+    stock_after INTEGER NOT NULL,
+    threshold_before INTEGER,
+    threshold_after INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_policy_history_product_time
+    ON inventory_policy_history (product_id, recorded_at, id);
+
+CREATE OR REPLACE FUNCTION record_inventory_policy_history()
+RETURNS TRIGGER AS $$
+DECLARE
+    changed_stock BOOLEAN;
+    changed_threshold BOOLEAN;
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO inventory_policy_history
+            (product_id, event_type, stock_before, stock_after, threshold_before, threshold_after)
+        VALUES (NEW.id, 'baseline', NULL, NEW.stock, NULL, NEW.threshold);
+        RETURN NEW;
+    END IF;
+    changed_stock := OLD.stock IS DISTINCT FROM NEW.stock;
+    changed_threshold := OLD.threshold IS DISTINCT FROM NEW.threshold;
+    IF NOT changed_stock AND NOT changed_threshold THEN RETURN NEW; END IF;
+    INSERT INTO inventory_policy_history
+        (product_id, event_type, stock_before, stock_after, threshold_before, threshold_after)
+    VALUES (
+        NEW.id,
+        CASE WHEN changed_stock AND changed_threshold THEN 'stock_and_threshold_changed'
+             WHEN changed_stock THEN 'stock_changed' ELSE 'threshold_changed' END,
+        OLD.stock, NEW.stock, OLD.threshold, NEW.threshold
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS products_inventory_policy_history ON products;
+CREATE TRIGGER products_inventory_policy_history
+    AFTER INSERT OR UPDATE OF stock, threshold ON products
+    FOR EACH ROW EXECUTE FUNCTION record_inventory_policy_history();
+
 -- Suppliers
 -- -----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS suppliers (
@@ -198,6 +245,7 @@ CREATE TABLE IF NOT EXISTS stock_movements (
                                  'adjustment', 'return', 'damage', 'inbound', 'outbound')),
     type          VARCHAR(20) NOT NULL DEFAULT 'inbound',
     quantity      INTEGER     NOT NULL CHECK (quantity > 0),
+    unit_cost     NUMERIC(12,2) CHECK (unit_cost IS NULL OR unit_cost >= 0),
     reference_no  VARCHAR(64),                            -- PO# / DR# / etc.
     supplier_id   UUID        REFERENCES suppliers(id) ON DELETE SET NULL,
     supplier      VARCHAR(160),
@@ -206,6 +254,7 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     created_by    VARCHAR(160),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS unit_cost NUMERIC(12,2) CHECK (unit_cost IS NULL OR unit_cost >= 0);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_branch   ON stock_movements (branch_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_product  ON stock_movements (product_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_type     ON stock_movements (movement_type);

@@ -9,7 +9,7 @@ import { getPool } from './client.js';
 import { hasDatabaseUrl } from './config.js';
 import { setDbSyncActive } from './syncState.js';
 
-import type { Product, ProductCreateInput, ProductUpdateInput, StockMovement, StockMovementInput } from '../inventory/store.js';
+import type { InventoryPolicyEvent, Product, ProductCreateInput, ProductUpdateInput, StockMovement, StockMovementInput } from '../inventory/store.js';
 import type { Order, OrderCreateInput, OrderUpdateInput, PaymentStatus, RefundType } from '../orders/store.js';
 import type { Delivery, DeliveryCreateInput, DeliveryUpdateInput } from '../delivery/store.js';
 import type { UserRecord, Role } from '../auth/users.js';
@@ -37,12 +37,13 @@ export async function hydrateStoresFromDb(): Promise<void> {
   const pool = getPool();
   if (!pool) return;
 
-  const [{ rows: prodRows }, { rows: orderRows }, { rows: delivRows }, { rows: movRows }, { rows: userRows }] = await Promise.all([
+  const [{ rows: prodRows }, { rows: orderRows }, { rows: delivRows }, { rows: movRows }, { rows: userRows }, { rows: policyRows }] = await Promise.all([
     pool.query('SELECT * FROM products WHERE deleted_at IS NULL ORDER BY name ASC'),
     pool.query('SELECT * FROM orders WHERE deleted_at IS NULL ORDER BY order_no ASC'),
     pool.query('SELECT * FROM deliveries ORDER BY id ASC'),
     pool.query('SELECT * FROM stock_movements ORDER BY occurred_at DESC'),
     pool.query('SELECT * FROM users WHERE deleted_at IS NULL'),
+    pool.query('SELECT id, product_id, recorded_at, event_type, stock_before, stock_after, threshold_before, threshold_after FROM inventory_policy_history ORDER BY recorded_at, id'),
   ]);
   const [inventoryStore, orderStore, deliveryStore, usersStore] = await Promise.all([
     import('../inventory/store.js'),
@@ -51,6 +52,7 @@ export async function hydrateStoresFromDb(): Promise<void> {
     import('../auth/users.js'),
   ]);
   inventoryStore._hydrateInventory(prodRows.map(rowToProduct));
+  inventoryStore.hydrateInventoryPolicyHistory(policyRows.map(rowToInventoryPolicyEvent));
   orderStore._hydrateOrders(orderRows.map(rowToOrder));
   deliveryStore._hydrateDeliveries(delivRows.map(rowToDelivery));
   inventoryStore._hydrateMovements(movRows.map((r) => ({
@@ -62,8 +64,32 @@ export async function hydrateStoresFromDb(): Promise<void> {
     supplier: r.supplier ? String(r.supplier) : undefined,
     occurredAt: new Date(r.occurred_at as string | Date).toISOString(),
     createdBy: String(r.created_by),
+    unitCost: r.unit_cost === null || r.unit_cost === undefined ? undefined : Number(r.unit_cost),
   })));
   usersStore._hydrateUsers(userRows.map(rowToUser));
+}
+
+function rowToInventoryPolicyEvent(row: Record<string, unknown>): InventoryPolicyEvent {
+  return {
+    id: Number(row.id),
+    productId: String(row.product_id),
+    recordedAt: new Date(row.recorded_at as string | Date).toISOString(),
+    eventType: String(row.event_type) as InventoryPolicyEvent['eventType'],
+    stockBefore: row.stock_before === null ? null : Number(row.stock_before),
+    stockAfter: Number(row.stock_after),
+    thresholdBefore: row.threshold_before === null ? null : Number(row.threshold_before),
+    thresholdAfter: Number(row.threshold_after),
+  };
+}
+
+export async function listInventoryPolicyHistoryDb(): Promise<InventoryPolicyEvent[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  const { rows } = await pool.query(`
+    SELECT id, product_id, recorded_at, event_type, stock_before, stock_after, threshold_before, threshold_after
+    FROM inventory_policy_history ORDER BY recorded_at, id
+  `);
+  return rows.map(rowToInventoryPolicyEvent);
 }
 
 // ── PRODUCTS ────────────────────────────────────────────────────────
@@ -194,8 +220,8 @@ export async function recordInboundStockDb(
     `, [productId, input.quantity]);
 
     await pool.query(`
-      INSERT INTO stock_movements (id, product_id, type, movement_type, quantity, reference_no, supplier, occurred_at, created_by)
-      VALUES ($1, $2, 'inbound', 'inbound', $3, $4, $5, $6, $7)
+      INSERT INTO stock_movements (id, product_id, type, movement_type, quantity, reference_no, supplier, occurred_at, created_by, unit_cost)
+      VALUES ($1, $2, 'inbound', 'inbound', $3, $4, $5, $6, $7, $8)
     `, [
       movementId,
       productId,
@@ -204,6 +230,7 @@ export async function recordInboundStockDb(
       input.supplier?.trim() || null,
       now,
       input.createdBy?.trim() || 'system',
+      input.unitCost ?? null,
     ]);
 
     await pool.query('COMMIT');
@@ -212,6 +239,7 @@ export async function recordInboundStockDb(
       productId,
       type: 'inbound',
       quantity: input.quantity,
+      ...(input.unitCost !== undefined ? { unitCost: input.unitCost } : {}),
       referenceNo: input.referenceNo.trim().toUpperCase(),
       supplier: input.supplier?.trim() || undefined,
       occurredAt: now,
@@ -280,7 +308,7 @@ export async function listProductMovementsDb(productId: string): Promise<StockMo
   if (!pool) return [];
   const { rows } = await pool.query(`
     SELECT id, product_id as "productId", type, quantity, reference_no as "referenceNo",
-           supplier, occurred_at as "occurredAt", created_by as "createdBy"
+           supplier, occurred_at as "occurredAt", created_by as "createdBy", unit_cost
     FROM stock_movements
     WHERE product_id = $1
     ORDER BY occurred_at DESC
@@ -294,6 +322,7 @@ export async function listProductMovementsDb(productId: string): Promise<StockMo
     supplier: r.supplier ? String(r.supplier) : undefined,
     occurredAt: new Date(r.occurredAt as string | Date).toISOString(),
     createdBy: String(r.createdBy),
+    unitCost: r.unit_cost === null || r.unit_cost === undefined ? undefined : Number(r.unit_cost),
   }));
 }
 
@@ -302,7 +331,7 @@ export async function listAllMovementsDb(): Promise<StockMovement[]> {
   if (!pool) return [];
   const { rows } = await pool.query(`
     SELECT id, product_id as "productId", type, quantity, reference_no as "referenceNo",
-           supplier, occurred_at as "occurredAt", created_by as "createdBy"
+           supplier, occurred_at as "occurredAt", created_by as "createdBy", unit_cost
     FROM stock_movements
     ORDER BY occurred_at DESC
   `);
@@ -315,6 +344,7 @@ export async function listAllMovementsDb(): Promise<StockMovement[]> {
     supplier: r.supplier ? String(r.supplier) : undefined,
     occurredAt: new Date(r.occurredAt as string | Date).toISOString(),
     createdBy: String(r.createdBy),
+    unitCost: r.unit_cost === null || r.unit_cost === undefined ? undefined : Number(r.unit_cost),
   }));
 }
 
@@ -716,6 +746,13 @@ export async function findUserByIdDb(id: string): Promise<UserRecord | null> {
   return rows[0] ? rowToUser(rows[0]) : null;
 }
 
+export async function listStaffUsersDb(): Promise<UserRecord[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  const { rows } = await pool.query("SELECT * FROM users WHERE role = 'staff' AND deleted_at IS NULL ORDER BY created_at ASC");
+  return rows.map(rowToUser);
+}
+
 export async function createUserDb(input: {
   email: string;
   name: string;
@@ -744,21 +781,30 @@ export async function createUserDb(input: {
 
 export async function updateUserDb(
   id: string,
-  updates: { name?: string; passwordHash?: string }
+  updates: { email?: string; name?: string; passwordHash?: string }
 ): Promise<UserRecord | null> {
   const pool = getPool();
   if (!pool) return null;
   const current = await findUserByIdDb(id);
   if (!current) return null;
 
+  const nextEmail = updates.email !== undefined ? updates.email.trim().toLowerCase() : current.email;
+  const nextUsername = updates.email !== undefined ? nextEmail.split('@')[0] : current.email.split('@')[0];
   const nextName = updates.name !== undefined ? updates.name.trim() : current.name;
   const nextHash = updates.passwordHash !== undefined ? updates.passwordHash : current.passwordHash;
 
   const { rows } = await pool.query(`
-    UPDATE users SET full_name = $2, password_hash = $3, updated_at = NOW()
-    WHERE id = $1 AND deleted_at IS NULL
+    UPDATE users SET email = $2, username = $3, full_name = $4, password_hash = $5, updated_at = NOW()
+    WHERE id = $1 AND deleted_at IS NULL AND role = 'staff'
     RETURNING *
-  `, [id, nextName, nextHash]);
+  `, [id, nextEmail, nextUsername, nextName, nextHash]);
 
   return rows[0] ? rowToUser(rows[0]) : null;
+}
+
+export async function deleteUserDb(id: string): Promise<boolean> {
+  const pool = getPool();
+  if (!pool) return false;
+  const { rowCount } = await pool.query("UPDATE users SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND role = 'staff' AND deleted_at IS NULL", [id]);
+  return (rowCount ?? 0) > 0;
 }

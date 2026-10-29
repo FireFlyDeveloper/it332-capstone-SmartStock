@@ -13,7 +13,61 @@ import {
   deleteProductDb,
   recordInboundStockDb,
   recordOutboundStockDb,
+  listInventoryPolicyHistoryDb,
 } from '../db/postgresStore.js';
+
+export type InventoryPolicyEventType = 'baseline' | 'stock_changed' | 'threshold_changed' | 'stock_and_threshold_changed';
+export interface InventoryPolicyEvent {
+  id: string | number;
+  productId: string;
+  recordedAt: string;
+  eventType: InventoryPolicyEventType;
+  stockBefore: number | null;
+  stockAfter: number;
+  thresholdBefore: number | null;
+  thresholdAfter: number;
+}
+
+const policyHistory: InventoryPolicyEvent[] = [];
+let memoryEventId = 0;
+
+export function recordInventoryPolicyEvent(productId: string, before: Pick<Product, 'stock' | 'threshold'> | null, after: Pick<Product, 'stock' | 'threshold'>): void {
+  const stockChanged = before !== null && before.stock !== after.stock;
+  const thresholdChanged = before !== null && before.threshold !== after.threshold;
+  if (before && !stockChanged && !thresholdChanged) return;
+  const eventType: InventoryPolicyEventType = !before
+    ? 'baseline'
+    : stockChanged && thresholdChanged ? 'stock_and_threshold_changed'
+      : stockChanged ? 'stock_changed' : 'threshold_changed';
+  policyHistory.push({
+    id: `memory-${++memoryEventId}`,
+    productId,
+    recordedAt: new Date().toISOString(),
+    eventType,
+    stockBefore: before?.stock ?? null,
+    stockAfter: after.stock,
+    thresholdBefore: before?.threshold ?? null,
+    thresholdAfter: after.threshold,
+  });
+}
+
+export function listInventoryPolicyHistory(): InventoryPolicyEvent[] {
+  return policyHistory.map((event) => ({ ...event })).sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
+}
+
+export function resetInventoryPolicyHistory(): void {
+  policyHistory.length = 0;
+  memoryEventId = 0;
+}
+
+export function hydrateInventoryPolicyHistory(events: InventoryPolicyEvent[]): void {
+  resetInventoryPolicyHistory();
+  policyHistory.push(...events.map((event) => ({ ...event })));
+}
+
+export async function readInventoryPolicyHistory(): Promise<InventoryPolicyEvent[]> {
+  return isDbSyncActive() ? listInventoryPolicyHistoryDb() : listInventoryPolicyHistory();
+}
 
 export type ProductCategory = 'glass' | 'aluminum';
 export type ProductStatus = 'active' | 'discontinued';
@@ -51,6 +105,7 @@ export interface StockMovement {
   productId: string;
   type: StockMovementType;
   quantity: number;
+  unitCost?: number;
   referenceNo: string;
   supplier?: string;
   occurredAt: string;
@@ -59,6 +114,7 @@ export interface StockMovement {
 
 export interface StockMovementInput {
   quantity: number;
+  unitCost?: number;
   referenceNo: string;
   supplier?: string;
   occurredAt?: string;
@@ -112,6 +168,7 @@ export function createProduct(input: ProductCreateInput): Product {
   const record = toRecord({ ...input, sku });
   products.set(record.id, record);
   bySku.set(record.sku, record.id);
+  if (!isDbSyncActive()) recordInventoryPolicyEvent(record.id, null, record);
   if (isDbSyncActive()) {
     createProductDb({ ...record, id: record.id }).catch((err) => {
       console.error('[inventory/store] DB write error on createProduct:', err);
@@ -146,6 +203,7 @@ export function updateProduct(id: string, input: ProductUpdateInput): Product | 
     bySku.set(next.sku, id);
   }
   products.set(id, next);
+  if (!isDbSyncActive()) recordInventoryPolicyEvent(id, current, next);
   if (isDbSyncActive()) {
     updateProductDb(id, input).catch((err) => {
       console.error('[inventory/store] DB write error on updateProduct:', err);
@@ -163,6 +221,7 @@ function createMovement(productId: string, type: StockMovementType, input: Stock
     productId,
     type,
     quantity: input.quantity,
+    ...(type === 'inbound' && input.unitCost !== undefined ? { unitCost: input.unitCost } : {}),
     referenceNo,
     supplier: input.supplier?.trim() || undefined,
     occurredAt: input.occurredAt ?? new Date().toISOString(),
@@ -181,6 +240,7 @@ export function recordInboundStock(productId: string, input: StockMovementInput)
   const movement = createMovement(productId, 'inbound', input);
   const product: Product = { ...current, stock: current.stock + input.quantity };
   products.set(productId, product);
+  if (!isDbSyncActive()) recordInventoryPolicyEvent(productId, current, product);
   if (isDbSyncActive()) {
     recordInboundStockDb(productId, { ...input, id: movement.id }).catch((err) => {
       console.error('[inventory/store] DB write error on recordInboundStock:', err);
@@ -196,6 +256,7 @@ export function recordOutboundStock(productId: string, input: StockMovementInput
   const movement = createMovement(productId, 'outbound', input);
   const product: Product = { ...current, stock: current.stock - input.quantity };
   products.set(productId, product);
+  if (!isDbSyncActive()) recordInventoryPolicyEvent(productId, current, product);
   if (isDbSyncActive()) {
     recordOutboundStockDb(productId, { ...input, id: movement.id }).catch((err) => {
       console.error('[inventory/store] DB write error on recordOutboundStock:', err);
@@ -268,6 +329,7 @@ export function _resetInventoryStore(seed = true): void {
   movements.clear();
   movementIdsByProduct.clear();
   movementRefs.clear();
+  resetInventoryPolicyHistory();
   if (!seed) return;
   const seedProducts: Array<[string, ProductCreateInput]> = [
     ['PRD-001', { sku: 'GLS-CLR-6MM', name: 'Clear Glass 6mm', category: 'glass', unit: 'sheet', stock: 24, price: 1250, threshold: 8, description: 'Standard clear glass sheet' }],
@@ -278,5 +340,6 @@ export function _resetInventoryStore(seed = true): void {
     const product = { ...toRecord(input), id };
     products.set(id, product);
     bySku.set(product.sku, id);
+    recordInventoryPolicyEvent(id, null, product);
   }
 }

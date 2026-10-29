@@ -41,6 +41,17 @@ export async function exportReportPdf(report: ReportDto): Promise<Buffer> {
       doc.fontSize(10).text(`Year: ${report.year}`);
       doc.moveDown(0.5);
     }
+    if ('method' in report) {
+      if (report.report === 'forecast') {
+        doc.fontSize(9).text(`Method: ${report.method}; alpha: ${report.alpha}; horizon months: ${report.horizonMonths}; history months: ${report.historyMonths}; minimum positive months: ${report.minimumPositiveMonths}`);
+        doc.fontSize(9).text(`Assumption: ${report.assumption}`, { width: 500 });
+      } else {
+        doc.fontSize(9).text(`Tracking start: ${report.trackingStart ?? 'No history'}`);
+        doc.fontSize(9).text(`Method: ${report.method}`, { width: 500 });
+        doc.fontSize(9).text(`Assumption: ${report.assumption}`, { width: 500 });
+      }
+      doc.moveDown(0.5);
+    }
 
     doc.fontSize(12).text('Totals', { underline: true });
     doc.moveDown(0.25);

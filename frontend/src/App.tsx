@@ -12,6 +12,7 @@ import { Analytics } from './pages/Analytics'
 import { Reports } from './pages/Reports'
 import { DailySales } from './pages/DailySales'
 import ProfilePage from './pages/Profile'
+import { StaffManagement } from './pages/StaffManagement'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import './App.css'
@@ -154,6 +155,14 @@ function AppRoutes() {
                 <DailySales />
               </Layout>
             </DataProvider>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/staff"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <DataProvider><Layout><StaffManagement /></Layout></DataProvider>
           </ProtectedRoute>
         }
       />

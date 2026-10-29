@@ -220,6 +220,66 @@ describe('auth routes', () => {
     });
   });
 
+  describe('staff CRUD', () => {
+    it('requires an admin for every staff operation', async () => {
+      const anonymous = await app.request('/auth/staff');
+      expect(anonymous.status).toBe(401);
+      const staff = await seedUser(E2, 'staff-pass');
+      const token = signToken({ sub: staff.id, email: staff.email, role: staff.role });
+      const headers = { authorization: 'Bearer ' + token, 'content-type': 'application/json' };
+      expect((await app.request('/auth/staff', { headers })).status).toBe(403);
+      expect((await app.request('/auth/staff', { method: 'POST', headers, body: JSON.stringify({ email: E3, name: 'New staff', password: 'password123' }) })).status).toBe(403);
+      expect((await app.request('/auth/staff/' + staff.id, { method: 'PATCH', headers, body: JSON.stringify({ name: 'Updated' }) })).status).toBe(403);
+      expect((await app.request('/auth/staff/' + staff.id, { method: 'DELETE', headers })).status).toBe(403);
+    });
+
+    it('lists, creates, updates, and deletes sanitized staff records', async () => {
+      const headers = await adminAuthHeaders();
+      const staff = await seedUser(E1, 'staff-password');
+      const listed = await app.request('/auth/staff', { headers });
+      expect(listed.status).toBe(200);
+      expect((await listed.json()).staff).toEqual([expect.objectContaining({ id: staff.id, email: E1, name: 'jane', role: 'staff', createdAt: staff.createdAt })]);
+
+      const created = await app.request('/auth/staff', { method: 'POST', headers, body: JSON.stringify({ email: E3, name: '  Carol  ', password: 'password123' }) });
+      expect(created.status).toBe(201);
+      const createdJson = await created.json();
+      expect(createdJson.staff).toEqual(expect.objectContaining({ email: E3, name: 'Carol', role: 'staff' }));
+      expect(createdJson.staff).not.toHaveProperty('passwordHash');
+      expect(JSON.stringify(createdJson)).not.toContain('password123');
+      expect(created.headers.get('set-cookie')).toBeNull();
+      expect(createdJson).not.toHaveProperty('token');
+      const createdId = createdJson.staff.id as string;
+
+      const updated = await app.request('/auth/staff/' + createdId, { method: 'PATCH', headers, body: JSON.stringify({ email: E2, name: 'Robert', password: 'new-password' }) });
+      expect(updated.status).toBe(200);
+      expect((await updated.json()).staff).toEqual(expect.objectContaining({ id: createdId, email: E2, name: 'Robert', role: 'staff' }));
+      expect(findByEmail(E2)?.passwordHash).not.toBe('new-password');
+
+      const targetToken = signToken({ sub: staff.id, email: staff.email, role: staff.role });
+      expect((await app.request('/auth/me', { headers: { authorization: 'Bearer ' + targetToken } })).status).toBe(200);
+      expect((await app.request('/auth/' + 'staff/' + staff.id, { method: 'DELETE', headers })).status).toBe(200);
+      expect(findById(staff.id)).toBeNull();
+      expect((await app.request('/auth/me', { headers: { authorization: 'Bearer ' + targetToken } })).status).toBe(401);
+      expect((await app.request('/auth/staff/' + staff.id, { method: 'DELETE', headers })).status).toBe(404);
+    });
+
+    it('rejects invalid, duplicate, missing, and admin-target updates', async () => {
+      const headers = await adminAuthHeaders();
+      const staff = await seedUser(E1, 'staff-password');
+      const other = await seedUser(E2, 'staff-password');
+      const adminId = findByEmail(E4)!.id;
+      const invalidCreate = await app.request('/auth/staff', { method: 'POST', headers, body: JSON.stringify({ email: E3, name: ' ', password: 'short' }) });
+      expect(invalidCreate.status).toBe(400);
+      const duplicate = await app.request('/auth/staff', { method: 'POST', headers, body: JSON.stringify({ email: E1, name: 'Jane', password: 'password123' }) });
+      expect(duplicate.status).toBe(409);
+      expect((await app.request('/auth/staff/' + staff.id, { method: 'PATCH', headers, body: JSON.stringify({ email: E2 }) })).status).toBe(409);
+      expect((await app.request('/auth/staff/' + staff.id, { method: 'PATCH', headers, body: JSON.stringify({ role: 'admin' }) })).status).toBe(400);
+      expect((await app.request('/auth/staff/' + adminId, { method: 'PATCH', headers, body: JSON.stringify({ name: 'Nope' }) })).status).toBe(404);
+      expect((await app.request('/auth/staff/' + adminId, { method: 'DELETE', headers })).status).toBe(404);
+      expect(findById(other.id)).not.toBeNull();
+    });
+  });
+
   describe('user store helpers', () => {
     it('findByEmail is case-insensitive', async () => {
       await seedUser(E1, 'pass1234');

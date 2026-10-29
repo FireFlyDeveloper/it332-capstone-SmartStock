@@ -88,6 +88,63 @@ export interface ApiUser {
   email: string
   name: string
   role: ApiRole
+  createdAt?: string
+}
+
+export interface ManagedStaff {
+  id: string
+  email: string
+  name: string
+  role: 'staff'
+  createdAt: string
+}
+
+export interface DemandForecastProduct {
+  productId: string; sku: string; name: string; category: string; unit: string; currentStock: number; reorderPoint: number;
+  history: { month: string; quantity: number }[]; positiveMonths: number; forecastQuantity: number | null;
+  status: 'available' | 'insufficient_history'; stockCoverageDays: number | null; recommendedOrderQuantity: number | null;
+  policyAssessment: 'below_reorder_point' | 'below_forecast' | 'adequate' | 'insufficient_history'
+}
+export interface DemandForecastResponse {
+  method: 'simple_exponential_smoothing'; alpha: number; horizonMonths: number; minimumPositiveMonths: number; generatedAt: string;
+  products: DemandForecastProduct[]; summary: Record<string, number>
+}
+
+export interface PurchaseAnalyticsResponse {
+  year: number; totalSpend: number; pricedReceiptCount: number; unpricedReceiptCount: number; unpricedQuantity: number;
+  groups: { materialType: string; supplier: string; transactionCount: number; totalQuantity: number; totalCost: number; unpricedReceiptCount: number; unpricedQuantity: number }[]
+}
+
+export interface PolicyPerformanceProduct {
+  productId: string
+  sku: string
+  name: string
+  unit: string
+  currentStock: number
+  currentReorderPoint: number
+  trackingStartedAt: string | null
+  trackingDays: number
+  timeWeightedAverageOnHand: number | null
+  daysAtOrBelowReorderPoint: number
+  percentTimeAtOrBelowReorderPoint: number | null
+  outOfStockDays: number
+  reorderPointChanges: number
+  status: 'at_or_below_reorder_point' | 'above_reorder_point'
+}
+
+export interface PolicyPerformanceResponse {
+  generatedAt: string
+  trackingStart: string | null
+  method: string
+  assumption: string
+  totals: {
+    products: number
+    productsWithHistory: number
+    trackingDays: number
+    outOfStockProductCount: number
+    reorderPointChanges: number
+  }
+  rows: PolicyPerformanceProduct[]
 }
 
 export interface LoginResponse {
@@ -152,8 +209,31 @@ export function getAnalyticsSalesTrends(): Promise<AnalyticsSalesTrend[]> {
   return apiFetch<AnalyticsSalesTrend[]>('/analytics/sales-trends')
 }
 
-export function getAnalyticsPurchases(year: number): Promise<AnalyticsPurchaseMetric[]> {
-  return apiFetch<AnalyticsPurchaseMetric[]>(`/analytics/purchases?year=${encodeURIComponent(String(year))}`)
+export async function getAnalyticsPurchases(year: number): Promise<PurchaseAnalyticsResponse> {
+  const groups = await apiFetch<PurchaseAnalyticsResponse['groups']>(`/analytics/purchases?year=${encodeURIComponent(String(year))}`)
+  return { year, groups, totalSpend: groups.reduce((sum, row) => sum + row.totalCost, 0),
+    unpricedReceiptCount: groups.reduce((sum, row) => sum + row.unpricedReceiptCount, 0),
+    unpricedQuantity: groups.reduce((sum, row) => sum + row.unpricedQuantity, 0),
+    pricedReceiptCount: groups.reduce((sum, row) => sum + row.transactionCount - row.unpricedReceiptCount, 0) }
+}
+
+export function getDemandForecast(historyMonths = 12): Promise<DemandForecastResponse> {
+  return apiFetch<DemandForecastResponse>(`/analytics/demand-forecast?historyMonths=${encodeURIComponent(String(historyMonths))}`)
+}
+
+export function getPolicyPerformance(): Promise<PolicyPerformanceResponse> {
+  return apiFetch<PolicyPerformanceResponse>('/reports/policy-performance')
+}
+
+export async function getStaff(): Promise<ManagedStaff[]> { return (await apiFetch<{ staff: ManagedStaff[] }>('/auth/staff')).staff }
+export async function createStaff(input: { email: string; name: string; password: string }): Promise<ManagedStaff> {
+  return (await apiFetch<{ staff: ManagedStaff }>('/auth/staff', { method: 'POST', body: JSON.stringify(input) })).staff
+}
+export async function updateStaff(id: string, input: { email?: string; name?: string; password?: string }): Promise<ManagedStaff> {
+  return (await apiFetch<{ staff: ManagedStaff }>(`/auth/staff/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) })).staff
+}
+export function deleteStaff(id: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`/auth/staff/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
 export function getAnalyticsMovement(threshold: number): Promise<AnalyticsMovementMetric[]> {

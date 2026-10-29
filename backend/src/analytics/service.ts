@@ -13,6 +13,7 @@ import {
   buildMonthlySalesTrend,
   classifyMovement,
   simpleExponentialSmoothingForecast,
+  buildDemandForecast,
 } from './analytics.js';
 
 function listAllMovements() {
@@ -29,6 +30,10 @@ export function getAnnualPurchases(year = new Date().getUTCFullYear()) {
 
 export function getMovementClassification(threshold = 10) {
   return classifyMovement(buildMonthlyOutboundQuantities(listAllMovements()), threshold);
+}
+
+export function getDemandForecast(historyMonths = 12, now = new Date()) {
+  return buildDemandForecast(listOrders(), listProducts(), historyMonths, now);
 }
 
 export function getForecast(quantities: number[], alpha = 0.3) {

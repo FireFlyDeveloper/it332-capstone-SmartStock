@@ -12,6 +12,8 @@ import {
   buildInventoryEvaluationReport,
   buildMonthlySalesReport,
   buildSpendingReport,
+  buildDemandForecastReport,
+  buildPolicyPerformanceReport,
   type ReportDto,
 } from './service.js';
 import { exportReportPdf } from './exporters/pdf.js';
@@ -30,33 +32,35 @@ function parseYear(rawYear: string | undefined): { ok: true; year: number | unde
   return { ok: true, year };
 }
 
-type ExportType = 'sales' | 'purchases' | 'inventory' | 'spending';
+type ExportType = 'sales' | 'purchases' | 'inventory' | 'spending' | 'forecast' | 'policy-performance';
 type ExportFormat = 'pdf' | 'xlsx';
 
 function filenameFor(type: ExportType, format: ExportFormat): string {
   return `smartstock-${type}-report.${format}`;
 }
 
-function buildReportForType(type: ExportType): ReportDto {
+function buildReportForType(type: ExportType): ReportDto | Promise<ReportDto> {
   switch (type) {
     case 'sales': return buildMonthlySalesReport();
     case 'purchases': return buildAnnualPurchasesReport();
     case 'inventory': return buildInventoryEvaluationReport();
     case 'spending': return buildSpendingReport();
+    case 'forecast': return buildDemandForecastReport();
+    case 'policy-performance': return buildPolicyPerformanceReport();
   }
 }
 
 reportsRoutes.get('/export', requireRole('admin'), async (c) => {
   const type = c.req.query('type');
   const format = c.req.query('format');
-  if (type !== 'sales' && type !== 'purchases' && type !== 'inventory' && type !== 'spending') {
-    return c.json({ error: 'type must be one of sales, purchases, inventory, spending' }, 400);
+  if (type !== 'sales' && type !== 'purchases' && type !== 'inventory' && type !== 'spending' && type !== 'forecast' && type !== 'policy-performance') {
+    return c.json({ error: 'type must be one of sales, purchases, inventory, spending, forecast, policy-performance' }, 400);
   }
   if (format !== 'pdf' && format !== 'xlsx') return c.json({ error: 'format must be pdf or xlsx' }, 400);
 
   const buffer = format === 'pdf'
-    ? await exportReportPdf(buildReportForType(type))
-    : await exportReportXlsx(buildReportForType(type));
+    ? await exportReportPdf(await buildReportForType(type))
+    : await exportReportXlsx(await buildReportForType(type));
   const contentType = format === 'pdf'
     ? 'application/pdf'
     : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -77,6 +81,8 @@ reportsRoutes.get('/purchases/annual', (c) => {
 });
 
 reportsRoutes.get('/inventory/evaluation', (c) => c.json(buildInventoryEvaluationReport()));
+
+reportsRoutes.get('/policy-performance', async (c) => c.json(await buildPolicyPerformanceReport()));
 
 reportsRoutes.get('/spending', (c) => {
   const parsed = parseYear(c.req.query('year'));

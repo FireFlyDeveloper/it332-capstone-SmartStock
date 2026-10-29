@@ -13,11 +13,21 @@ import {
   getForecast,
   getMovementClassification,
   getSalesTrends,
+  getDemandForecast,
 } from './service.js';
 
 export const analyticsRoutes = new Hono();
 
 analyticsRoutes.use('*', requireAuth);
+
+analyticsRoutes.get('/demand-forecast', (c) => {
+  const raw = c.req.query('historyMonths');
+  const historyMonths = raw === undefined ? 12 : Number(raw);
+  if (!Number.isInteger(historyMonths) || historyMonths < 1 || historyMonths > 60) {
+    return c.json({ error: 'historyMonths must be an integer between 1 and 60' }, 400);
+  }
+  return c.json(getDemandForecast(historyMonths));
+});
 
 analyticsRoutes.get('/sales-trends', (c) => c.json(getSalesTrends()));
 

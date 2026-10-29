@@ -20,6 +20,8 @@ export interface AnnualPurchaseSummaryRow {
   transactionCount: number;
   totalQuantity: number;
   totalCost: number;
+  unpricedReceiptCount: number;
+  unpricedQuantity: number;
 }
 
 export interface MonthlyQuantity {
@@ -89,10 +91,17 @@ export function buildAnnualPurchaseSummary(
       transactionCount: 0,
       totalQuantity: 0,
       totalCost: 0,
+      unpricedReceiptCount: 0,
+      unpricedQuantity: 0,
     };
     current.transactionCount += 1;
     current.totalQuantity += movement.quantity;
-    current.totalCost = roundTwo(current.totalCost + movement.quantity * (product?.price ?? 0));
+    if (movement.unitCost === undefined) {
+      current.unpricedReceiptCount += 1;
+      current.unpricedQuantity += movement.quantity;
+    } else {
+      current.totalCost = roundTwo(current.totalCost + movement.quantity * movement.unitCost);
+    }
     byGroup.set(key, current);
   }
 
@@ -135,4 +144,68 @@ export function simpleExponentialSmoothingForecast(quantities: number[], alpha =
     forecast = alpha * quantities[index] + (1 - alpha) * forecast;
   }
   return { alpha, forecast: roundTwo(forecast) };
+}
+
+export type PolicyAssessment = 'below_reorder_point' | 'below_forecast' | 'adequate' | 'insufficient_history';
+export interface DemandForecastProduct {
+  productId: string; sku: string; name: string; category: Product['category']; unit: string;
+  currentStock: number; reorderPoint: number; history: MonthlyQuantity[]; positiveMonths: number;
+  forecastQuantity: number | null; status: 'available' | 'insufficient_history';
+  stockCoverageDays: number | null; recommendedOrderQuantity: number | null;
+  policyAssessment: PolicyAssessment;
+}
+export interface DemandForecastReport {
+  method: 'simple_exponential_smoothing'; alpha: number; horizonMonths: 1; minimumPositiveMonths: 3;
+  generatedAt: string; historyMonths: number; assumption: string;
+  products: DemandForecastProduct[];
+  summary: { productCount: number; availableForecasts: number; insufficientHistory: number;
+    belowReorderPoint: number; recommendedOrderQuantity: number };
+}
+
+function completeMonthKeys(now: Date, count: number): string[] {
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  return Array.from({ length: count }, (_, index) => {
+    const month = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - count + index, 1));
+    return month.toISOString().slice(0, 7);
+  });
+}
+
+export function buildDemandForecast(orders: Order[], products: Product[], historyMonths = 12, now = new Date()): DemandForecastReport {
+  if (!Number.isInteger(historyMonths) || historyMonths < 1 || historyMonths > 60) throw new Error('historyMonths must be an integer between 1 and 60');
+  const months = completeMonthKeys(now, historyMonths);
+  const quantities = new Map<string, Map<string, number>>();
+  for (const product of products) quantities.set(product.id, new Map(months.map((month) => [month, 0])));
+  for (const order of orders) {
+    if (order.orderStatus !== 'delivered') continue;
+    const month = monthKey(order.createdAt);
+    if (!months.includes(month)) continue;
+    for (const item of order.items) {
+      const byMonth = quantities.get(item.productId);
+      if (byMonth?.has(month)) byMonth.set(month, (byMonth.get(month) ?? 0) + item.quantity);
+    }
+  }
+  const reportProducts = products.map((product): DemandForecastProduct => {
+    const history = months.map((month) => ({ month, quantity: quantities.get(product.id)?.get(month) ?? 0 }));
+    const positiveMonths = history.filter((row) => row.quantity > 0).length;
+    const available = positiveMonths >= 3;
+    const forecastQuantity = available ? simpleExponentialSmoothingForecast(history.map((row) => row.quantity)).forecast : null;
+    const coverage = forecastQuantity !== null && forecastQuantity > 0 ? Math.round(product.stock / forecastQuantity * 30) : null;
+    const recommended = forecastQuantity === null ? null : Math.max(0, Math.ceil(forecastQuantity + product.threshold - product.stock));
+    const policyAssessment: PolicyAssessment = !available ? 'insufficient_history'
+      : product.stock <= product.threshold ? 'below_reorder_point'
+      : product.stock < (forecastQuantity ?? 0) ? 'below_forecast' : 'adequate';
+    return { productId: product.id, sku: product.sku, name: product.name, category: product.category, unit: product.unit,
+      currentStock: product.stock, reorderPoint: product.threshold, history, positiveMonths, forecastQuantity,
+      status: available ? 'available' : 'insufficient_history', stockCoverageDays: coverage,
+      recommendedOrderQuantity: recommended, policyAssessment };
+  });
+  return {
+    method: 'simple_exponential_smoothing', alpha: 0.3, horizonMonths: 1, minimumPositiveMonths: 3,
+    generatedAt: now.toISOString(), historyMonths, assumption: 'Current-policy assessment only; suggested order quantity targets one forecast month plus the current reorder point. No historical stockout, lead-time, or holding-cost effects are inferred.',
+    products: reportProducts,
+    summary: { productCount: products.length, availableForecasts: reportProducts.filter((p) => p.status === 'available').length,
+      insufficientHistory: reportProducts.filter((p) => p.status === 'insufficient_history').length,
+      belowReorderPoint: reportProducts.filter((p) => p.policyAssessment === 'below_reorder_point').length,
+      recommendedOrderQuantity: reportProducts.reduce((sum, p) => sum + (p.recommendedOrderQuantity ?? 0), 0) },
+  };
 }

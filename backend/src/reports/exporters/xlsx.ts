@@ -31,6 +31,21 @@ export async function exportReportXlsx(report: ReportDto): Promise<Buffer> {
   worksheet.addRow(['SMARTSTOCK']);
   worksheet.addRow([titleFor(report)]);
   if ('year' in report) worksheet.addRow(['Year', report.year]);
+  if ('method' in report) {
+    if (report.report === 'forecast') {
+      worksheet.addRow(['Method', report.method]);
+      worksheet.addRow(['Alpha', report.alpha]);
+      worksheet.addRow(['Horizon months', report.horizonMonths]);
+      worksheet.addRow(['History months', report.historyMonths]);
+      worksheet.addRow(['Minimum positive months', report.minimumPositiveMonths]);
+      worksheet.addRow(['Assumption', report.assumption]);
+    } else {
+      worksheet.addRow(['Tracking start', report.trackingStart ?? 'No history']);
+      worksheet.addRow(['Generated at', report.generatedAt]);
+      worksheet.addRow(['Method', report.method]);
+      worksheet.addRow(['Assumption', report.assumption]);
+    }
+  }
   worksheet.addRow([]);
   worksheet.addRow(['Totals']);
   for (const [key, value] of Object.entries(report.totals)) {
