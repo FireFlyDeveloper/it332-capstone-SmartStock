@@ -41,6 +41,15 @@ export const DeliveryPage: React.FC = () => {
     });
   }, [deliveries, filterStatus]);
 
+  const unmatchedOutForDeliveryOrders = useMemo(() => {
+    const linkedOrderIds = new Set(deliveries.map((delivery) => delivery.orderId));
+    return orders.filter((order) =>
+      order.orderType === 'delivery' &&
+      order.orderStatus === 'out_for_delivery' &&
+      !linkedOrderIds.has(order.id),
+    );
+  }, [deliveries, orders]);
+
   const getNextStatus = (currentStatus: Delivery['status']): Delivery['status'] | null => {
     const flow: Record<Delivery['status'], Delivery['status'] | null> = {
       pending: 'assigned',
@@ -139,7 +148,13 @@ export const DeliveryPage: React.FC = () => {
     { key: 'delivered', label: 'Delivered' },
   ];
 
-  const isEmpty = !deliveriesLoading && deliveries.length === 0;
+  const hasNoDeliveries =
+    !deliveriesLoading &&
+    !deliveriesError &&
+    deliveries.length === 0 &&
+    !ordersLoading &&
+    !ordersError &&
+    unmatchedOutForDeliveryOrders.length === 0;
 
   if (deliveriesLoading) {
     return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading delivery data from backend…</div>;
@@ -193,6 +208,42 @@ export const DeliveryPage: React.FC = () => {
             <p className="text-2xl font-black text-[#10b981] mt-1">{deliveries.filter(d => d.status === 'delivered').length}</p>
           </div>
         </div>
+
+        {!ordersLoading && !ordersError && unmatchedOutForDeliveryOrders.length > 0 && (
+          <section aria-labelledby="unmatched-delivery-orders" className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 id="unmatched-delivery-orders" className="text-sm font-extrabold text-amber-950">
+                  Orders out for delivery without a delivery record
+                </h2>
+                <p className="mt-1 max-w-3xl text-xs leading-relaxed text-amber-900">
+                  These orders are marked out for delivery in backend order data, but have no matching record from the deliveries endpoint. They are listed here for visibility; driver and truck updates are unavailable until a delivery record exists.
+                </p>
+              </div>
+              <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-bold text-amber-900">
+                {unmatchedOutForDeliveryOrders.length}
+              </span>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {unmatchedOutForDeliveryOrders.map((order) => (
+                <article key={order.id} className="rounded-2xl border border-amber-200 bg-white p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-extrabold text-slate-900">{order.referenceNumber || order.id}</p>
+                      <p className="mt-1 truncate text-xs text-slate-600">{order.customerName}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-900">
+                      Out for delivery
+                    </span>
+                  </div>
+                  <p className="mt-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Destination</p>
+                  <p className="text-xs font-medium text-slate-700">{order.address?.trim() || 'Address not provided'}</p>
+                  <p className="mt-2 text-[10px] text-slate-500">Delivery date: {order.date || 'Not provided'}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Filter */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -374,14 +425,20 @@ export const DeliveryPage: React.FC = () => {
             );
           })}
 
-          {filteredDeliveries.length === 0 && !isEmpty && (
+          {filteredDeliveries.length === 0 && deliveries.length > 0 && (
             <div className="col-span-full p-12 text-center">
               <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500">No deliveries match the current filter.</p>
             </div>
           )}
 
-          {isEmpty && (
+          {deliveries.length === 0 && !deliveriesLoading && !ordersLoading && !ordersError && unmatchedOutForDeliveryOrders.length > 0 && (
+            <div role="status" className="col-span-full rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center text-sm text-amber-900">
+              No delivery records are linked to these orders yet. The backend orders are listed above; delivery status controls require a matching delivery record.
+            </div>
+          )}
+
+          {hasNoDeliveries && (
             <div className="col-span-full p-12 text-center">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
                 <Truck className="h-8 w-8 text-amber-600" />
