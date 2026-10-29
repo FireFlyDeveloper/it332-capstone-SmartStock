@@ -7,7 +7,7 @@ export function useInfiniteScroll<T>(items: readonly T[], batchSize = DEFAULT_BA
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     setVisibleCount(batchSize)
-  }, [batchSize, items.length])
+  }, [batchSize, items])
 
   useEffect(() => {
     const sentinel = sentinelRef.current

@@ -130,6 +130,8 @@ describe('inventory PostgreSQL movement transactions', () => {
     const cancelled = await cancelOrderDb('order-1');
 
     expect(cancelled?.order).toMatchObject({ orderStatus: 'cancelled', paidAmount: 0, refundedAmount: 90, paymentStatus: 'refunded' });
+    expect(cancelled?.products).toMatchObject([{ id: 'product-1', stock: 14 }]);
+    expect(cancelled?.movements).toMatchObject([{ productId: 'product-1', type: 'inbound', quantity: 2, createdBy: 'order_cancel' }]);
     expect(database.query.mock.calls.map(([sql]) => String(sql).trim().split(/\s+/)[0])).toEqual([
       'BEGIN', 'SELECT', 'UPDATE', 'INSERT', 'UPDATE', 'COMMIT',
     ]);

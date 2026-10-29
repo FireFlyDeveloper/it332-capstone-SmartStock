@@ -11,6 +11,10 @@ import { authRoutes } from '../auth/routes.js';
 import { createUser, _resetUserStore, type Role } from '../auth/users.js';
 import { hashPassword } from '../auth/hash.js';
 import { orderRoutes } from './routes.js';
+import { dailySalesRoutes } from '../dailySales/routes.js';
+import { inventoryRoutes } from '../inventory/routes.js';
+import { analyticsRoutes } from '../analytics/routes.js';
+import { reportsRoutes } from '../reports/routes.js';
 import { _resetOrderStore, listOrders } from './store.js';
 import { _resetInventoryStore, findProductById } from '../inventory/store.js';
 
@@ -18,6 +22,10 @@ function buildApp() {
   const app = new Hono();
   app.route('/auth', authRoutes);
   app.route('/orders', orderRoutes);
+  app.route('/daily-sales', dailySalesRoutes);
+  app.route('/products', inventoryRoutes);
+  app.route('/analytics', analyticsRoutes);
+  app.route('/reports', reportsRoutes);
   return app;
 }
 
@@ -212,6 +220,71 @@ describe('order routes', () => {
     const repeatedResult = await repeated.json() as { order: { refundedAmount: number } };
     expect(repeatedResult.order.refundedAmount).toBe(order.paidAmount);
     expect(findProductById(order.items[0].productId)!.stock).toBe(beforeStock + order.items[0].quantity);
+  });
+
+  it('reflects cancellation refunds in Daily Sales and removes cancelled revenue while restoring product stock', async () => {
+    _resetOrderStore(false);
+    _resetInventoryStore();
+    const token = await login(app, STAFF);
+    const beforeStock = findProductById('PRD-001')!.stock;
+    const beforeFrameStock = findProductById('PRD-002')!.stock;
+
+    const createdResponse = await app.request('/orders', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify(validOrderPayload),
+    });
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json() as { id: string; createdAt: string; paidAmount: number };
+    expect(created.paidAmount).toBe(1000);
+    expect(findProductById('PRD-001')!.stock).toBe(beforeStock - 2);
+
+    const cancelResponse = await app.request(`/orders/${created.id}/cancel`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(cancelResponse.status).toBe(200);
+
+    const productsResponse = await app.request('/products', {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(productsResponse.status).toBe(200);
+    const products = await productsResponse.json() as Array<{ id: string; stock: number }>;
+    expect(products.find((product) => product.id === 'PRD-001')?.stock).toBe(beforeStock);
+    expect(products.find((product) => product.id === 'PRD-002')?.stock).toBe(beforeFrameStock);
+
+    const ordersResponse = await app.request('/orders', {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(ordersResponse.status).toBe(200);
+    const orders = await ordersResponse.json() as Array<{ id: string; paidAmount: number; refundedAmount: number; orderStatus: string }>;
+    expect(orders).toMatchObject([{ id: created.id, paidAmount: 0, refundedAmount: 1000, orderStatus: 'cancelled' }]);
+
+    const salesResponse = await app.request(`/daily-sales?date=${created.createdAt.slice(0, 10)}`, {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(salesResponse.status).toBe(200);
+    const sales = await salesResponse.json() as {
+      orderCount: number; cancelledOrderCount: number; grossSales: number;
+      collectedAmount: number; refundsAmount: number; netCollectedAmount: number;
+      orders: Array<{ paidAmount: number; refundedAmount: number; paymentStatus: string; orderStatus: string }>;
+    };
+    expect(sales).toMatchObject({
+      orderCount: 0,
+      cancelledOrderCount: 1,
+      grossSales: 0,
+      collectedAmount: 1000,
+      refundsAmount: 1000,
+      netCollectedAmount: 0,
+      orders: [{ paidAmount: 0, refundedAmount: 1000, paymentStatus: 'refunded', orderStatus: 'cancelled' }],
+    });
+
+    const reportResponse = await app.request('/reports/sales/monthly', {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(reportResponse.status).toBe(200);
+    const report = await reportResponse.json() as { totals: { transactionCount: number; grossSales: number } };
+    expect(report.totals).toMatchObject({ transactionCount: 0, grossSales: 0 });
   });
 
   it('processes refunds and updates refund fields and payment status', async () => {
