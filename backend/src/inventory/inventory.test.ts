@@ -129,6 +129,45 @@ describe('product inventory routes', () => {
     expect(await remove.json()).toEqual({ ok: true });
   });
 
+  it('accepts an empty optional description when creating a product', async () => {
+    const token = await login(app, ADMIN);
+    const res = await app.request('/products', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sku: 'ALU-EMPTY-DESC',
+        name: 'Aluminum',
+        category: 'aluminum',
+        unit: 'sqm',
+        stock: 0,
+        price: 100,
+        threshold: 10,
+        status: 'active',
+        description: '',
+      }),
+    });
+    expect(res.status).toBe(201);
+    const created = (await res.json()) as { id: string; sku: string; description?: string };
+    expect(created).toMatchObject({ sku: 'ALU-EMPTY-DESC' });
+    expect(created.description).toBeUndefined();
+
+    const setDescription = await app.request('/products/' + created.id, {
+      method: 'PUT',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ description: 'Temporary description' }),
+    });
+    expect(setDescription.status).toBe(200);
+
+    const clearDescription = await app.request('/products/' + created.id, {
+      method: 'PUT',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ description: '' }),
+    });
+    expect(clearDescription.status).toBe(200);
+    const cleared = (await clearDescription.json()) as { description?: string };
+    expect(cleared.description).toBeUndefined();
+  });
+
   it('blocks staff from mutating products', async () => {
     const token = await login(app, STAFF);
     const res = await app.request('/products', {

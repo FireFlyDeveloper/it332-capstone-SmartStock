@@ -43,6 +43,14 @@ function readString(value: unknown, field: string, required = true): ServiceResu
   return { ok: true, data: value.trim() };
 }
 
+function readOptionalText(value: unknown, field: string): ServiceResult<string | undefined> {
+  if (value === undefined || value === null) return { ok: true, data: undefined };
+  if (typeof value !== 'string') {
+    return { ok: false, status: 400, error: `${field} must be a string` };
+  }
+  return { ok: true, data: value.trim() };
+}
+
 function readNumber(value: unknown, field: string, required = true): ServiceResult<number | undefined> {
   if (value === undefined || value === null) {
     return required ? { ok: false, status: 400, error: `${field} is required` } : { ok: true, data: undefined };
@@ -97,7 +105,7 @@ function parseCreate(body: unknown): ServiceResult<ProductCreateInput> {
   if (!threshold.ok) return threshold;
   const status = readStatus(input.status, false);
   if (!status.ok) return status;
-  const description = readString(input.description, 'description', false);
+  const description = readOptionalText(input.description, 'description');
   if (!description.ok) return description;
 
   if (
@@ -135,7 +143,9 @@ function parseUpdate(body: unknown): ServiceResult<ProductUpdateInput> {
 
   for (const field of ['sku', 'name', 'unit', 'description'] as const) {
     if (field in input) {
-      const parsed = readString(input[field], field, false);
+      const parsed = field === 'description'
+        ? readOptionalText(input[field], field)
+        : readString(input[field], field, false);
       if (!parsed.ok) return parsed;
       data[field] = parsed.data;
     }
