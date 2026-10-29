@@ -41,7 +41,12 @@ export default defineConfig(({ mode }) => {
       proxy: Object.fromEntries(
         ['/auth', '/products', '/inventory', '/orders', '/deliveries', '/tracking', '/analytics', '/reports', '/health'].map((path) => [
           path,
-          { target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:3000', changeOrigin: true },
+          {
+            target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:3000',
+            changeOrigin: true,
+            // Let direct SPA navigations through; API fetches use Accept: */*.
+            bypass: (req) => req.headers.accept?.includes('text/html') ? req.url : undefined,
+          },
         ]),
       ),
     },

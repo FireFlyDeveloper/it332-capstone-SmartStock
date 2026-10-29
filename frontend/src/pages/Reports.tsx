@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 
 import { useData } from '../components/DataContext';
+import type { Order } from '../types';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
@@ -94,10 +95,10 @@ const ReportCard: React.FC<ReportCardProps> = ({
 
 export const Reports: React.FC = () => {
   const navigate = useNavigate();
-  const { products, orders } = useData();
+  const { products, orders, productsLoading, productsError, ordersLoading, ordersError, refreshProducts, refreshOrders } = useData();
   const { canExportReports } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending' | 'cancelled'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | Order['orderStatus']>('all');
   const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
@@ -188,11 +189,11 @@ export const Reports: React.FC = () => {
     });
   }, [orders, fromDate, toDate]);
 
-  // Build dynamic transaction history from filtered orders
+  // Keep the backend order identity and status; this is an order history, not a transaction ledger.
   const transactionHistory = useMemo(() => {
-    return filteredOrders.map((order, i) => ({
-      id: `TXN-${String(i + 1).padStart(3, '0')}`,
-      type: 'sale' as const,
+    return filteredOrders.map((order) => ({
+      id: order.id,
+      type: 'order' as const,
       reference: order.referenceNumber,
       items: order.items.map(item => ({
         name: item.productName,
@@ -201,8 +202,7 @@ export const Reports: React.FC = () => {
       })),
       total: order.total,
       date: order.date,
-      status: (order.orderStatus === 'completed' ? 'completed' : 
-               order.orderStatus === 'cancelled' ? 'cancelled' : 'pending') as 'completed' | 'pending' | 'cancelled',
+      status: order.orderStatus,
     }));
   }, [filteredOrders]);
 
@@ -289,7 +289,7 @@ export const Reports: React.FC = () => {
 
   const handleExportCSV = () => {
     if (filteredTransactions.length === 0) {
-      toast.warning('No transactions found to export for the selected date range.');
+      toast.warning('No orders found to export for the selected date range.');
       return;
     }
     const rows = filteredTransactions.map((txn) => ({
@@ -302,7 +302,7 @@ export const Reports: React.FC = () => {
       status: txn.status,
     }));
     const columns: { key: keyof typeof rows[0]; header: string }[] = [
-      { key: 'id', header: 'Transaction ID' },
+      { key: 'id', header: 'Order ID' },
       { key: 'type', header: 'Type' },
       { key: 'reference', header: 'Reference' },
       { key: 'items', header: 'Items' },
@@ -313,12 +313,12 @@ export const Reports: React.FC = () => {
     const csvData = toCSV(rows, columns);
     const dateRangeSlug = fromDate || toDate ? `_${fromDate || 'start'}_to_${toDate || 'end'}` : '_all-time';
     downloadCSV(`smartstock-${exportType}-report${dateRangeSlug}.csv`, csvData);
-    toast.success(`Exported ${filteredTransactions.length} transaction records to CSV.`);
+    toast.success(`Exported ${filteredTransactions.length} order records to CSV.`);
   };
 
-  const getTransactionIcon = (type: 'sale' | 'restock' | 'return' | 'adjustment') => {
+  const getTransactionIcon = (type: 'order' | 'restock' | 'return' | 'adjustment') => {
     switch (type) {
-      case 'sale': return ShoppingCart;
+      case 'order': return ShoppingCart;
       case 'restock': return Package;
       case 'return': return RotateCcw;
       case 'adjustment': return Settings;
@@ -326,15 +326,34 @@ export const Reports: React.FC = () => {
     }
   };
 
-  const getTransactionColor = (type: 'sale' | 'restock' | 'return' | 'adjustment') => {
+  const getTransactionColor = (type: 'order' | 'restock' | 'return' | 'adjustment') => {
     switch (type) {
-      case 'sale': return 'bg-emerald-50 text-[#10b981]';
+      case 'order': return 'bg-emerald-50 text-[#10b981]';
       case 'restock': return 'bg-indigo-50 text-[#4f46e5]';
       case 'return': return 'bg-rose-50 text-[#f43f5e]';
       case 'adjustment': return 'bg-amber-50 text-[#f59e0b]';
       default: return 'bg-slate-100 text-slate-600';
     }
   };
+
+  if (productsLoading || ordersLoading) {
+    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading report source data from backend…</div>;
+  }
+  const sourceError = [productsError && `Products: ${productsError}`, ordersError && `Orders: ${ordersError}`].filter(Boolean).join('; ');
+  if (sourceError) {
+    return (
+      <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
+        <p className="font-semibold text-rose-700">Could not load report source data: {sourceError}</p>
+        <button
+          type="button"
+          onClick={() => void Promise.allSettled([refreshProducts(), refreshOrders()])}
+          className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
       <div className="space-y-6 animate-fadeIn">
@@ -461,8 +480,11 @@ export const Reports: React.FC = () => {
                   className="rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:border-[#4f46e5] focus:outline-none shadow-2xs"
                 >
                   <option value="all">All Statuses</option>
-                  <option value="completed">Completed</option>
                   <option value="pending">Pending</option>
+                  <option value="ready_for_pickup">Ready for Pickup</option>
+                  <option value="packed">Packed</option>
+                  <option value="out_for_delivery">Out for Delivery</option>
+                  <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
               </div>
@@ -711,18 +733,18 @@ export const Reports: React.FC = () => {
           </div>
         </div>
 
-        {/* Transaction History */}
+        {/* Backend Order History */}
         <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] overflow-hidden">
           <div className="p-6 border-b border-[#f1f5f9]">
-            <h3 className="text-lg font-bold text-slate-900">Transaction History</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Recent financial transactions</p>
+            <h3 className="text-lg font-bold text-slate-900">Order History</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Orders returned by the backend for the selected period</p>
           </div>
           
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50/80 border-b border-[#f1f5f9]">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">ID</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Order ID</th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Reference</th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Items</th>
@@ -770,7 +792,7 @@ export const Reports: React.FC = () => {
           {filteredTransactions.length === 0 && (
             <div className="p-12 text-center">
               <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500 font-medium text-sm">No transactions found</p>
+              <p className="text-slate-500 font-medium text-sm">No orders found</p>
             </div>
           )}
         </div>

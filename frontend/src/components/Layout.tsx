@@ -287,7 +287,7 @@ export function Layout({ children }: LayoutProps) {
                       className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors flex items-center gap-2.5"
                     >
                       <Bell className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Push Notifications</span>
+                      <span>Browser Notifications</span>
                     </button>
                     <button
                       type="button"

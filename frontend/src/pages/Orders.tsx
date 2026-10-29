@@ -61,7 +61,7 @@ const emptyForm = {
   contact: '',
   address: '',
   deliveryOption: 'delivery' as 'delivery' | 'pickup',
-  paymentStatus: 'pending' as Order['paymentStatus'],
+  paidAmount: 0,
   items: [] as OrderItem[],
   total: 0,
   notes: '',
@@ -69,7 +69,7 @@ const emptyForm = {
 
 // ── Component ──────────────────────────────────────────────────────
 export const Orders: React.FC = () => {
-  const { products, orders, addOrder, updateOrder, processPayment, processRefund, loading } = useData();
+  const { products, orders, addOrder, updateOrder, processPayment, processRefund, productsLoading, productsError, ordersLoading, ordersError, refreshProducts, refreshOrders } = useData();
 
   // ── Filter / search / modal state ────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
@@ -211,7 +211,7 @@ export const Orders: React.FC = () => {
       contact: order.contact,
       address: order.address,
       deliveryOption: order.orderType,
-      paymentStatus: order.paymentStatus,
+      paidAmount: order.paidAmount,
       items: [...order.items],
       total: order.total,
       notes: order.notes || '',
@@ -292,6 +292,10 @@ export const Orders: React.FC = () => {
     if (form.items.length === 0) { toast.error('Add at least one item'); return; }
     if (!form.customerName.trim()) { toast.error('Enter customer name'); return; }
     if (!form.contact.trim()) { toast.error('Enter contact number'); return; }
+    if (modalMode === 'create' && (!Number.isFinite(form.paidAmount) || form.paidAmount < 0 || form.paidAmount > form.total)) {
+      toast.error('Initial payment must be between zero and the order total');
+      return;
+    }
 
     setSavingOrder(true);
     try {
@@ -309,10 +313,7 @@ export const Orders: React.FC = () => {
           address: form.address,
           items: form.items,
           total: form.total,
-          paidAmount:
-            form.paymentStatus === 'paid' ? form.total :
-            form.paymentStatus === 'partial' ? Math.round(form.total * 0.5) : 0,
-          paymentStatus: form.paymentStatus,
+          paidAmount: form.paidAmount,
           orderStatus: form.deliveryOption === 'pickup' ? 'ready_for_pickup' : 'packed',
           deliveryStatus: form.deliveryOption === 'delivery' ? 'scheduled' : 'not_required',
           orderType: form.deliveryOption,
@@ -411,7 +412,7 @@ export const Orders: React.FC = () => {
     { key: 'cancelled', label: 'Cancelled' },
   ];
 
-  const isEmpty = !loading && orders.length === 0;
+  const isEmpty = !ordersLoading && orders.length === 0;
 
   // ── View modal item search ───────────────────────────────────────
   const filteredViewItems = useMemo(() => {
@@ -427,6 +428,25 @@ export const Orders: React.FC = () => {
     const q = productSearch.toLowerCase();
     return products.filter(p => p.status === 'active' && p.name.toLowerCase().includes(q));
   }, [products, productSearch]);
+
+  if (productsLoading || ordersLoading) {
+    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading orders and product data from backend…</div>;
+  }
+  const sourceError = [productsError && `Products: ${productsError}`, ordersError && `Orders: ${ordersError}`].filter(Boolean).join('; ');
+  if (sourceError) {
+    return (
+      <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
+        <p className="font-semibold text-rose-700">Could not load order source data: {sourceError}</p>
+        <button
+          type="button"
+          onClick={() => void Promise.allSettled([refreshProducts(), refreshOrders()])}
+          className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -839,14 +859,18 @@ export const Orders: React.FC = () => {
               {/* ── Payment & Summary ─────────────────────────────── */}
               {modalMode === 'create' && (
                 <div>
-                  <label className="label">Payment Status</label>
-                  <select value={form.paymentStatus}
-                    onChange={e => setForm({ ...form, paymentStatus: e.target.value as 'pending' | 'paid' | 'partial' })}
-                    className="input">
-                    <option value="pending">Pending</option>
-                    <option value="paid">Paid in Full</option>
-                    <option value="partial">Partial Payment (50%)</option>
-                  </select>
+                  <label className="label" htmlFor="initial-paid-amount">Initial payment received (PHP)</label>
+                  <input
+                    id="initial-paid-amount"
+                    type="number"
+                    min={0}
+                    max={form.total}
+                    step="0.01"
+                    value={form.paidAmount}
+                    onChange={e => setForm({ ...form, paidAmount: Number(e.target.value) })}
+                    className="input"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Enter the amount actually received. Leave 0 if no payment was collected; the server calculates payment status.</p>
                 </div>
               )}
 
@@ -988,20 +1012,10 @@ export const Orders: React.FC = () => {
                 </div>
                 <div className="px-4 py-3 rounded-xl bg-gray-50">
                   <p className="text-xs text-gray-500 mb-1">Payment</p>
-                  <select
-                    value={viewOrder.paymentStatus}
-                    onChange={e => {
-                      const v = e.target.value as 'pending' | 'paid' | 'partial' | 'refunded';
-                      updateOrder(viewOrder.id, { paymentStatus: v });
-                      setViewOrder({ ...viewOrder, paymentStatus: v });
-                    }}
-                    className="mt-1 px-3 py-1 rounded-full text-sm font-medium bg-white border border-gray-300 cursor-pointer"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="partial">Partial</option>
-                    <option value="paid">Paid</option>
-                    <option value="refunded">Refunded</option>
-                  </select>
+                  <span className={`mt-1 inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(viewOrder.paymentStatus)}`}>
+                    {viewOrder.paymentStatus.charAt(0).toUpperCase() + viewOrder.paymentStatus.slice(1)}
+                  </span>
+                  <p className="text-xs text-gray-500 mt-2">Calculated from payments recorded for this order.</p>
                 </div>
                 <div className="px-4 py-3 rounded-xl bg-gray-50">
                   <p className="text-xs text-gray-500 mb-1">Type</p>

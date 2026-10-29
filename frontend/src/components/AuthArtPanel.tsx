@@ -13,16 +13,16 @@
 
 import './AuthArtPanel.css'
 
-interface Stat {
-  num: string
-  label: string
+interface Feature {
+  name: string
+  description: string
   className?: string
 }
 
-const STATS: Stat[] = [
-  { num: '12', label: 'branches' },
-  { num: '3.4k', label: 'SKUs tracked', className: 'auth-art__stat--offset' },
-  { num: '98.2%', label: 'stock accuracy, 30d', className: 'auth-art__stat--bottom' }
+const FEATURES: Feature[] = [
+  { name: 'Inventory', description: 'Products and stock levels' },
+  { name: 'Orders', description: 'Customer order records', className: 'auth-art__stat--offset' },
+  { name: 'Delivery', description: 'Delivery status', className: 'auth-art__stat--bottom' },
 ]
 
 export function AuthArtPanel() {
@@ -30,20 +30,20 @@ export function AuthArtPanel() {
     <div className="auth-art">
       <div className="auth-art__grid" />
       <div className="auth-art__grain" />
-      {STATS.map((s) => (
+      {FEATURES.map((feature) => (
         <div
-          key={s.label}
-          className={`auth-art__stat ${s.className ?? ''}`.trim()}
+          key={feature.name}
+          className={`auth-art__stat ${feature.className ?? ''}`.trim()}
         >
-          <span className="auth-art__stat-num">{s.num}</span>
-          <span className="auth-art__stat-label">{s.label}</span>
+          <span className="auth-art__stat-num">{feature.name}</span>
+          <span className="auth-art__stat-label">{feature.description}</span>
         </div>
       ))}
       <div className="auth-art__quote">
         <p>From receiving bay to delivery truck, one count.</p>
       </div>
       <div className="auth-art__footer" aria-hidden="true">
-        Demo build · SmartStock IT332
+        SmartStock · Inventory and order management
       </div>
     </div>
   )

@@ -11,9 +11,10 @@ import {
   ExternalLink,
   BellOff,
   Package,
+  RefreshCw,
 } from 'lucide-react';
 import { useData } from './DataContext';
-import { formatCurrency, checkStockStatus } from '../utils/helpers';
+import { formatCurrency, formatDate, checkStockStatus } from '../utils/helpers';
 
 export interface NotificationItem {
   id: string;
@@ -21,7 +22,7 @@ export interface NotificationItem {
   severity: 'critical' | 'warning' | 'info' | 'success';
   title: string;
   message: string;
-  timeAgo: string;
+  contextLabel: string;
   link: string;
 }
 
@@ -29,11 +30,26 @@ const READ_STORAGE_KEY = 'smartstock_read_notifications';
 const DISMISSED_STORAGE_KEY = 'smartstock_dismissed_notifications';
 
 export const NotificationDropdown: React.FC = () => {
-  const { products, orders } = useData();
+  const {
+    products,
+    orders,
+    productsLoading,
+    productsError,
+    ordersLoading,
+    ordersError,
+    refresh,
+  } = useData();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const sourcesLoading = productsLoading || ordersLoading;
+  const sourcesError = productsError || ordersError;
+  const sourcesReady = !sourcesLoading && !sourcesError;
+
+  const retrySources = () => {
+    void refresh();
+  };
 
   // Read / Dismissed IDs in localStorage
   const [readIds, setReadIds] = useState<Set<string>>(() => {
@@ -111,7 +127,7 @@ export const NotificationDropdown: React.FC = () => {
           message: p.stock === 0 
             ? 'Item is completely out of stock! Restock urgently.'
             : `Only ${p.stock} remaining (min safety threshold is ${p.threshold}).`,
-          timeAgo: 'Urgent',
+          contextLabel: 'Urgent',
           link: '/inventory',
         });
       } else if (status === 'low') {
@@ -121,7 +137,7 @@ export const NotificationDropdown: React.FC = () => {
           severity: 'warning',
           title: `Low Stock: ${p.name}`,
           message: `${p.stock} units remaining. Reorder suggested soon.`,
-          timeAgo: 'Action needed',
+          contextLabel: 'Action needed',
           link: '/inventory',
         });
       }
@@ -129,14 +145,14 @@ export const NotificationDropdown: React.FC = () => {
 
     // 2. Orders Alerts
     orders.forEach((o) => {
-      if (o.orderStatus === 'pending') {
+      if (o.orderStatus === 'pending' || o.orderStatus === 'packed') {
         list.push({
           id: `order-pending-${o.id}`,
           type: 'order',
           severity: 'info',
-          title: `Pending Order: ${o.referenceNumber}`,
-          message: `Order for ${o.customerName} (${formatCurrency(o.total)}) awaits processing.`,
-          timeAgo: o.date || 'Recent',
+          title: `Processing Order: ${o.referenceNumber}`,
+          message: `Order for ${o.customerName} (${formatCurrency(o.total)}) is being processed.`,
+          contextLabel: `Created ${formatDate(o.createdAt)}`,
           link: '/orders',
         });
       } else if (o.paymentStatus === 'pending' || o.paymentStatus === 'partial') {
@@ -146,7 +162,7 @@ export const NotificationDropdown: React.FC = () => {
           severity: 'warning',
           title: `Payment ${o.paymentStatus === 'partial' ? 'Partial' : 'Pending'}: ${o.referenceNumber}`,
           message: `${o.customerName} has ${formatCurrency(o.total - (o.paidAmount || 0))} balance remaining.`,
-          timeAgo: o.date || 'Recent',
+          contextLabel: `Created ${formatDate(o.createdAt)}`,
           link: '/orders',
         });
       }
@@ -159,7 +175,7 @@ export const NotificationDropdown: React.FC = () => {
           severity: 'info',
           title: `Out for Delivery: ${o.referenceNumber}`,
           message: `En route to ${o.customerName} (${o.address || 'Destination'}).`,
-          timeAgo: 'En route',
+          contextLabel: 'En route',
           link: '/delivery',
         });
       }
@@ -247,7 +263,7 @@ export const NotificationDropdown: React.FC = () => {
         aria-expanded={isOpen}
       >
         <Bell className="w-5 h-5" />
-        {unreadCount > 0 && (
+        {sourcesReady && unreadCount > 0 && (
           <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#f43f5e] px-1 text-[10px] font-extrabold text-white ring-2 ring-white shadow-xs">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
@@ -266,17 +282,17 @@ export const NotificationDropdown: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-extrabold text-slate-900 text-sm">Notifications</h3>
-                  {unreadCount > 0 && (
+                  {sourcesReady && unreadCount > 0 && (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-600 border border-rose-100">
                       {unreadCount} new
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] text-slate-400">Inventory &amp; Operations alerts</p>
+                <p className="text-[11px] text-slate-400">Generated from products/orders; read and dismissed state is browser-only.</p>
               </div>
             </div>
 
-            {unreadCount > 0 && (
+            {sourcesReady && unreadCount > 0 && (
               <button
                 type="button"
                 onClick={markAllAsRead}
@@ -289,35 +305,49 @@ export const NotificationDropdown: React.FC = () => {
             )}
           </div>
 
-          {/* Filter Tabs */}
-          <div className="flex items-center gap-1 px-4 py-2 bg-slate-50/70 border-b border-slate-100">
-            <button
-              type="button"
-              onClick={() => setActiveTab('all')}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'all'
-                  ? 'bg-white text-slate-900 shadow-2xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              All ({visibleNotifications.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('unread')}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'unread'
-                  ? 'bg-white text-slate-900 shadow-2xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Unread ({unreadCount})
-            </button>
-          </div>
+          {sourcesReady && (
+            <div className="flex items-center gap-1 px-4 py-2 bg-slate-50/70 border-b border-slate-100">
+              <button
+                type="button"
+                onClick={() => setActiveTab('all')}
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'all'
+                    ? 'bg-white text-slate-900 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                All ({visibleNotifications.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('unread')}
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'unread'
+                    ? 'bg-white text-slate-900 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Unread ({unreadCount})
+              </button>
+            </div>
+          )}
 
           {/* Notifications Scrollable List */}
           <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-100">
-            {displayedNotifications.length === 0 ? (
+            {sourcesLoading ? (
+              <div role="status" className="p-8 text-center text-xs text-slate-500">
+                Loading alerts from current product and order records…
+              </div>
+            ) : sourcesError ? (
+              <div role="alert" className="p-6 text-center">
+                <p className="text-xs font-bold text-slate-700">Alerts could not be loaded.</p>
+                <p className="text-[11px] text-slate-500 mt-1">Product or order data is unavailable, so the alert list may be incomplete.</p>
+                <button type="button" onClick={retrySources} className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-[#4f46e5] hover:underline">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Retry
+                </button>
+              </div>
+            ) : displayedNotifications.length === 0 ? (
               <div className="p-8 text-center">
                 <div className="w-12 h-12 rounded-2xl bg-slate-50 text-slate-300 flex items-center justify-center mx-auto mb-3">
                   <BellOff className="w-6 h-6" />
@@ -368,7 +398,7 @@ export const NotificationDropdown: React.FC = () => {
                       </p>
                       <div className="flex items-center justify-between mt-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                          {item.timeAgo}
+                          {item.contextLabel}
                         </span>
                         <div className="flex items-center gap-1 text-[10px] font-bold text-[#4f46e5] opacity-0 group-hover:opacity-100 transition-opacity">
                           <span>View</span>

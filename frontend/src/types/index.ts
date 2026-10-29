@@ -48,6 +48,7 @@ export interface Order {
   total: number;
   paidAmount: number;
   paymentStatus: PaymentStatus;
+  paymentMethod?: 'cash' | 'gcash' | 'bank_transfer' | null;
   orderStatus: OrderStatus;
   deliveryStatus: DeliveryStatus;
   orderType: OrderType;

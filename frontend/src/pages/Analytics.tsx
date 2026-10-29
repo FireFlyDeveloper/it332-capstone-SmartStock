@@ -37,20 +37,14 @@ type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 
 export const Analytics: React.FC = () => {
   const navigate = useNavigate();
-  const { products, orders } = useData();
+  const { products, orders, productsLoading, productsError, ordersLoading, ordersError, refreshProducts, refreshOrders } = useData();
   const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [forecast, setForecast] = useState<DemandForecastProduct[]>([]);
   const [forecastLoading, setForecastLoading] = useState(true);
   const [forecastError, setForecastError] = useState('');
-
-  // Anchor date: latest date in orders (or fallback to current date)
-  const latestOrderDate = useMemo(() => {
-    if (!orders || orders.length === 0) return new Date();
-    const timestamps = orders.map(o => new Date(o.date).getTime()).filter(t => !isNaN(t));
-    return timestamps.length > 0 ? new Date(Math.max(...timestamps)) : new Date();
-  }, [orders]);
+  const [forecastRefreshKey, setForecastRefreshKey] = useState(0);
 
   const handleDatePreset = (preset: '7d' | '30d' | 'all') => {
     setDatePreset(preset);
@@ -59,10 +53,10 @@ export const Analytics: React.FC = () => {
       setToDate('');
       toast.info('Showing all-time analytics.');
     } else {
-      const end = new Date(latestOrderDate);
-      const start = new Date(latestOrderDate);
+      const end = new Date();
+      const start = new Date(end);
       const days = preset === '7d' ? 7 : 30;
-      start.setDate(start.getDate() - days);
+      start.setDate(start.getDate() - (days - 1));
       const startStr = formatDateInput(start);
       const endStr = formatDateInput(end);
       setFromDate(startStr);
@@ -104,7 +98,7 @@ export const Analytics: React.FC = () => {
       .catch(error => { if (active) setForecastError(error instanceof Error ? error.message : 'Could not load demand forecast.') })
       .finally(() => { if (active) setForecastLoading(false) });
     return () => { active = false };
-  }, []);
+  }, [forecastRefreshKey]);
 
   // Calculate inventory stats
   const totalInventoryValue = products.reduce((sum, p) => sum + (p.stock * p.price), 0);
@@ -112,18 +106,26 @@ export const Analytics: React.FC = () => {
   const aluminumProducts = products.filter(p => p.category === 'aluminum');
   const glassValue = glassProducts.reduce((sum, p) => sum + (p.stock * p.price), 0);
   const aluminumValue = aluminumProducts.reduce((sum, p) => sum + (p.stock * p.price), 0);
+  const categoryListedPriceTotal = glassValue + aluminumValue;
+  const glassListedPriceShare = categoryListedPriceTotal > 0 ? glassValue / categoryListedPriceTotal * 100 : 0;
+  const aluminumListedPriceShare = categoryListedPriceTotal > 0 ? aluminumValue / categoryListedPriceTotal * 100 : 0;
+
+  const nonCancelledOrders = useMemo(
+    () => filteredOrders.filter(order => order.orderStatus !== 'cancelled'),
+    [filteredOrders],
+  );
 
   const avgOrderValue = useMemo(() => {
-    return filteredOrders.length > 0
-      ? filteredOrders.reduce((sum, o) => sum + o.total, 0) / filteredOrders.length
+    return nonCancelledOrders.length > 0
+      ? nonCancelledOrders.reduce((sum, order) => sum + order.total, 0) / nonCancelledOrders.length
       : 0;
-  }, [filteredOrders]);
+  }, [nonCancelledOrders]);
 
   const lowStockCount = useMemo(() => {
-    return products.filter(p => checkStockStatus(p.stock, p.threshold) !== 'healthy').length;
+    return products.filter(p => p.status === 'active' && checkStockStatus(p.stock, p.threshold) !== 'healthy').length;
   }, [products]);
 
-  // Top-selling items derived only from orders in the selected date range.
+  // Highest ordered quantities in the selected date range; not paid-sales volume.
   const topSellingItems = useMemo(() => {
     const productCounts: Record<string, { name: string; quantity: number; category: string }> = {};
     filteredOrders.forEach(o => {
@@ -134,7 +136,7 @@ export const Analytics: React.FC = () => {
           productCounts[i.productId] = {
             name: i.productName,
             quantity: 0,
-            category: prod?.category || 'aluminum',
+            category: prod?.category ?? 'Unclassified',
           };
         }
         productCounts[i.productId].quantity += i.quantity;
@@ -173,13 +175,13 @@ export const Analytics: React.FC = () => {
     { name: 'Out of Stock', value: products.filter(p => p.stock === 0).length, color: '#6b7280' }
   ].filter(item => item.value > 0);
 
-  // Fast & Slow moving items calculated dynamically from real order flow
-  const { fastMovingItems, slowMovingItems } = useMemo(() => {
-    const salesCount: Record<string, number> = {};
+  // Rank current catalog products by non-cancelled order quantities in recorded history.
+  const { mostOrderedItems, leastOrderedItems } = useMemo(() => {
+    const quantityByProduct: Record<string, number> = {};
     orders.forEach((o) => {
       if (o.orderStatus === 'cancelled') return;
       o.items.forEach((item) => {
-        salesCount[item.productId] = (salesCount[item.productId] || 0) + item.quantity;
+        quantityByProduct[item.productId] = (quantityByProduct[item.productId] || 0) + item.quantity;
       });
     });
 
@@ -187,22 +189,38 @@ export const Analytics: React.FC = () => {
       name: p.name,
       category: p.category,
       stock: p.stock,
-      unitsSold: salesCount[p.id] || 0,
+      unitsOrdered: quantityByProduct[p.id] || 0,
       status: checkStockStatus(p.stock, p.threshold),
     }));
 
-    const sorted = [...list].sort((a, b) => b.unitsSold - a.unitsSold);
-    const fast = sorted.filter((p) => p.unitsSold > 0).slice(0, 5);
-    const slow = sorted.filter((p) => p.unitsSold === 0 || p.unitsSold <= 2).reverse().slice(0, 5);
-    return { fastMovingItems: fast, slowMovingItems: slow };
+    const mostOrdered = [...list]
+      .filter((product) => product.unitsOrdered > 0)
+      .sort((a, b) => b.unitsOrdered - a.unitsOrdered || a.name.localeCompare(b.name))
+      .slice(0, 5);
+    const leastOrdered = [...list]
+      .sort((a, b) => a.unitsOrdered - b.unitsOrdered || a.name.localeCompare(b.name))
+      .slice(0, 5);
+    return { mostOrderedItems: mostOrdered, leastOrderedItems: leastOrdered };
   }, [products, orders]);
 
   // Rule-based stock alerts derived from current product levels and thresholds.
   const stockAlerts = useMemo(() => {
     const recs: Array<{ id: string; priority: 'high' | 'medium' | 'low'; type: string; title: string; description: string }> = [];
-    const criticalProds = products.filter((p) => checkStockStatus(p.stock, p.threshold) === 'critical');
-    const lowProds = products.filter((p) => checkStockStatus(p.stock, p.threshold) === 'low');
+    const activeProducts = products.filter((product) => product.status === 'active');
+    const outOfStockProds = activeProducts.filter((p) => p.stock <= 0);
+    const criticalProds = activeProducts.filter((p) => checkStockStatus(p.stock, p.threshold) === 'critical');
+    const lowProds = activeProducts.filter((p) => checkStockStatus(p.stock, p.threshold) === 'low');
 
+    if (outOfStockProds.length > 0) {
+      const product = outOfStockProds[0];
+      recs.push({
+        id: `rec-out-${product.id}`,
+        priority: 'high',
+        type: 'Out of Stock Alert',
+        title: `No stock remaining for ${product.name}`,
+        description: `Current stock is ${product.stock} ${product.unit}; review replenishment for this active product.`,
+      });
+    }
     if (criticalProds.length > 0) {
       recs.push({
         id: 'rec-crit',
@@ -226,7 +244,7 @@ export const Analytics: React.FC = () => {
 
   // Current stock and order quantities from the selected date range.
   const inventoryMovements = useMemo(() => {
-    return products.slice(0, 8).map(product => {
+    return products.map(product => {
       const orderedQty = filteredOrders
         .filter(o => o.orderStatus !== 'cancelled')
         .reduce((sum, o) => sum + o.items
@@ -307,6 +325,25 @@ export const Analytics: React.FC = () => {
 
   const chartSalesData = salesTrendData;
 
+  if (productsLoading || ordersLoading) {
+    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading analytics data from backend…</div>;
+  }
+  const sourceError = [productsError && `Products: ${productsError}`, ordersError && `Orders: ${ordersError}`].filter(Boolean).join('; ');
+  if (sourceError) {
+    return (
+      <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
+        <p className="font-semibold text-rose-700">Could not load analytics source data: {sourceError}</p>
+        <button
+          type="button"
+          onClick={() => void Promise.allSettled([refreshProducts(), refreshOrders()])}
+          className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
       <div className="space-y-6 sm:space-y-8 animate-fadeIn">
         {/* Page Title Header */}
@@ -337,7 +374,7 @@ export const Analytics: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
                 <Calendar className="w-4 h-4 text-slate-400" />
-                <span>Date Range:</span>
+                <span>Delivery Date Range:</span>
               </div>
               {(['all', '30d', '7d'] as const).map((key) => {
                 const label = key === 'all' ? 'All time' : key === '30d' ? 'Last 30 days' : 'Last 7 days';
@@ -413,7 +450,7 @@ export const Analytics: React.FC = () => {
 
         {/* Key Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* 1. Total Inventory Value */}
+          {/* 1. Stock at Listed Prices */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover flex flex-col justify-between min-w-0">
             <div className="flex items-center justify-between gap-2 mb-4 min-w-0">
 
@@ -423,7 +460,7 @@ export const Analytics: React.FC = () => {
             </div>
             <div className="space-y-1 min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 truncate">
-                Total Inventory Value
+                Stock at Listed Prices
               </p>
               <div className="min-w-0">
                 <span
@@ -432,6 +469,7 @@ export const Analytics: React.FC = () => {
                 >
                   {formatCurrency(totalInventoryValue)}
                 </span>
+                <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Current stock × listed selling price; not acquisition cost.</p>
               </div>
             </div>
           </div>
@@ -445,7 +483,7 @@ export const Analytics: React.FC = () => {
             </div>
             <div className="space-y-1 min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 truncate">
-                Order Volume
+                Order Records
               </p>
               <div className="min-w-0">
                 <span
@@ -454,11 +492,12 @@ export const Analytics: React.FC = () => {
                 >
                   {filteredOrders.length}
                 </span>
+                <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Includes cancelled order records.</p>
               </div>
             </div>
           </div>
 
-          {/* 3. Average Order Value */}
+          {/* 3. Average Gross Order Value */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover flex flex-col justify-between min-w-0">
             <div className="flex items-center gap-2 mb-4 min-w-0">
               <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 shadow-2xs">
@@ -467,7 +506,7 @@ export const Analytics: React.FC = () => {
             </div>
             <div className="space-y-1 min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 truncate">
-                Average Order Value
+                Average Gross Order Value
               </p>
               <div className="min-w-0">
                 <span
@@ -476,6 +515,7 @@ export const Analytics: React.FC = () => {
                 >
                   {formatCurrency(avgOrderValue)}
                 </span>
+                <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Non-cancelled order totals; unpaid/partial orders included, refunds not deducted.</p>
               </div>
             </div>
           </div>
@@ -493,7 +533,7 @@ export const Analytics: React.FC = () => {
             </div>
             <div className="space-y-1 min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 truncate">
-                Low Stock Items
+                Active Low Stock Items
               </p>
               <div className="min-w-0">
                 <span
@@ -509,12 +549,12 @@ export const Analytics: React.FC = () => {
 
         {/* Charts Row 1 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Monthly Sales Trend */}
+          {/* Monthly Gross Order Value */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Monthly Sales Trend</h3>
-                <p className="text-xs text-slate-500">{fromDate || toDate ? 'Revenue for selected period' : 'Revenue over time'}</p>
+                <h3 className="text-lg font-bold text-slate-900">Monthly Gross Order Value</h3>
+                <p className="text-xs text-slate-500">By delivery date; non-cancelled orders, including unpaid/partial amounts; refunds not deducted.</p>
               </div>
               <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 shadow-2xs">
                 <TrendingUp className="w-4 h-4" />
@@ -532,7 +572,7 @@ export const Analytics: React.FC = () => {
                 <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} />
                 <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} tickFormatter={(value) => value >= 1000 ? `₱${Math.round(value/1000)}k` : `₱${value}`} />
                 <Tooltip 
-                  formatter={(value: number) => [formatCurrency(value), 'Sales']}
+                  formatter={(value: number) => [formatCurrency(value), 'Gross order value']}
                   contentStyle={{
                     backgroundColor: '#ffffff',
                     border: '1px solid #f1f5f9',
@@ -551,8 +591,8 @@ export const Analytics: React.FC = () => {
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Orders per Month</h3>
-                <p className="text-xs text-slate-500">{fromDate || toDate ? 'Order volume for selected period' : 'Order volume tracking'}</p>
+                <h3 className="text-lg font-bold text-slate-900">Order Records per Month</h3>
+                <p className="text-xs text-slate-500">By delivery date; count includes cancelled records.</p>
               </div>
               <div className="w-9 h-9 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0 shadow-2xs">
                 <Package className="w-4 h-4" />
@@ -582,15 +622,15 @@ export const Analytics: React.FC = () => {
 
         {/* Charts Row 2 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Top Selling Items */}
+          {/* Top Ordered Products */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-base sm:text-lg font-bold text-slate-900">
-                  {fromDate || toDate ? 'Top Selling Items' : 'Top Selling Items Annual'}
+                  Top Ordered Products
                 </h3>
                 <p className="text-xs text-slate-500">
-                  {fromDate || toDate ? 'Top 5 purchased materials in selected range' : 'Annual most purchased materials (Top 5)'}
+                  Top 5 quantities in non-cancelled orders for the selected delivery-date range; category uses current catalog metadata.
                 </p>
               </div>
               <div className="w-9 h-9 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0 shadow-2xs">
@@ -616,8 +656,11 @@ export const Analytics: React.FC = () => {
                   axisLine={{ stroke: '#f1f5f9' }}
                 />
                 <Tooltip
-                  formatter={(value: number) => [`${value} units`, 'Sold']}
-                  labelFormatter={(_label, payload) => payload?.[0]?.payload?.fullName || _label}
+                  formatter={(value: number) => [`${value} units`, 'Ordered']}
+                  labelFormatter={(_label, payload) => {
+                    const item = payload?.[0]?.payload;
+                    return `${item?.fullName || _label} · ${item?.category || 'Unclassified'}`;
+                  }}
                   contentStyle={{
                     backgroundColor: '#ffffff',
                     border: '1px solid #f1f5f9',
@@ -629,7 +672,7 @@ export const Analytics: React.FC = () => {
                 />
                 <Bar dataKey="quantity" fill="#0ea5e9" barSize={16} radius={[0, 8, 8, 0]}>
                   {topSellingItems.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.category === 'glass' ? '#0ea5e9' : '#10b981'} />
+                    <Cell key={`cell-${index}`} fill={entry.category === 'glass' ? '#0ea5e9' : entry.category === 'aluminum' ? '#10b981' : '#94a3b8'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -683,11 +726,11 @@ export const Analytics: React.FC = () => {
             </ResponsiveContainer>
           </div>
 
-          {/* Category Value */}
+          {/* Stock at Listed Prices by Category */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-base sm:text-lg font-bold text-slate-900">Category Value</h3>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">Stock at Listed Prices by Category</h3>
                 <p className="text-xs text-slate-500">Inventory by category</p>
               </div>
               <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 shadow-2xs">
@@ -697,20 +740,20 @@ export const Analytics: React.FC = () => {
             <div className="space-y-4 mt-4">
               <div>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="text-slate-600 font-medium">Glass Products</span>
+                  <span className="text-slate-600 font-medium">Glass stock at list price</span>
                   <span className="font-bold text-slate-900">{formatCurrency(glassValue)}</span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-2">
-                  <div className="bg-sky-500 h-2 rounded-full transition-all duration-500" style={{ width: `${(glassValue / (glassValue + aluminumValue)) * 100}%` }} />
+                  <div className="bg-sky-500 h-2 rounded-full transition-all duration-500" style={{ width: `${glassListedPriceShare}%` }} />
                 </div>
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="text-slate-600 font-medium">Aluminum Products</span>
+                  <span className="text-slate-600 font-medium">Aluminum stock at list price</span>
                   <span className="font-bold text-slate-900">{formatCurrency(aluminumValue)}</span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-2">
-                  <div className="bg-emerald-500 h-2 rounded-full transition-all duration-500" style={{ width: `${(aluminumValue / (glassValue + aluminumValue)) * 100}%` }} />
+                  <div className="bg-emerald-500 h-2 rounded-full transition-all duration-500" style={{ width: `${aluminumListedPriceShare}%` }} />
                 </div>
               </div>
             </div>
@@ -723,21 +766,21 @@ export const Analytics: React.FC = () => {
           </div>
         </div>
 
-        {/* Fast & Slow Moving Items */}
+        {/* Relative order-quantity rankings */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Fast Moving Items */}
+          {/* Most Ordered Products */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 shadow-2xs">
                 <ArrowUpRight className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Fast Moving Items Monthly</h3>
-                <p className="text-xs text-slate-500">Monthly high turnover products</p>
+                <h3 className="text-lg font-bold text-slate-900">Most Ordered Products</h3>
+                <p className="text-xs text-slate-500">All recorded non-cancelled orders; independent of the date filter.</p>
               </div>
             </div>
             <div className="space-y-3">
-              {fastMovingItems.map((item, index) => (
+              {mostOrderedItems.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">No non-cancelled order quantities are available.</p> : mostOrderedItems.map((item, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-emerald-50/50 rounded-2xl border border-emerald-100/40">
                   <div className="flex items-center gap-3">
                     <span className="w-8 h-8 bg-white shadow-2xs rounded-full flex items-center justify-center text-emerald-600 font-bold text-xs">
@@ -746,7 +789,7 @@ export const Analytics: React.FC = () => {
                     <span className="font-semibold text-slate-800 text-sm">{item.name}</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-xs font-semibold text-slate-500">{item.stock} in stock</span>
+                    <span className="text-xs font-semibold text-slate-500">{item.unitsOrdered} ordered · {item.stock} in stock</span>
                     <span className={`ml-2 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${item.status === 'healthy' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                       {item.status}
                     </span>
@@ -756,19 +799,19 @@ export const Analytics: React.FC = () => {
             </div>
           </div>
 
-          {/* Slow Moving Items */}
+          {/* Fewest Ordered Products */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 shadow-2xs">
                 <Clock className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Slow Moving Items</h3>
-                <p className="text-xs text-slate-500">Low turnover products</p>
+                <h3 className="text-lg font-bold text-slate-900">Fewest Ordered Products</h3>
+                <p className="text-xs text-slate-500">Zero means no matching orders in the recorded history.</p>
               </div>
             </div>
             <div className="space-y-3">
-              {slowMovingItems.map((item, index) => (
+              {leastOrderedItems.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">No catalog products are available.</p> : leastOrderedItems.map((item, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-amber-50/40 rounded-2xl border border-amber-100/40">
                   <div className="flex items-center gap-3">
                     <span className="w-8 h-8 bg-white shadow-2xs rounded-full flex items-center justify-center text-amber-600 font-bold text-xs">
@@ -777,7 +820,7 @@ export const Analytics: React.FC = () => {
                     <span className="font-semibold text-slate-800 text-sm">{item.name}</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-xs font-semibold text-slate-500">{item.stock} in stock</span>
+                    <span className="text-xs font-semibold text-slate-500">{item.unitsOrdered} ordered · {item.stock} in stock</span>
                     <span className={`ml-2 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${item.status === 'healthy' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
                       {item.status}
                     </span>
@@ -833,20 +876,20 @@ export const Analytics: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Historical Demand Forecast</h3>
-                <p className="text-xs text-slate-600">Delivered-order sales by complete UTC month; estimates require at least three positive months</p>
+                <p className="text-xs text-slate-600">Delivered-order quantities grouped by order-creation month in UTC; estimates require at least three positive months.</p>
               </div>
             </div>
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
               <Clock className="w-3.5 h-3.5 text-violet-500" />
-              <span>Inventory movement history</span>
+              <span>Order-history forecast</span>
             </div>
           </div>
           
           <div className="mb-6 overflow-hidden rounded-2xl border border-violet-100/80 bg-white shadow-2xs">
             <div className="border-b border-violet-100 bg-violet-50/60 p-4 text-xs text-slate-600">
-              Backend historical forecast: simple exponential smoothing (α=0.3), next-month horizon, up to 12 complete UTC months of delivered-order sales. At least 3 positive-quantity months are required; sparse-history products are shown without an estimate.
+              Backend historical forecast: simple exponential smoothing (α=0.3), next-month horizon, using delivered-order quantities grouped by order-creation month in UTC (up to 12 months, including the current month to date). At least 3 positive-quantity months are required; sparse-history products are shown without an estimate.
             </div>
-            {forecastLoading ? <p className="p-8 text-center text-sm text-slate-500">Loading historical forecast…</p> : forecastError ? <div role="alert" className="p-8 text-center text-sm text-rose-700">{forecastError}</div> : forecast.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No forecast products are available.</p> : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-violet-50/70"><tr><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Product</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Stock / reorder point</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Forecast next month</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Suggested order</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Coverage</th><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Policy assessment</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">History</th></tr></thead><tbody className="divide-y divide-slate-100">{forecast.map(item => <tr key={item.productId}><td className="px-4 py-3"><p className="text-sm font-semibold text-slate-800">{item.name}</p><p className="text-xs text-slate-500">{item.sku} · {item.category}</p></td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.currentStock} / {item.reorderPoint} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-semibold text-slate-700">{item.forecastQuantity === null ? 'Unavailable' : `${item.forecastQuantity} ${item.unit}`}</td><td className="px-4 py-3 text-right text-sm font-bold text-violet-700">{item.recommendedOrderQuantity === null ? '—' : `${item.recommendedOrderQuantity} ${item.unit}`}</td><td className="px-4 py-3 text-right text-sm text-slate-600">{item.stockCoverageDays === null ? '—' : `${item.stockCoverageDays} days`}</td><td className="px-4 py-3 text-sm capitalize text-slate-700">{item.policyAssessment.replaceAll('_', ' ')}</td><td className="px-4 py-3 text-right text-xs text-slate-600">{item.positiveMonths} positive months</td></tr>)}</tbody></table></div>}
+            {forecastLoading ? <p className="p-8 text-center text-sm text-slate-500">Loading historical forecast…</p> : forecastError ? <div role="alert" className="p-8 text-center text-sm text-rose-700"><p>{forecastError}</p><button type="button" onClick={() => setForecastRefreshKey((current) => current + 1)} className="mt-3 font-semibold text-indigo-600 hover:text-indigo-800">Retry</button></div> : forecast.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No forecast products are available.</p> : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-violet-50/70"><tr><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Product</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Stock / reorder point</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Forecast next month</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Suggested order</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Coverage</th><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Policy assessment</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">History</th></tr></thead><tbody className="divide-y divide-slate-100">{forecast.map(item => <tr key={item.productId}><td className="px-4 py-3"><p className="text-sm font-semibold text-slate-800">{item.name}</p><p className="text-xs text-slate-500">{item.sku} · {item.category}</p></td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.currentStock} / {item.reorderPoint} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-semibold text-slate-700">{item.forecastQuantity === null ? 'Unavailable' : `${item.forecastQuantity} ${item.unit}`}</td><td className="px-4 py-3 text-right text-sm font-bold text-violet-700">{item.recommendedOrderQuantity === null ? '—' : `${item.recommendedOrderQuantity} ${item.unit}`}</td><td className="px-4 py-3 text-right text-sm text-slate-600">{item.stockCoverageDays === null ? '—' : `${item.stockCoverageDays} days`}</td><td className="px-4 py-3 text-sm capitalize text-slate-700">{item.policyAssessment.replaceAll('_', ' ')}</td><td className="px-4 py-3 text-right text-xs text-slate-600">{item.positiveMonths} positive months</td></tr>)}</tbody></table></div>}
           </div>
           
           {/* Rule-based stock alerts */}
@@ -874,7 +917,7 @@ export const Analytics: React.FC = () => {
                 </div>
               ))}
               {stockAlerts.length === 0 && (
-                <p className="text-sm text-slate-500 md:col-span-2">No products currently meet the configured low-stock alert threshold.</p>
+                <p className="text-sm text-slate-500 md:col-span-2">No active products currently meet the configured low-stock alert threshold.</p>
               )}
             </div>
           </div>

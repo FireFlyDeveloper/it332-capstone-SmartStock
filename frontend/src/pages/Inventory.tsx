@@ -77,7 +77,7 @@ function toProductPayload(form: ProductFormData): Omit<Product, 'id'> {
 const PRODUCT_BATCH_SIZES = [10, 25, 50, 100] as const;
 
 export const Inventory: React.FC = () => {
-  const { products, addProduct, updateProduct, deleteProduct, restockProduct, loading } = useData();
+  const { products, addProduct, updateProduct, deleteProduct, restockProduct, productsLoading, productsError, refreshProducts } = useData();
   const { isAdmin } = useAuth();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -91,11 +91,14 @@ export const Inventory: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [restockProductId, setRestockProductId] = useState<string | null>(null);
   const [restockQuantity, setRestockQuantity] = useState('');
+  const [restockReferenceNo, setRestockReferenceNo] = useState('');
+  const [restockSupplier, setRestockSupplier] = useState('');
   const [purchaseUnitCost, setPurchaseUnitCost] = useState('');
   const [formData, setFormData] = useState<ProductFormData>(emptyProductForm);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
   const [savingProduct, setSavingProduct] = useState(false);
+  const [savingRestock, setSavingRestock] = useState(false);
 
   const resetListPosition = () => {
     setVisibleCount(batchSize);
@@ -184,6 +187,8 @@ export const Inventory: React.FC = () => {
   const handleRestock = (productId: string) => {
     setRestockProductId(productId);
     setRestockQuantity('');
+    setRestockReferenceNo('');
+    setRestockSupplier('');
     setPurchaseUnitCost('');
     setIsRestockModalOpen(true);
   };
@@ -192,20 +197,38 @@ export const Inventory: React.FC = () => {
     setIsRestockModalOpen(false);
     setRestockProductId(null);
     setRestockQuantity('');
+    setRestockReferenceNo('');
+    setRestockSupplier('');
     setPurchaseUnitCost('');
   };
 
   const handleRestockSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const quantity = Number(restockQuantity);
-    if (!restockProductId || restockQuantity.trim() === '' || !Number.isFinite(quantity) || quantity <= 0) return;
+    const unitCost = purchaseUnitCost.trim() === '' ? undefined : Number(purchaseUnitCost);
+    if (!restockProductId || restockQuantity.trim() === '' || !Number.isFinite(quantity) || quantity <= 0 || savingRestock) return;
+    if (!restockReferenceNo.trim() || !restockSupplier.trim()) {
+      toast.error('Enter the actual supplier and receipt or purchase-order reference.');
+      return;
+    }
+    if (unitCost !== undefined && (!Number.isFinite(unitCost) || unitCost < 0)) {
+      toast.error('Enter a valid purchase cost or leave it blank if unknown.');
+      return;
+    }
 
+    setSavingRestock(true);
     try {
-      await restockProduct(restockProductId, quantity, purchaseUnitCost === '' ? undefined : Number(purchaseUnitCost));
+      await restockProduct(restockProductId, quantity, {
+        referenceNo: restockReferenceNo.trim(),
+        supplier: restockSupplier.trim(),
+        ...(unitCost !== undefined ? { unitCost } : {}),
+      });
       toast.success(`Restocked ${quantity} units successfully`);
       handleCloseRestockModal();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not restock product.');
+    } finally {
+      setSavingRestock(false);
     }
   };
 
@@ -242,7 +265,25 @@ export const Inventory: React.FC = () => {
     toast.success(`Exported all ${exportRows.length} filtered products to CSV`);
   };
 
-  const isEmpty = !loading && products.length === 0;
+  const isEmpty = !productsLoading && products.length === 0;
+
+  if (productsLoading) {
+    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading inventory data from backend…</div>;
+  }
+  if (productsError) {
+    return (
+      <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
+        <p className="font-semibold text-rose-700">Could not load inventory from backend: {productsError}</p>
+        <button
+          type="button"
+          onClick={() => void refreshProducts().catch(() => undefined)}
+          className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
       <div className="space-y-6 animate-fadeIn">
@@ -450,11 +491,11 @@ export const Inventory: React.FC = () => {
             </table>
           </div>
           
-          {loading && products.length === 0 && (
+          {productsLoading && products.length === 0 && (
             <div className="p-12 text-center text-sm text-slate-500" role="status">Loading inventory…</div>
           )}
 
-          {!loading && filteredProducts.length === 0 && !isEmpty && (
+          {!productsLoading && filteredProducts.length === 0 && !isEmpty && (
             <div className="p-12 text-center">
               <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500">No products match the current filters.</p>
@@ -683,8 +724,9 @@ export const Inventory: React.FC = () => {
               
               <form onSubmit={handleRestockSubmit} className="p-6 space-y-4">
                 <div>
-                  <label className="label">Quantity to Add</label>
+                  <label className="label" htmlFor="restock-quantity">Quantity to Add</label>
                   <input
+                    id="restock-quantity"
                     type="number"
                     name="restockQuantity"
                     value={restockQuantity}
@@ -695,8 +737,34 @@ export const Inventory: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="label">Purchase cost per unit (₱, optional)</label>
-                  <input type="number" name="purchaseUnitCost" value={purchaseUnitCost} onChange={(e) => setPurchaseUnitCost(e.target.value)} className="input" min="0" step="0.01" placeholder="Leave blank if unknown" />
+                  <label className="label" htmlFor="restock-supplier">Actual Supplier</label>
+                  <input
+                    id="restock-supplier"
+                    type="text"
+                    name="restockSupplier"
+                    value={restockSupplier}
+                    onChange={(e) => setRestockSupplier(e.target.value)}
+                    className="input"
+                    autoComplete="organization"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label" htmlFor="restock-reference">Receipt or purchase-order reference</label>
+                  <input
+                    id="restock-reference"
+                    type="text"
+                    name="restockReferenceNo"
+                    value={restockReferenceNo}
+                    onChange={(e) => setRestockReferenceNo(e.target.value)}
+                    className="input"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-slate-500">Enter the reference shown on the actual receipt or purchase order.</p>
+                </div>
+                <div>
+                  <label className="label" htmlFor="purchase-unit-cost">Purchase cost per unit (₱, optional)</label>
+                  <input id="purchase-unit-cost" type="number" name="purchaseUnitCost" value={purchaseUnitCost} onChange={(e) => setPurchaseUnitCost(e.target.value)} className="input" min="0" step="0.01" placeholder="Leave blank if unknown" />
                   <p className="mt-1 text-xs text-slate-500">Recorded acquisition cost for this receipt; this is not the product selling price.</p>
                 </div>
                 
@@ -704,8 +772,8 @@ export const Inventory: React.FC = () => {
                   <button type="button" onClick={handleCloseRestockModal} className="flex-1 btn-secondary">
                     Cancel
                   </button>
-                  <button type="submit" className="flex-1 btn-primary">
-                    Confirm Restock
+                  <button type="submit" className="flex-1 btn-primary" disabled={savingRestock}>
+                    {savingRestock ? 'Saving…' : 'Confirm Restock'}
                   </button>
                 </div>
               </form>
@@ -722,7 +790,7 @@ export const Inventory: React.FC = () => {
                   <Trash2 className="w-8 h-8 text-red-600" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">Delete Product?</h3>
-                <p className="text-gray-500">This action cannot be undone. The product will be permanently removed.</p>
+                <p className="text-gray-500">This product will be hidden from inventory. Its database record and stock-movement history are retained; this screen has no restore action.</p>
               </div>
               
               <div className="flex gap-3 p-6 pt-0">

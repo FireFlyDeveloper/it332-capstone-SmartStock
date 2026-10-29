@@ -2,10 +2,8 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { 
   Search, 
-  Package, 
   CheckCircle, 
   Clock, 
-  Phone, 
   User, 
   ShoppingBag, 
   Truck, 
@@ -23,23 +21,18 @@ import { toast } from 'sonner';
 type PublicTrackingOrder = {
   referenceNumber: string;
   customerName: string;
-  deliveryAddress?: string;
-  deliveryDate?: string;
-  orderStatus: string;
+  deliveryAddress: string;
+  deliveryDate: string;
+  orderStatus: 'processing' | 'in_transit' | 'delivered' | 'cancelled';
   paymentStatus: string;
   total: number;
   paidAmount: number;
   items: Array<{
-    name?: string;
-    productName?: string;
+    name: string;
     quantity: number;
     unitPrice: number;
-    lineTotal?: number;
-    total?: number;
+    lineTotal: number;
   }>;
-  contact?: string;
-  address?: string;
-  orderType?: 'pickup' | 'delivery';
 };
 
 export const TrackingPage: React.FC = () => {
@@ -71,16 +64,13 @@ export const TrackingPage: React.FC = () => {
         { auth: false }
       );
       if (!backendOrder?.referenceNumber) throw new Error('Tracking service returned an invalid response.');
-      setOrder({
-        ...backendOrder,
-        address: backendOrder.deliveryAddress || backendOrder.address,
-      });
+      setOrder(backendOrder);
       setLastRefreshed(new Date());
     } catch (err) {
       setOrder(null);
       const message = err instanceof Error ? err.message : 'Unable to load tracking information.';
       setError(message.includes('not found')
-        ? `No active order found with reference "${cleanRef}". Please verify and try again.`
+        ? `No order found with reference "${cleanRef}". Please verify and try again.`
         : `Tracking information could not be loaded: ${message}`);
     } finally {
       setLoading(false);
@@ -109,7 +99,7 @@ export const TrackingPage: React.FC = () => {
 
   const handleCopyLink = () => {
     if (!order) return;
-    const url = `${window.location.origin}/tracking/${encodeURIComponent(order.referenceNumber)}`;
+    const url = `${window.location.origin}/track/${encodeURIComponent(order.referenceNumber)}`;
     navigator.clipboard.writeText(url);
     toast.success('Tracking link copied to clipboard!');
   };
@@ -119,39 +109,24 @@ export const TrackingPage: React.FC = () => {
     window.print();
   };
 
-  // Progress steps for pickup vs delivery
-  const progressSteps = useMemo(() => {
-    if (!order) return [];
-
-    if (order.orderType === 'pickup') {
-      return [
-        { key: 'pending', label: 'Order Placed', desc: 'Order confirmed' },
-        { key: 'ready_for_pickup', label: 'Ready for Pickup', desc: 'Prepared at warehouse' },
-        { key: 'completed', label: 'Completed', desc: 'Picked up by customer' },
-      ];
-    } else {
-      return [
-        { key: 'pending', label: 'Order Placed', desc: 'Order confirmed' },
-        { key: 'packed', label: 'Packed & Inspected', desc: 'Ready for loading' },
-        { key: 'out_for_delivery', label: 'Out for Delivery', desc: 'Dispatched with truck' },
-        { key: 'completed', label: 'Delivered', desc: 'Received & signed' },
-      ];
-    }
-  }, [order]);
+  // These steps mirror the statuses the public tracking API actually returns.
+  const progressSteps = useMemo(() => [
+    { key: 'processing', label: 'Processing', desc: 'Order is being prepared' },
+    { key: 'in_transit', label: 'In Transit', desc: 'Order status is marked in transit' },
+    { key: 'delivered', label: 'Delivered', desc: 'Order is marked delivered' },
+  ], []);
 
   const currentStepIndex = useMemo(() => {
     if (!order) return 0;
-    const status = order.orderStatus.toLowerCase();
-    if (status === 'completed' || status === 'delivered') return progressSteps.length - 1;
-    if (status === 'in_transit' || status === 'out_for_delivery') return progressSteps.length === 3 ? 1 : 2;
-    if (status === 'packed' || status === 'ready_for_pickup' || status === 'processing') return 1;
-    return 0;
+    if (order.orderStatus === 'delivered') return progressSteps.length - 1;
+    if (order.orderStatus === 'in_transit') return 1;
+    if (order.orderStatus === 'processing') return 0;
+    return -1;
   }, [order, progressSteps]);
 
   const isDelivered = useMemo(() => {
     if (!order) return false;
-    const status = order.orderStatus.toLowerCase();
-    return status === 'completed' || status === 'delivered';
+    return order.orderStatus === 'delivered';
   }, [order]);
 
   const getPaymentBadge = (status: string) => {
@@ -170,7 +145,7 @@ export const TrackingPage: React.FC = () => {
 
   const getOrderStatusBadge = (status: string) => {
     const s = status.toLowerCase();
-    if (s === 'completed' || s === 'delivered') {
+    if (s === 'delivered') {
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
           <CheckCircle className="w-3.5 h-3.5" />
@@ -178,22 +153,15 @@ export const TrackingPage: React.FC = () => {
         </span>
       );
     }
-    if (s === 'out_for_delivery' || s === 'in_transit') {
+    if (s === 'in_transit') {
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-sky-50 text-sky-700 border border-sky-100">
           <Truck className="w-3.5 h-3.5" />
-          <span>Out for Delivery</span>
+          <span>In Transit</span>
         </span>
       );
     }
-    if (s === 'packed' || s === 'ready_for_pickup') {
-      return (
-        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-[#4f46e5] border border-indigo-100">
-          <Package className="w-3.5 h-3.5" />
-          <span>Packed &amp; Prepared</span>
-        </span>
-      );
-    }
+
     if (s === 'cancelled') {
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-100">
@@ -218,13 +186,13 @@ export const TrackingPage: React.FC = () => {
         <div className="text-center max-w-2xl mx-auto space-y-2 print:hidden">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100/80 text-indigo-700 text-xs font-bold tracking-wide mb-1">
             <Truck className="w-3.5 h-3.5" />
-            <span>Public Order &amp; Dispatch Tracker</span>
+            <span>Public Order Tracker</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-[-0.03em]">
-            Track Your Order in Real Time
+            Check Your Order Status
           </h1>
           <p className="text-sm text-slate-500 leading-relaxed">
-            Enter your order reference code to check current progress, warehouse packing status, and courier dispatch timeline.
+            Enter your order reference to retrieve the latest status and details available for public tracking.
           </p>
         </div>
 
@@ -237,7 +205,7 @@ export const TrackingPage: React.FC = () => {
                 type="text"
                 value={referenceInput}
                 onChange={(e) => setReferenceInput(e.target.value)}
-                placeholder="Enter reference (e.g. SS-2026-00001 or ORD-001)"
+                placeholder="Enter your order reference"
                 className="w-full pl-12 pr-4 py-3.5 bg-[#f8fafc] border border-slate-200/90 rounded-2xl focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none text-sm text-slate-800 font-semibold transition-all shadow-2xs"
               />
             </div>
@@ -285,7 +253,7 @@ export const TrackingPage: React.FC = () => {
                     {getOrderStatusBadge(order.orderStatus)}
                   </div>
                   <p className="text-xs text-slate-400 mt-1">
-                    Scheduled Delivery: <strong className="text-slate-700">{order.deliveryDate ? formatDate(order.deliveryDate) : 'Pending assignment'}</strong>
+                    Scheduled date: <strong className="text-slate-700">{formatDate(order.deliveryDate)}</strong>
                   </p>
                 </div>
 
@@ -312,7 +280,7 @@ export const TrackingPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Customer & Address Details */}
+              {/* Public-safe customer and address details */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                 <div className="p-4 bg-[#f8fafc] rounded-2xl border border-slate-100 flex items-start gap-3">
                   <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0">
@@ -321,12 +289,6 @@ export const TrackingPage: React.FC = () => {
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Recipient</p>
                     <p className="font-extrabold text-slate-900 text-sm truncate">{order.customerName}</p>
-                    {order.contact && (
-                      <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                        <Phone className="w-3 h-3 text-slate-400" />
-                        <span>{order.contact}</span>
-                      </p>
-                    )}
                   </div>
                 </div>
 
@@ -335,28 +297,25 @@ export const TrackingPage: React.FC = () => {
                     <MapPin className="w-5 h-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Destination</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Address on order</p>
                     <p className="font-extrabold text-slate-900 text-sm">
-                      {order.address || order.deliveryAddress || 'Glassram Central Hub / Manila'}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Fulfillment Mode: <strong className="capitalize text-slate-700">{order.orderType || 'Delivery'}</strong>
+                      {order.deliveryAddress || 'Not provided'}
                     </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Live Progress Timeline Card */}
+            {/* Backend order-status timeline */}
             <div className="bg-white rounded-[28px] p-6 sm:p-8 border border-[#f1f5f9] shadow-sm">
               <div className="flex items-center justify-between mb-8">
                 <div>
-                  <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Order Status Pipeline</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Real-time status updates synced with dispatch network</p>
+                  <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Order Status</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Status is read from the order record. Refresh to check for changes.</p>
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="font-semibold text-slate-600">Updated: {lastRefreshed.toLocaleTimeString()}</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="font-semibold text-slate-600">Checked: {lastRefreshed.toLocaleTimeString()}</span>
                 </div>
               </div>
 
@@ -423,15 +382,11 @@ export const TrackingPage: React.FC = () => {
                     <Truck className="w-4 h-4" />
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Current Phase</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Current Status</p>
                     <p className="text-sm font-extrabold text-slate-900">
-                      {order.orderStatus === 'completed' || order.orderStatus === 'delivered'
-                        ? 'Order successfully completed and delivered.'
-                        : order.orderStatus === 'out_for_delivery' || order.orderStatus === 'in_transit'
-                        ? 'Shipment has departed Glassram Logistics Center and is en route.'
-                        : order.orderStatus === 'packed' || order.orderStatus === 'ready_for_pickup'
-                        ? 'Materials packed and verified. Awaiting courier departure or customer pickup.'
-                        : 'Order details registered. Awaiting warehouse fulfillment.'}
+                      {order.orderStatus === 'cancelled'
+                        ? 'This order is marked as cancelled.'
+                        : 'The status above reflects the latest value returned for this order.'}
                     </p>
                   </div>
                 </div>
@@ -452,23 +407,21 @@ export const TrackingPage: React.FC = () => {
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
                   <ShoppingBag className="w-5 h-5 text-[#4f46e5]" />
-                  <span>Itemized Shipment Manifest</span>
+                  <span>Order Items &amp; Billing Summary</span>
                 </h3>
                 {getPaymentBadge(order.paymentStatus)}
               </div>
 
               <div className="divide-y divide-slate-100">
                 {order.items.map((item, idx) => {
-                  const name = item.productName || item.name || 'Glass/Aluminum Material';
-                  const price = item.unitPrice || 0;
-                  const itemTotal = item.lineTotal || item.total || (item.quantity * price);
+                  const itemTotal = item.lineTotal;
 
                   return (
                     <div key={idx} className="py-3.5 flex items-center justify-between gap-4">
                       <div className="min-w-0">
-                        <p className="text-sm font-bold text-slate-900 truncate">{name}</p>
+                        <p className="text-sm font-bold text-slate-900 truncate">{item.name}</p>
                         <p className="text-xs text-slate-400 mt-0.5">
-                          Qty: <strong className="text-slate-600">{item.quantity}</strong> × {formatCurrency(price)}
+                          Qty: <strong className="text-slate-600">{item.quantity}</strong> × {formatCurrency(item.unitPrice)}
                         </p>
                       </div>
                       <span className="font-extrabold text-slate-900 text-sm whitespace-nowrap">
@@ -499,26 +452,6 @@ export const TrackingPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Warehouse Pickup Info (if applicable) */}
-            {order.orderType === 'pickup' && (
-              <div className="bg-indigo-50/70 rounded-[28px] p-6 sm:p-8 border border-indigo-100">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-[#4f46e5] text-white flex items-center justify-center shrink-0 shadow-md shadow-indigo-900/10">
-                    <Package className="w-6 h-6" />
-                  </div>
-                  <div className="space-y-2">
-                    <h4 className="text-base font-extrabold text-slate-900">Warehouse Self-Pickup Instructions</h4>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Please present your reference code <strong className="text-slate-900 font-mono">{order.referenceNumber}</strong> and valid ID at the Glassram Dispatch Desk.
-                    </p>
-                    <div className="text-xs text-slate-600 pt-1 space-y-1">
-                      <p><strong>Hub Location:</strong> Glassram Glass &amp; Aluminum Depot, Caloocan / Metro Manila</p>
-                      <p><strong>Pickup Operating Hours:</strong> Monday – Saturday, 8:00 AM – 5:00 PM</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -530,30 +463,30 @@ export const TrackingPage: React.FC = () => {
                 <ShieldCheck className="w-7 h-7" />
               </div>
               <h3 className="text-lg font-black text-slate-900 tracking-tight">
-                Where can I locate my reference number?
+                How do I check this order?
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Every SmartStock glass and aluminum purchase generates an official transaction identifier formatted like <span className="font-mono font-bold text-slate-700">SS-2026-XXXXX</span>.
+                Enter the order reference provided by the store. The status and order details shown here come from the public order record.
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
               <div className="p-4 rounded-2xl bg-[#f8fafc] border border-slate-100 space-y-1.5">
                 <span className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xs">1</span>
-                <p className="text-xs font-bold text-slate-900">Invoice Receipt</p>
-                <p className="text-[11px] text-slate-500">Printed on the top header of your official sales receipt or purchase voucher.</p>
+                <p className="text-xs font-bold text-slate-900">Use the reference</p>
+                <p className="text-[11px] text-slate-500">Enter the exact order reference in the field above.</p>
               </div>
 
               <div className="p-4 rounded-2xl bg-[#f8fafc] border border-slate-100 space-y-1.5">
                 <span className="w-7 h-7 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center font-bold text-xs">2</span>
-                <p className="text-xs font-bold text-slate-900">SMS / Email Notice</p>
-                <p className="text-[11px] text-slate-500">Sent to your registered mobile phone or email upon order placement.</p>
+                <p className="text-xs font-bold text-slate-900">Check the returned status</p>
+                <p className="text-[11px] text-slate-500">The status badge reflects the value returned by the tracking service.</p>
               </div>
 
               <div className="p-4 rounded-2xl bg-[#f8fafc] border border-slate-100 space-y-1.5">
                 <span className="w-7 h-7 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-xs">3</span>
-                <p className="text-xs font-bold text-slate-900">Driver Dispatch Note</p>
-                <p className="text-[11px] text-slate-500">Displayed on the courier's digital or physical bill of lading.</p>
+                <p className="text-xs font-bold text-slate-900">Refresh when needed</p>
+                <p className="text-[11px] text-slate-500">When an order is displayed, use Refresh status to request its latest saved value.</p>
               </div>
             </div>
           </div>
@@ -564,13 +497,10 @@ export const TrackingPage: React.FC = () => {
       <footer className="bg-white border-t border-[#f1f5f9] py-8 text-center text-xs text-slate-400 mt-auto print:hidden">
         <div className="max-w-5xl mx-auto px-4 space-y-2">
           <p className="font-bold text-slate-600">
-            Glassram Glass and Aluminum Supply &bull; SmartStock Live Tracking
+            Glassram Glass and Aluminum Supply &bull; SmartStock Order Tracking
           </p>
           <p className="text-[11px]">
-            &copy; {new Date().getFullYear()} Glassram Supply. All rights reserved. Real-time delivery and dispatch tracking network.
-          </p>
-          <p className="text-[11px] text-slate-400">
-            Need urgent assistance? Customer Support Hotline: <strong className="text-slate-600">+63 917 123 4567</strong> (Mobile) &bull; <strong className="text-slate-600">+63 (2) 8123-4567</strong> (Landline) (Mon–Sat 8AM–5PM)
+            &copy; {new Date().getFullYear()} Glassram Supply. All rights reserved. Status details are provided by SmartStock order records.
           </p>
         </div>
       </footer>

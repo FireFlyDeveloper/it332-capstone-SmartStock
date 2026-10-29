@@ -154,7 +154,7 @@ export const Dashboard: React.FC = () => {
     [products],
   );
   const activeOrders = useMemo(
-    () => orders.filter((order) => ['processing', 'in_transit'].includes(order.orderStatus)).length,
+    () => orders.filter((order) => !['completed', 'cancelled'].includes(order.orderStatus)).length,
     [orders],
   );
   const inTransitDeliveries = useMemo(
@@ -282,7 +282,7 @@ export const Dashboard: React.FC = () => {
 
         {/* KPI 2: Current-month gross order value */}
         <KpiCard
-          label="THIS MONTH'S ORDER VALUE"
+          label="THIS MONTH'S GROSS ORDER VALUE"
           value={salesTrendLoading ? 'Loading…' : salesTrendError ? 'Unavailable' : formatCurrencyWhole(currentMonthOrderValue)}
           icon={TrendingUp}
           iconBoxBg="bg-emerald-50"

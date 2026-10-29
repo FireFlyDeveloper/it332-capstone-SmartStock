@@ -35,7 +35,7 @@ export const QuickActionsGrid: React.FC = () => {
     {
       id: 'dispatch',
       title: 'Track Dispatch',
-      subtitle: 'Truck fleet routes',
+      subtitle: 'Update delivery status',
       icon: Truck,
       path: '/delivery',
       iconBg: 'bg-amber-50 text-[#f59e0b]',
@@ -44,7 +44,7 @@ export const QuickActionsGrid: React.FC = () => {
     {
       id: 'report',
       title: 'Export Report',
-      subtitle: 'Sales & audit summary',
+      subtitle: 'Sales, stock & order reports',
       icon: FileSpreadsheet,
       path: '/reports',
       iconBg: 'bg-blue-50 text-[#3b82f6]',

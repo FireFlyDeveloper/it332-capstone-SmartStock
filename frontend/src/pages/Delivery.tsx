@@ -29,7 +29,7 @@ const deliverySteps = [
 ];
 
 export const DeliveryPage: React.FC = () => {
-  const { deliveries, orders, updateDeliveryStatus, loading } = useData();
+  const { deliveries, orders, updateDeliveryStatus, deliveriesLoading, deliveriesError, refreshDeliveries, ordersLoading, ordersError, refreshOrders } = useData();
   
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'in_transit' | 'delivered'>('all');
 
@@ -83,7 +83,24 @@ export const DeliveryPage: React.FC = () => {
     }
   };
 
+  const handleMarkFailed = async (deliveryId: string) => {
+    try {
+      await updateDeliveryStatus(deliveryId, 'failed', -1);
+      toast.success('Delivery marked as failed');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not mark delivery as failed.');
+    }
+  };
+
   const handleExportCSV = () => {
+    if (ordersLoading) {
+      toast.info('Order details are still loading; try exporting again shortly.');
+      return;
+    }
+    if (ordersError) {
+      toast.error(`Could not load order details for export: ${ordersError}`);
+      return;
+    }
     const rows = filteredDeliveries.map((d) => {
       const order = orders.find((o) => o.id === d.orderId);
       return {
@@ -122,10 +139,41 @@ export const DeliveryPage: React.FC = () => {
     { key: 'delivered', label: 'Delivered' },
   ];
 
-  const isEmpty = !loading && deliveries.length === 0;
+  const isEmpty = !deliveriesLoading && deliveries.length === 0;
+
+  if (deliveriesLoading) {
+    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading delivery data from backend…</div>;
+  }
+  if (deliveriesError) {
+    return (
+      <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
+        <p className="font-semibold text-rose-700">Could not load deliveries from backend: {deliveriesError}</p>
+        <button
+          type="button"
+          onClick={() => void refreshDeliveries().catch(() => undefined)}
+          className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
       <div className="space-y-6 animate-fadeIn">
+        {ordersLoading && (
+          <div role="status" className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
+            Loading order details needed for CSV export…
+          </div>
+        )}
+        {ordersError && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+            <span>Order details could not be loaded; CSV export is unavailable. {ordersError}</span>
+            <button type="button" onClick={() => void refreshOrders().catch(() => undefined)} className="rounded-lg bg-rose-700 px-3 py-1.5 font-semibold text-white hover:bg-rose-800">
+              Retry order details
+            </button>
+          </div>
+        )}
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
@@ -167,7 +215,7 @@ export const DeliveryPage: React.FC = () => {
           <button
             type="button"
             onClick={handleExportCSV}
-            disabled={filteredDeliveries.length === 0}
+            disabled={filteredDeliveries.length === 0 || ordersLoading || Boolean(ordersError)}
             className="inline-flex items-center gap-2 self-start rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
           >
             <Download className="h-4 w-4" /> Export CSV
@@ -303,10 +351,7 @@ export const DeliveryPage: React.FC = () => {
                         )}
                         <button
                           type="button"
-                          onClick={() => {
-                            updateDeliveryStatus(delivery.id, 'failed', -1);
-                            toast.error('Delivery marked as failed');
-                          }}
+                          onClick={() => handleMarkFailed(delivery.id)}
                           className="w-full text-rose-600 hover:bg-rose-50 py-1.5 rounded-xl text-xs font-bold transition-colors"
                         >
                           Mark as Failed
@@ -343,8 +388,7 @@ export const DeliveryPage: React.FC = () => {
               </div>
               <h3 className="text-lg font-semibold text-gray-900">No deliveries scheduled</h3>
               <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
-                Demo data will appear once the backend is connected. The delivery list updates
-                automatically as orders move through the pipeline.
+                When a delivery is created, it will appear here.
               </p>
             </div>
           )}

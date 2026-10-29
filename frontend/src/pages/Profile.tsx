@@ -93,7 +93,7 @@ export const ProfilePage: React.FC = () => {
   const [passwordSaving, setPasswordSaving] = useState(false);
 
 
-  // ── Push Notification State ─────────────────────────────────────
+  // ── Browser Notification State ──────────────────────────────────
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission>(() => {
     return typeof window !== 'undefined' && 'Notification' in window
       ? Notification.permission
@@ -206,7 +206,7 @@ export const ProfilePage: React.FC = () => {
 
   const handleRequestPushPermission = async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
-      toast.error('Browser push notifications are not supported in this browser.');
+      toast.error('Browser notifications are not supported in this browser.');
       return;
     }
 
@@ -214,15 +214,15 @@ export const ProfilePage: React.FC = () => {
       const result = await Notification.requestPermission();
       setBrowserPermission(result);
       if (result === 'granted') {
-        toast.success('Push notification permission granted!');
+        toast.success('Browser notification permission granted.');
         setNotifPrefs((prev) => ({ ...prev, browserPush: true }));
         // Trigger a native test notification
-        new Notification('SmartStock Notifications Active', {
-          body: 'You will now receive live alerts for orders, stock levels, and dispatches.',
+        new Notification('Browser notification permission enabled', {
+          body: 'This only confirms permission for local notifications shown by this page. It does not subscribe this browser to backend alerts.',
           icon: '/favicon.ico',
         });
       } else if (result === 'denied') {
-        toast.error('Push notifications were blocked. Please enable them in browser site settings.');
+        toast.error('Browser notifications were blocked. Please enable them in browser site settings.');
       }
     } catch {
       toast.error('Failed to request notification permission.');
@@ -307,7 +307,7 @@ export const ProfilePage: React.FC = () => {
         {[
           { key: 'profile', label: 'Profile Info', icon: UserIcon },
           { key: 'security', label: 'Change Password', icon: Lock },
-          { key: 'notifications', label: 'Push Notifications', icon: Bell },
+          { key: 'notifications', label: 'Browser Notifications', icon: Bell },
           { key: 'settings', label: 'Preferences & Settings', icon: Sliders },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -538,10 +538,10 @@ export const ProfilePage: React.FC = () => {
         </div>
       )}
 
-      {/* ── TAB 3: Push Notifications ───────────────────────────────── */}
+      {/* ── TAB 3: Browser Notifications ────────────────────────────── */}
       {activeTab === 'notifications' && (
         <div className="space-y-6">
-          {/* Web Push Banner Card */}
+          {/* Browser Notification Card */}
           <div className="bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/60 rounded-[28px] p-6 sm:p-8 border border-indigo-100 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-2xl bg-[#4f46e5] text-white flex items-center justify-center shrink-0 shadow-md shadow-indigo-900/15">
@@ -549,7 +549,7 @@ export const ProfilePage: React.FC = () => {
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-extrabold text-slate-900">Browser Web Push Notifications</h3>
+                  <h3 className="text-base font-extrabold text-slate-900">Browser Notifications</h3>
                   <span
                     className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                       browserPermission === 'granted'
@@ -560,7 +560,7 @@ export const ProfilePage: React.FC = () => {
                     }`}
                   >
                     {browserPermission === 'granted'
-                      ? 'Enabled'
+                      ? 'Permission Granted'
                       : browserPermission === 'denied'
                       ? 'Blocked'
                       : 'Permission Required'}
@@ -588,7 +588,7 @@ export const ProfilePage: React.FC = () => {
                   className="btn-secondary flex items-center gap-1.5 text-xs font-bold py-2 px-3.5 shadow-2xs text-slate-700"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-[#4f46e5]" />
-                  <span>Send Test Alert</span>
+                  <span>Preview Local Notification</span>
                 </button>
               )}
             </div>
@@ -597,8 +597,8 @@ export const ProfilePage: React.FC = () => {
           {/* Detailed Notification Preferences */}
           <div className="bg-white rounded-[28px] p-6 sm:p-8 border border-[#f1f5f9] shadow-sm space-y-6">
             <div className="border-b border-slate-100 pb-4">
-              <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Event Triggers &amp; Channels</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Configure which operational events trigger notification alerts</p>
+              <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Local Notification Preferences</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Saved only in this browser; these choices do not subscribe to backend events, send email digests, or control automated sound/alert delivery.</p>
             </div>
 
             <div className="space-y-4">
@@ -606,31 +606,31 @@ export const ProfilePage: React.FC = () => {
                 {
                   key: 'lowStockAlerts',
                   label: 'Low Stock & Critical Inventory Thresholds',
-                  desc: 'Immediate warning when glass sheets or aluminum extrusions drop below safe limits',
+                  desc: 'Local preference only; automated inventory threshold alerts are not configured.',
                   icon: AlertCircle,
                 },
                 {
                   key: 'orderStatusUpdates',
                   label: 'New Customer Orders & Processing Status',
-                  desc: 'Alert when orders are placed, paid, or marked as awaiting verification',
+                  desc: 'Local preference only; server-side order event alerts are not configured.',
                   icon: CheckCircle2,
                 },
                 {
                   key: 'deliveryDispatches',
                   label: 'Courier Dispatches & Live Tracking Updates',
-                  desc: 'Notifications when logistics trucks leave the warehouse or complete delivery',
+                  desc: 'Local preference only; server-side dispatch and tracking alerts are not configured.',
                   icon: Smartphone,
                 },
                 {
                   key: 'soundAlerts',
                   label: 'Audio Chime for Urgent Notifications',
-                  desc: 'Play a discreet audio tone when critical inventory or emergency dispatch triggers',
+                  desc: 'Local preference only; event-triggered sound playback is not configured.',
                   icon: Volume2,
                 },
                 {
                   key: 'weeklyFinancialReport',
                   label: 'Weekly Financial & Inventory Summary Digest',
-                  desc: 'Automated weekly digest summarizing revenue, inventory valuation, and sales velocity',
+                  desc: 'Local preference only; scheduled email or weekly digest delivery is not configured.',
                   icon: FileSpreadsheet,
                 },
               ].map((item) => {
@@ -692,8 +692,8 @@ export const ProfilePage: React.FC = () => {
       {activeTab === 'settings' && (
         <div className="bg-white rounded-[28px] p-6 sm:p-8 border border-[#f1f5f9] shadow-sm space-y-6">
           <div className="border-b border-slate-100 pb-4">
-            <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">System &amp; Application Preferences</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Customize operational currency, date formats, and export behaviors</p>
+            <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Browser-Only Preferences</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Saved in this browser only. Current screens do not read these choices to change currency, date formatting, density, refresh behavior, or export output.</p>
           </div>
 
           <div className="space-y-6">
@@ -757,7 +757,7 @@ export const ProfilePage: React.FC = () => {
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-slate-400" />
-                  <span>Live Tracking &amp; Orders Polling</span>
+                  <span>Auto-Refresh Preference (Not Applied)</span>
                 </label>
                 <select
                   value={appSettings.autoRefreshInterval}
