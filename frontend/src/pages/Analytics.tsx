@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 // Last touched: 2026-09-22 (interactive date filter toolbar matching Reports & Sales)
 import { 
@@ -15,7 +15,7 @@ import {
 
 import { useData } from '../components/DataContext';
 import { formatCurrency, checkStockStatus, formatDateInput } from '../utils/helpers';
-import { getDemandForecast, type DemandForecastProduct } from '../api';
+import { getDemandForecast, getProductsPage, type DemandForecastProduct, type ProductsPageResponse } from '../api';
 import { toast } from 'sonner';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { 
@@ -46,6 +46,71 @@ export const Analytics: React.FC = () => {
   const [forecastLoading, setForecastLoading] = useState(true);
   const [forecastError, setForecastError] = useState('');
   const [forecastRefreshKey, setForecastRefreshKey] = useState(0);
+  const [snapshotProducts, setSnapshotProducts] = useState<ProductsPageResponse['items']>([]);
+  const [snapshotPage, setSnapshotPage] = useState<ProductsPageResponse['page'] | null>(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(true);
+  const [snapshotLoadingMore, setSnapshotLoadingMore] = useState(false);
+  const [snapshotError, setSnapshotError] = useState('');
+  const [snapshotRetry, setSnapshotRetry] = useState(0);
+  const snapshotSentinelRef = useRef<HTMLDivElement | null>(null);
+  const snapshotRequestRef = useRef(0);
+  const snapshotLoadingMoreRef = useRef(false);
+
+  useEffect(() => {
+    const requestId = ++snapshotRequestRef.current;
+    setSnapshotProducts([]);
+    setSnapshotPage(null);
+    setSnapshotError('');
+    setSnapshotLoading(true);
+    snapshotLoadingMoreRef.current = false;
+    setSnapshotLoadingMore(false);
+    getProductsPage({ limit: 25 })
+      .then((response) => {
+        if (requestId !== snapshotRequestRef.current) return;
+        setSnapshotProducts(response.items);
+        setSnapshotPage(response.page);
+      })
+      .catch((error) => {
+        if (requestId === snapshotRequestRef.current) setSnapshotError(error instanceof Error ? error.message : 'Could not load inventory snapshot.');
+      })
+      .finally(() => {
+        if (requestId === snapshotRequestRef.current) setSnapshotLoading(false);
+      });
+    return () => {
+      if (requestId === snapshotRequestRef.current) snapshotRequestRef.current += 1;
+    };
+  }, [products, snapshotRetry]);
+
+  const loadMoreSnapshot = useCallback(async () => {
+    if (!snapshotPage?.hasMore || !snapshotPage.nextCursor || snapshotLoading || snapshotLoadingMoreRef.current) return;
+    const requestId = snapshotRequestRef.current;
+    snapshotLoadingMoreRef.current = true;
+    setSnapshotLoadingMore(true);
+    setSnapshotError('');
+    try {
+      const response = await getProductsPage({ limit: 25, cursor: snapshotPage.nextCursor });
+      if (requestId !== snapshotRequestRef.current) return;
+      setSnapshotProducts((current) => [...current, ...response.items]);
+      setSnapshotPage(response.page);
+    } catch (error) {
+      if (requestId === snapshotRequestRef.current) setSnapshotError(error instanceof Error ? error.message : 'Could not load more inventory.');
+    } finally {
+      if (requestId === snapshotRequestRef.current) {
+        snapshotLoadingMoreRef.current = false;
+        setSnapshotLoadingMore(false);
+      }
+    }
+  }, [snapshotPage, snapshotLoading]);
+
+  useEffect(() => {
+    const sentinel = snapshotSentinelRef.current;
+    if (!sentinel || !snapshotPage?.hasMore || snapshotLoading || snapshotLoadingMore || snapshotError || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMoreSnapshot();
+    }, { rootMargin: '320px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [snapshotPage?.hasMore, snapshotLoading, snapshotLoadingMore, snapshotError, loadMoreSnapshot]);
 
   const handleDatePreset = (preset: '7d' | '30d' | 'all') => {
     setDatePreset(preset);
@@ -243,9 +308,8 @@ export const Analytics: React.FC = () => {
     return recs;
   }, [products]);
 
-  // Current stock and order quantities from the selected date range.
   const inventoryMovements = useMemo(() => {
-    return products.map(product => {
+    return snapshotProducts.map(product => {
       const orderedQty = filteredOrders
         .filter(o => o.orderStatus !== 'cancelled')
         .reduce((sum, o) => sum + o.items
@@ -259,8 +323,7 @@ export const Analytics: React.FC = () => {
         orderedQty,
       };
     });
-  }, [products, filteredOrders]);
-  const { visibleItems: visibleInventoryMovements, sentinelRef: inventorySentinelRef, hasMore: hasMoreInventory } = useInfiniteScroll(inventoryMovements);
+  }, [snapshotProducts, filteredOrders]);
   const availableForecastRows = useMemo(
     () => forecast.filter((item) => item.forecastQuantity !== null),
     [forecast],
@@ -838,6 +901,14 @@ export const Analytics: React.FC = () => {
               <p className="text-xs text-slate-500">Current backend stock compared with non-cancelled orders in the selected period</p>
             </div>
           </div>
+          {snapshotPage && <p className="text-xs text-slate-400 -mt-4 mb-3">Showing {snapshotProducts.length} of {snapshotPage.totalCount} products</p>}
+          {snapshotLoading && <div role="status" className="py-4 text-center text-sm text-slate-500">Loading inventory snapshot…</div>}
+          {snapshotError && (
+            <div role="alert" className="py-4 text-center text-sm text-rose-700">
+              <p>{snapshotError}</p>
+              <button type="button" onClick={() => setSnapshotRetry((value) => value + 1)} className="mt-2 font-bold underline">Retry</button>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50/80 border-b border-[#f1f5f9]">
@@ -849,7 +920,7 @@ export const Analytics: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f1f5f9]">
-                {visibleInventoryMovements.map((item) => (
+                {inventoryMovements.map((item) => (
                   <tr key={item.productId} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-4 py-3 text-sm text-slate-900 font-medium">{item.productName}</td>
                     <td className="px-4 py-3">
@@ -864,7 +935,18 @@ export const Analytics: React.FC = () => {
               </tbody>
             </table>
           </div>
-          {hasMoreInventory && <div ref={inventorySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more products…</div>}
+          {snapshotPage?.hasMore && <div ref={snapshotSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more products…</div>}
+          {snapshotPage?.hasMore && typeof IntersectionObserver === 'undefined' && (
+            <div className="py-3 text-center">
+              <button type="button" onClick={() => void loadMoreSnapshot()} disabled={snapshotLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">
+                {snapshotLoadingMore ? 'Loading…' : 'Load more products'}
+              </button>
+            </div>
+          )}
+          {snapshotLoadingMore && <div role="status" className="py-3 text-center text-xs text-slate-400">Loading more products…</div>}
+          {!snapshotLoading && !snapshotError && snapshotPage?.totalCount === 0 && (
+            <p className="py-8 text-center text-sm text-slate-500">No products are available.</p>
+          )}
         </div>
 
         {/* Order-history demand estimates */}
