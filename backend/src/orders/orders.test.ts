@@ -103,6 +103,11 @@ describe('order routes', () => {
     expect(secondBody.orders).toHaveLength(1);
     expect(secondBody.orders[0].id).not.toBe(firstBody.orders[0].id);
 
+    const itemSearch = listOrders()[0].items[0].name;
+    const itemSearchResponse = await app.request(`/orders/page?search=${encodeURIComponent(itemSearch)}`, { headers });
+    expect(itemSearchResponse.status).toBe(200);
+    expect((await itemSearchResponse.json()).page.totalCount).toBeGreaterThan(0);
+
     expect((await app.request('/orders/page?limit=0', { headers })).status).toBe(400);
     expect((await app.request('/orders/page?from=2026-02-30', { headers })).status).toBe(400);
     expect((await app.request('/orders/page?from=2026-11-01&to=2026-10-01', { headers })).status).toBe(400);

@@ -67,6 +67,7 @@ describe('PostgreSQL Orders cursor query', () => {
     expect(sql).toContain("o.order_status = 'processing'");
     expect(sql).toContain('o.delivery_date >= $3::date');
     expect(sql).toContain('POSITION(LOWER($2)');
+    expect(sql).toContain('jsonb_array_elements');
     expect(sql).toContain('ORDER BY created_at DESC, id::text DESC');
     expect(sql).toContain('LIMIT $7');
     expect(values).toEqual(['packed', 'customer', '2026-10-01', '2026-10-31', '2026-10-29T00:00:00.000Z', '123e4567-e89b-42d3-a456-426614174000', 2]);

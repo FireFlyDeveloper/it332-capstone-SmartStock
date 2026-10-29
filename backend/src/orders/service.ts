@@ -183,7 +183,8 @@ export async function listOrderPageRecords(input: OrdersPageInput) {
       || (input.status === 'completed' && order.orderStatus === 'delivered')
       || (input.status === 'cancelled' && order.orderStatus === 'cancelled');
     const matchesSearch = !query || order.customerName.toLowerCase().includes(query)
-      || order.referenceNumber.toLowerCase().includes(query) || order.id.toLowerCase().includes(query);
+      || order.referenceNumber.toLowerCase().includes(query) || order.id.toLowerCase().includes(query)
+      || order.items.some((item) => item.name.toLowerCase().includes(query));
     const matchesFrom = !input.fromDate || order.deliveryDate >= input.fromDate;
     const matchesTo = !input.toDate || order.deliveryDate <= input.toDate;
     return matchesStatus && matchesSearch && matchesFrom && matchesTo;

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   FileText, 
@@ -23,7 +23,8 @@ import type { Order } from '../types';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
-import { apiFetchBlob, getAnalyticsPurchases, getDemandForecast, getPolicyPerformance, type ApiError, type PurchaseAnalyticsResponse, type DemandForecastProduct, type PolicyPerformanceResponse } from '../api';
+import { apiFetchBlob, getAnalyticsPurchases, getDemandForecast, getPolicyPerformance, getOrdersPage, type ApiError, type PurchaseAnalyticsResponse, type DemandForecastProduct, type PolicyPerformanceResponse } from '../api';
+import { toFrontendOrder } from '../components/orderMapper';
 import { useAuth } from '../components/AuthContext';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 
@@ -115,6 +116,86 @@ export const Reports: React.FC = () => {
   const [observedPolicy, setObservedPolicy] = useState<PolicyPerformanceResponse | null>(null);
   const [observedPolicyLoading, setObservedPolicyLoading] = useState(true);
   const [observedPolicyError, setObservedPolicyError] = useState('');
+  const [historyOrders, setHistoryOrders] = useState<Order[]>([]);
+  const [historyTotalCount, setHistoryTotalCount] = useState(0);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [historyRetry, setHistoryRetry] = useState(0);
+  const historySentinelRef = useRef<HTMLDivElement | null>(null);
+  const historyRequestRef = useRef(0);
+  const historyLoadingMoreRef = useRef(false);
+
+  useEffect(() => {
+    const requestId = ++historyRequestRef.current;
+    setHistoryOrders([]);
+    setHistoryTotalCount(0);
+    setHistoryHasMore(false);
+    setHistoryCursor(null);
+    historyLoadingMoreRef.current = false;
+    setHistoryLoadingMore(false);
+    setHistoryError('');
+    setHistoryLoading(true);
+    getOrdersPage({ limit: 25, status: statusFilter, search: searchTerm, fromDate: fromDate || null, toDate: toDate || null })
+      .then((response) => {
+        if (requestId !== historyRequestRef.current) return;
+        setHistoryOrders(response.orders.map(toFrontendOrder));
+        setHistoryTotalCount(response.page.totalCount);
+        setHistoryHasMore(response.page.hasMore);
+        setHistoryCursor(response.page.nextCursor);
+      })
+      .catch((error) => {
+        if (requestId === historyRequestRef.current) setHistoryError(error instanceof Error ? error.message : 'Could not load order history.');
+      })
+      .finally(() => {
+        if (requestId === historyRequestRef.current) setHistoryLoading(false);
+      });
+    return () => {
+      if (requestId === historyRequestRef.current) historyRequestRef.current += 1;
+    };
+  }, [searchTerm, statusFilter, fromDate, toDate, historyRetry]);
+
+  const loadMoreHistory = useCallback(async () => {
+    if (!historyHasMore || !historyCursor || historyLoading || historyLoadingMoreRef.current) return;
+    const requestId = historyRequestRef.current;
+    historyLoadingMoreRef.current = true;
+    setHistoryLoadingMore(true);
+    setHistoryError('');
+    try {
+      const response = await getOrdersPage({
+        limit: 25,
+        cursor: historyCursor,
+        status: statusFilter,
+        search: searchTerm,
+        fromDate: fromDate || null,
+        toDate: toDate || null,
+      });
+      if (requestId !== historyRequestRef.current) return;
+      setHistoryOrders((current) => [...current, ...response.orders.map(toFrontendOrder)]);
+      setHistoryTotalCount(response.page.totalCount);
+      setHistoryHasMore(response.page.hasMore);
+      setHistoryCursor(response.page.nextCursor);
+    } catch (error) {
+      if (requestId === historyRequestRef.current) setHistoryError(error instanceof Error ? error.message : 'Could not load more order history.');
+    } finally {
+      if (requestId === historyRequestRef.current) {
+        historyLoadingMoreRef.current = false;
+        setHistoryLoadingMore(false);
+      }
+    }
+  }, [historyHasMore, historyCursor, historyLoading, statusFilter, searchTerm, fromDate, toDate]);
+
+  useEffect(() => {
+    const sentinel = historySentinelRef.current;
+    if (!sentinel || !historyHasMore || historyLoading || historyLoadingMore || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMoreHistory();
+    }, { rootMargin: '320px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [historyHasMore, historyLoading, historyLoadingMore, loadMoreHistory]);
 
   // Anchor date: latest date in orders (or fallback to current date)
   useEffect(() => {
@@ -181,49 +262,29 @@ export const Reports: React.FC = () => {
     toast.info('Date filters cleared.');
   };
 
-  // Filter orders by specific date range (from / to)
-  const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      if (fromDate && order.date < fromDate) return false;
-      if (toDate && order.date > toDate) return false;
-      return true;
-    });
-  }, [orders, fromDate, toDate]);
+  const filteredOrders = useMemo(() => orders.filter((order) => {
+    if (fromDate && order.date < fromDate) return false;
+    if (toDate && order.date > toDate) return false;
+    return true;
+  }), [orders, fromDate, toDate]);
 
-  // Keep the backend order identity and status; this is an order history, not a transaction ledger.
+  // The backend order-history endpoint applies these filters before cursor pagination.
   const transactionHistory = useMemo(() => {
-    return filteredOrders.map((order) => ({
+    return historyOrders.map((order) => ({
       id: order.id,
       type: 'order' as const,
       reference: order.referenceNumber,
-      items: order.items.map(item => ({
-        name: item.productName,
-        quantity: item.quantity,
-        amount: item.total,
-      })),
+      items: order.items.map(item => ({ name: item.productName, quantity: item.quantity, amount: item.total })),
       total: order.total,
       date: order.date,
       status: order.orderStatus,
     }));
-  }, [filteredOrders]);
-
-  // Filter transactions by search term and status filter
-  const filteredTransactions = useMemo(() => {
-    return transactionHistory.filter(txn => {
-      const q = searchTerm.toLowerCase().trim();
-      const matchesSearch = !q || 
-        txn.reference.toLowerCase().includes(q) ||
-        txn.id.toLowerCase().includes(q) ||
-        txn.items.some(item => item.name.toLowerCase().includes(q));
-      const matchesStatus = statusFilter === 'all' || txn.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [searchTerm, statusFilter, transactionHistory]);
+  }, [historyOrders]);
+  const filteredTransactions = transactionHistory;
   const availablePolicyRows = useMemo(() => policyRows.filter((row) => row.forecastQuantity !== null), [policyRows]);
   const { visibleItems: visiblePurchaseGroups, sentinelRef: purchaseSentinelRef, hasMore: hasMorePurchaseGroups } = useInfiniteScroll(purchaseData?.groups ?? []);
   const { visibleItems: visiblePolicyRows, sentinelRef: policySentinelRef, hasMore: hasMorePolicyRows } = useInfiniteScroll(availablePolicyRows);
   const { visibleItems: visibleObservedRows, sentinelRef: observedSentinelRef, hasMore: hasMoreObservedRows } = useInfiniteScroll(observedPolicy?.rows ?? []);
-  const { visibleItems: visibleTransactions, sentinelRef: transactionSentinelRef, hasMore: hasMoreTransactions } = useInfiniteScroll(filteredTransactions);
 
   // Calculate summary stats dynamically based on filtered orders
   const totalSales = filteredOrders.filter(o => o.orderStatus === 'completed').reduce((sum, o) => sum + o.total, 0);
@@ -293,33 +354,54 @@ export const Reports: React.FC = () => {
     }
   };
 
-  const handleExportCSV = () => {
-    if (filteredTransactions.length === 0) {
-      toast.warning('No orders found to export for the selected date range.');
-      return;
+  const handleExportCSV = async () => {
+    try {
+      const allOrders: Order[] = [];
+      let cursor: string | null = null;
+      let hasMore = true;
+      while (hasMore) {
+        const response = await getOrdersPage({
+          limit: 100,
+          cursor,
+          status: statusFilter,
+          search: searchTerm,
+          fromDate: fromDate || null,
+          toDate: toDate || null,
+        });
+        allOrders.push(...response.orders.map(toFrontendOrder));
+        hasMore = response.page.hasMore;
+        cursor = response.page.nextCursor;
+        if (hasMore && !cursor) throw new Error('Order history returned no cursor for another page.');
+      }
+      if (allOrders.length === 0) {
+        toast.warning('No orders found for the selected filters.');
+        return;
+      }
+      const rows = allOrders.map((order) => ({
+        id: order.id,
+        type: 'order' as const,
+        reference: order.referenceNumber,
+        items: order.items.map((item) => `${item.productName} (qty: ${item.quantity})`).join('; '),
+        total: order.total,
+        date: order.date,
+        status: order.orderStatus,
+      }));
+      const columns: { key: keyof typeof rows[0]; header: string }[] = [
+        { key: 'id', header: 'Order ID' },
+        { key: 'type', header: 'Type' },
+        { key: 'reference', header: 'Reference' },
+        { key: 'items', header: 'Items' },
+        { key: 'total', header: 'Total (PHP)' },
+        { key: 'date', header: 'Date' },
+        { key: 'status', header: 'Status' },
+      ];
+      const csvData = toCSV(rows, columns);
+      const dateRangeSlug = fromDate || toDate ? `_${fromDate || 'start'}_to_${toDate || 'end'}` : '_all-time';
+      downloadCSV(`smartstock-${exportType}-report${dateRangeSlug}.csv`, csvData);
+      toast.success(`Exported ${allOrders.length} order records to CSV.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not export order history.');
     }
-    const rows = filteredTransactions.map((txn) => ({
-      id: txn.id,
-      type: txn.type,
-      reference: txn.reference,
-      items: txn.items.map((i) => `${i.name} (qty: ${i.quantity})`).join('; '),
-      total: txn.total,
-      date: txn.date,
-      status: txn.status,
-    }));
-    const columns: { key: keyof typeof rows[0]; header: string }[] = [
-      { key: 'id', header: 'Order ID' },
-      { key: 'type', header: 'Type' },
-      { key: 'reference', header: 'Reference' },
-      { key: 'items', header: 'Items' },
-      { key: 'total', header: 'Total (PHP)' },
-      { key: 'date', header: 'Date' },
-      { key: 'status', header: 'Status' },
-    ];
-    const csvData = toCSV(rows, columns);
-    const dateRangeSlug = fromDate || toDate ? `_${fromDate || 'start'}_to_${toDate || 'end'}` : '_all-time';
-    downloadCSV(`smartstock-${exportType}-report${dateRangeSlug}.csv`, csvData);
-    toast.success(`Exported ${filteredTransactions.length} order records to CSV.`);
   };
 
   const getTransactionIcon = (type: 'order' | 'restock' | 'return' | 'adjustment') => {
@@ -739,6 +821,7 @@ export const Reports: React.FC = () => {
           <div className="p-6 border-b border-[#f1f5f9]">
             <h3 className="text-lg font-bold text-slate-900">Order History</h3>
             <p className="text-xs text-slate-500 mt-0.5">Orders returned by the backend for the selected period</p>
+            {!historyLoading && <p className="text-xs text-slate-400 mt-1">Showing {historyOrders.length} of {historyTotalCount} matching orders</p>}
           </div>
           
           <div className="overflow-x-auto">
@@ -755,7 +838,7 @@ export const Reports: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f1f5f9]">
-                {visibleTransactions.map((txn) => {
+                {filteredTransactions.map((txn) => {
                   const Icon = getTransactionIcon(txn.type);
                   return (
                     <tr key={txn.id} className="hover:bg-slate-50/50 transition-colors">
@@ -790,8 +873,25 @@ export const Reports: React.FC = () => {
             </table>
           </div>
           
-          {hasMoreTransactions && <div ref={transactionSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more orders…</div>}
-          {filteredTransactions.length === 0 && (
+          {historyLoading && <div role="status" className="p-8 text-center text-sm text-slate-500">Loading matching orders…</div>}
+          {historyError && (
+            <div role="alert" className="p-5 text-center text-sm text-rose-700">
+              <p>{historyError}</p>
+              <button type="button" onClick={() => historyOrders.length ? void loadMoreHistory() : setHistoryRetry((value) => value + 1)} className="mt-2 font-bold underline">
+                Retry
+              </button>
+            </div>
+          )}
+          {historyHasMore && <div ref={historySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more orders…</div>}
+          {historyHasMore && typeof IntersectionObserver === 'undefined' && (
+            <div className="py-3 text-center">
+              <button type="button" onClick={() => void loadMoreHistory()} disabled={historyLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">
+                {historyLoadingMore ? 'Loading…' : 'Load more orders'}
+              </button>
+            </div>
+          )}
+          {historyLoadingMore && <div role="status" className="py-3 text-center text-xs text-slate-400">Loading more orders…</div>}
+          {!historyLoading && !historyError && historyTotalCount === 0 && (
             <div className="p-12 text-center">
               <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
               <p className="text-slate-500 font-medium text-sm">No orders found</p>

@@ -503,7 +503,11 @@ export async function listOrdersPageDb(input: {
           OR ($1 = 'cancelled' AND o.order_status = 'cancelled'))
         AND ($2::text = '' OR POSITION(LOWER($2) IN LOWER(COALESCE(o.customer_name, ''))) > 0
           OR POSITION(LOWER($2) IN LOWER(COALESCE(o.order_no, ''))) > 0
-          OR POSITION(LOWER($2) IN LOWER(o.id::text)) > 0)
+          OR POSITION(LOWER($2) IN LOWER(o.id::text)) > 0
+          OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS items(item)
+            WHERE POSITION(LOWER($2) IN LOWER(COALESCE(items.item ->> 'name', items.item ->> 'productName', ''))) > 0
+          ))
         AND ($3::date IS NULL OR o.delivery_date >= $3::date)
         AND ($4::date IS NULL OR o.delivery_date <= $4::date)
     ), summary AS (
