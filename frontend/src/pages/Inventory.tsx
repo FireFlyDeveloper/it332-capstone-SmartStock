@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Plus,
   Search,
@@ -10,6 +10,7 @@ import {
   PackagePlus,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
+import { getProductsPage, type ProductsPageResponse } from '../api';
 import { useAuth } from '../components/AuthContext';
 import type { Product } from '../types';
 import { formatCurrency, getStatusColor, checkStockStatus } from '../utils/helpers';
@@ -77,14 +78,24 @@ function toProductPayload(form: ProductFormData): Omit<Product, 'id'> {
 const PRODUCT_BATCH_SIZES = [10, 25, 50, 100] as const;
 
 export const Inventory: React.FC = () => {
-  const { products, addProduct, updateProduct, deleteProduct, restockProduct, productsLoading, productsError, refreshProducts } = useData();
+  const { addProduct, updateProduct, deleteProduct, restockProduct } = useData();
   const { isAdmin } = useAuth();
-  
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'glass' | 'aluminum'>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'healthy'>('all');
   const [batchSize, setBatchSize] = useState<number>(25);
-  const [visibleCount, setVisibleCount] = useState(25);
+  const [pagedProducts, setPagedProducts] = useState<Product[]>([]);
+  const [pageSummary, setPageSummary] = useState<ProductsPageResponse['summary']>({ totalProducts: 0, glassCount: 0, aluminumCount: 0, lowStockCount: 0, outOfStockCount: 0 });
+  const [pageTotalCount, setPageTotalCount] = useState(0);
+  const [pageNextCursor, setPageNextCursor] = useState<string | null>(null);
+  const [pageHasMore, setPageHasMore] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [pageError, setPageError] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingMoreError, setLoadingMoreError] = useState('');
+  const [exportingCsv, setExportingCsv] = useState(false);
+  const requestGeneration = useRef(0);
+  const loadingMoreRef = useRef(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
@@ -100,51 +111,83 @@ export const Inventory: React.FC = () => {
   const [savingProduct, setSavingProduct] = useState(false);
   const [savingRestock, setSavingRestock] = useState(false);
 
-  const resetListPosition = () => {
-    setVisibleCount(batchSize);
-  };
+  const loadFirstPage = useCallback(async () => {
+    const requestId = ++requestGeneration.current;
+    loadingMoreRef.current = false;
+    setPageLoading(true);
+    setLoadingMore(false);
+    setPageError('');
+    setLoadingMoreError('');
+    setPagedProducts([]);
+    setPageNextCursor(null);
+    setPageHasMore(false);
+    setPageTotalCount(0);
+    setPageSummary({ totalProducts: 0, glassCount: 0, aluminumCount: 0, lowStockCount: 0, outOfStockCount: 0 });
+    try {
+      const result = await getProductsPage({
+        limit: batchSize,
+        category: categoryFilter,
+        stock: stockFilter,
+        search: searchTerm,
+      });
+      if (requestId !== requestGeneration.current) return;
+      setPagedProducts(result.items);
+      setPageSummary(result.summary);
+      setPageTotalCount(result.page.totalCount);
+      setPageNextCursor(result.page.nextCursor);
+      setPageHasMore(result.page.hasMore);
+    } catch (error) {
+      if (requestId === requestGeneration.current) setPageError(error instanceof Error ? error.message : 'Could not load inventory.');
+    } finally {
+      if (requestId === requestGeneration.current) setPageLoading(false);
+    }
+  }, [batchSize, categoryFilter, stockFilter, searchTerm]);
 
-  const searchTokens = useMemo(
-    () => searchTerm.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean),
-    [searchTerm],
-  );
-  const searchableProducts = useMemo(() => products.map((product) => ({
-    product,
-    searchableText: [product.id, product.sku, product.name, product.category, product.unit, product.description]
-      .filter(Boolean)
-      .join(' ')
-      .toLocaleLowerCase(),
-  })), [products]);
-  const filteredProducts = useMemo(() => searchableProducts
-    .filter(({ product, searchableText }) => {
-      const matchesSearch = searchTokens.every((token) => searchableText.includes(token));
-      const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
-      const stockStatus = checkStockStatus(product.stock, product.threshold);
-      const matchesStock = stockFilter === 'all' || (stockFilter === 'low' ? stockStatus !== 'healthy' : stockStatus === 'healthy');
-      return matchesSearch && matchesCategory && matchesStock;
-    })
-    .map(({ product }) => product), [searchableProducts, searchTokens, categoryFilter, stockFilter]);
+  useEffect(() => { void loadFirstPage() }, [loadFirstPage]);
 
-  const infiniteProducts = useMemo(
-    () => filteredProducts.slice(0, visibleCount),
-    [filteredProducts, visibleCount],
-  );
-  const displayedStart = filteredProducts.length === 0 ? 0 : 1;
-  const displayedEnd = Math.min(filteredProducts.length, visibleCount);
+  const loadMore = useCallback(async () => {
+    if (!pageHasMore || !pageNextCursor || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    setLoadingMoreError('');
+    const requestId = requestGeneration.current;
+    try {
+      const result = await getProductsPage({
+        limit: batchSize,
+        cursor: pageNextCursor,
+        category: categoryFilter,
+        stock: stockFilter,
+        search: searchTerm,
+      });
+      if (requestId !== requestGeneration.current) return;
+      setPagedProducts((current) => [...current, ...result.items]);
+      setPageNextCursor(result.page.nextCursor);
+      setPageHasMore(result.page.hasMore);
+      setPageTotalCount(result.page.totalCount);
+      setPageSummary(result.summary);
+    } catch (error) {
+      if (requestId === requestGeneration.current) setLoadingMoreError(error instanceof Error ? error.message : 'Could not load more products.');
+    } finally {
+      if (requestId === requestGeneration.current) {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      }
+    }
+  }, [batchSize, pageHasMore, pageNextCursor, categoryFilter, stockFilter, searchTerm]);
 
   useEffect(() => {
-    if (visibleCount >= filteredProducts.length) return;
     const sentinel = loadMoreRef.current;
-    if (!sentinel || typeof IntersectionObserver === 'undefined') return;
-
+    if (!sentinel || !pageHasMore || pageLoading || loadingMore || loadingMoreError || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        setVisibleCount((count) => Math.min(filteredProducts.length, count + batchSize));
-      }
-    }, { rootMargin: '240px' });
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+    }, { rootMargin: '240px 0px' });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [visibleCount, filteredProducts.length, batchSize]);
+  }, [pageHasMore, pageLoading, loadingMore, loadingMoreError, loadMore]);
+
+  const displayedStart = pagedProducts.length === 0 ? 0 : 1;
+  const displayedEnd = pagedProducts.length;
+
 
   const handleOpenModal = (product?: Product) => {
     if (product) {
@@ -176,6 +219,7 @@ export const Inventory: React.FC = () => {
         await addProduct(payload);
         toast.success('Product added successfully');
       }
+      await loadFirstPage();
       handleCloseModal();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save product.');
@@ -223,6 +267,7 @@ export const Inventory: React.FC = () => {
         supplier: restockSupplier.trim(),
         ...(unitCost !== undefined ? { unitCost } : {}),
       });
+      await loadFirstPage();
       toast.success(`Restocked ${quantity} units successfully`);
       handleCloseRestockModal();
     } catch (err) {
@@ -241,6 +286,7 @@ export const Inventory: React.FC = () => {
     if (!deleteProductId) return;
     try {
       await deleteProduct(deleteProductId);
+      await loadFirstPage();
       toast.success('Product deleted successfully');
       setIsDeleteConfirmOpen(false);
     } catch (err) {
@@ -248,39 +294,51 @@ export const Inventory: React.FC = () => {
     }
   };
 
-  const handleExportCSV = () => {
-    // Export the complete filtered set, not only the current page or loaded scroll batch.
-    const exportRows = filteredProducts;
-    const csv = toCSV(exportRows, [
-      { key: 'sku', header: 'SKU' },
-      { key: 'name', header: 'Product' },
-      { key: 'category', header: 'Category' },
-      { key: 'unit', header: 'Unit' },
-      { key: 'stock', header: 'Stock' },
-      { key: 'price', header: 'Price (PHP)' },
-      { key: 'threshold', header: 'Reorder Threshold' },
-      { key: 'status', header: 'Status' },
-    ]);
-    downloadCSV(`inventory-${new Date().toISOString().split('T')[0]}.csv`, csv);
-    toast.success(`Exported all ${exportRows.length} filtered products to CSV`);
+  const handleExportCSV = async () => {
+    setExportingCsv(true);
+    try {
+      const exportRows: Product[] = [];
+      let cursor: string | null = null;
+      do {
+        const result = await getProductsPage({
+          limit: 100,
+          cursor,
+          category: categoryFilter,
+          stock: stockFilter,
+          search: searchTerm,
+        });
+        exportRows.push(...result.items);
+        cursor = result.page.nextCursor;
+      } while (cursor);
+      const csv = toCSV(exportRows, [
+        { key: 'sku', header: 'SKU' },
+        { key: 'name', header: 'Product' },
+        { key: 'category', header: 'Category' },
+        { key: 'unit', header: 'Unit' },
+        { key: 'stock', header: 'Stock' },
+        { key: 'price', header: 'Price (PHP)' },
+        { key: 'threshold', header: 'Reorder Threshold' },
+        { key: 'status', header: 'Status' },
+      ]);
+      downloadCSV(`inventory-${new Date().toISOString().split('T')[0]}.csv`, csv);
+      toast.success(`Exported all ${exportRows.length} filtered products to CSV`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not export inventory.');
+    } finally {
+      setExportingCsv(false);
+    }
   };
 
-  const isEmpty = !productsLoading && products.length === 0;
+  const isEmpty = !pageLoading && !pageError && pageSummary.totalProducts === 0;
 
-  if (productsLoading) {
+  if (pageLoading) {
     return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading inventory data from backend…</div>;
   }
-  if (productsError) {
+  if (pageError) {
     return (
       <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
-        <p className="font-semibold text-rose-700">Could not load inventory from backend: {productsError}</p>
-        <button
-          type="button"
-          onClick={() => void refreshProducts().catch(() => undefined)}
-          className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
-        >
-          Retry
-        </button>
+        <p className="font-semibold text-rose-700">Could not load inventory from backend: {pageError}</p>
+        <button type="button" onClick={() => void loadFirstPage()} className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Retry</button>
       </div>
     );
   }
@@ -300,7 +358,6 @@ export const Inventory: React.FC = () => {
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
-                  resetListPosition();
                 }}
                 className="input !pl-10 w-full sm:w-64"
               />
@@ -312,7 +369,6 @@ export const Inventory: React.FC = () => {
               value={categoryFilter}
               onChange={(e) => {
                 setCategoryFilter(e.target.value as typeof categoryFilter);
-                resetListPosition();
               }}
               className="input w-full sm:w-40"
             >
@@ -327,7 +383,6 @@ export const Inventory: React.FC = () => {
               value={stockFilter}
               onChange={(e) => {
                 setStockFilter(e.target.value as typeof stockFilter);
-                resetListPosition();
               }}
               className="input w-full sm:w-40"
             >
@@ -341,12 +396,12 @@ export const Inventory: React.FC = () => {
             <button
               type="button"
               onClick={handleExportCSV}
-              disabled={filteredProducts.length === 0}
+              disabled={pageTotalCount === 0 || exportingCsv}
               title="Exports all products matching the current filters, including rows not yet loaded by scrolling"
               aria-label="Export all filtered products to CSV"
               className="inline-flex items-center gap-2 self-start rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
             >
-              <Download className="h-4 w-4" /> Export CSV
+              <Download className="h-4 w-4" /> {exportingCsv ? 'Exporting…' : 'Export CSV'}
             </button>
             {isAdmin && (
               <button
@@ -364,7 +419,7 @@ export const Inventory: React.FC = () => {
         {/* Result count and infinite-scroll batch size */}
         <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-slate-600" aria-live="polite">
-            {filteredProducts.length} product{filteredProducts.length === 1 ? '' : 's'} match the current filters
+            {pageTotalCount} product{pageTotalCount === 1 ? '' : 's'} match the current filters
           </p>
           <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
             Load batch size
@@ -374,7 +429,6 @@ export const Inventory: React.FC = () => {
               onChange={(e) => {
                 const nextSize = Number(e.target.value);
                 setBatchSize(nextSize);
-                setVisibleCount(nextSize);
               }}
               className="input !w-auto !py-1.5"
             >
@@ -387,19 +441,19 @@ export const Inventory: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Products</p>
-            <p className="text-2xl font-black text-slate-900 mt-1">{products.length}</p>
+            <p className="text-2xl font-black text-slate-900 mt-1">{pageSummary.totalProducts}</p>
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Glass Products</p>
-            <p className="text-2xl font-black text-[#3b82f6] mt-1">{products.filter(p => p.category === 'glass').length}</p>
+            <p className="text-2xl font-black text-[#3b82f6] mt-1">{pageSummary.glassCount}</p>
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Aluminum Profiles</p>
-            <p className="text-2xl font-black text-[#10b981] mt-1">{products.filter(p => p.category === 'aluminum').length}</p>
+            <p className="text-2xl font-black text-[#10b981] mt-1">{pageSummary.aluminumCount}</p>
           </div>
           <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] p-5 micro-hover">
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Low Stock</p>
-            <p className="text-2xl font-black text-[#f43f5e] mt-1">{products.filter(p => checkStockStatus(p.stock, p.threshold) !== 'healthy').length}</p>
+            <p className="text-2xl font-black text-[#f43f5e] mt-1">{pageSummary.lowStockCount}</p>
           </div>
         </div>
 
@@ -419,7 +473,7 @@ export const Inventory: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {infiniteProducts.map((product) => {
+                {pagedProducts.map((product) => {
                   const stockStatus = checkStockStatus(product.stock, product.threshold);
                   return (
                     <tr key={product.id} className="hover:bg-gray-50 transition-colors">
@@ -491,11 +545,11 @@ export const Inventory: React.FC = () => {
             </table>
           </div>
           
-          {productsLoading && products.length === 0 && (
+          {pageLoading && pagedProducts.length === 0 && (
             <div className="p-12 text-center text-sm text-slate-500" role="status">Loading inventory…</div>
           )}
 
-          {!productsLoading && filteredProducts.length === 0 && !isEmpty && (
+          {!pageLoading && pageTotalCount === 0 && !isEmpty && (
             <div className="p-12 text-center">
               <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500">No products match the current filters.</p>
@@ -527,21 +581,22 @@ export const Inventory: React.FC = () => {
 
           <div className="flex flex-col gap-3 border-t border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-slate-500" aria-live="polite">
-              Showing {displayedStart}–{displayedEnd} of {filteredProducts.length} matching products
+              Showing {displayedStart}–{displayedEnd} of {pageTotalCount} matching products
             </p>
             <div className="flex flex-wrap items-center gap-3">
-              {filteredProducts.length === 0 ? (
+              {pageTotalCount === 0 ? (
                 <span className="text-xs text-slate-500">No matching products to load.</span>
-              ) : displayedEnd < filteredProducts.length ? (
+              ) : pageHasMore ? (
                 <>
-                  <span className="text-xs text-slate-500">Keep scrolling to load more products.</span>
+                  <span className="text-xs text-slate-500">{loadingMore ? 'Loading more products…' : 'Keep scrolling to load more products.'}</span>
                   {typeof IntersectionObserver === 'undefined' && (
                     <button
                       type="button"
-                      onClick={() => setVisibleCount((count) => Math.min(filteredProducts.length, count + batchSize))}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      onClick={() => void loadMore()}
+                      disabled={loadingMore}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                     >
-                      Load more
+                      {loadingMore ? 'Loading…' : 'Load more'}
                     </button>
                   )}
                   <div ref={loadMoreRef} className="h-1 w-full" aria-hidden="true" />
@@ -549,6 +604,7 @@ export const Inventory: React.FC = () => {
               ) : (
                 <span className="text-xs text-slate-500">All matching products are loaded.</span>
               )}
+              {loadingMoreError && <div role="alert" className="flex items-center gap-2 text-xs text-rose-700"><span>{loadingMoreError}</span><button type="button" onClick={() => void loadMore()} className="font-semibold underline">Retry</button></div>}
             </div>
           </div>
         </div>

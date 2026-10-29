@@ -11,7 +11,7 @@
  */
 
 import type { BackendOrder } from './components/orderMapper'
-import type { Delivery } from './types'
+import type { Delivery, Product } from './types'
 
 const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined)?.trim().replace(/\/+$/, '')) ?? ''
 
@@ -358,6 +358,28 @@ export function getDeliveriesPage(options: {
   if (options.cursor) params.set('cursor', options.cursor)
   if (options.status) params.set('status', options.status)
   return apiFetch<DeliveriesPageResponse>(`/deliveries?${params.toString()}&mode=page`)
+}
+
+export interface ProductsPageResponse {
+  items: Product[]
+  page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null }
+  summary: { totalProducts: number; glassCount: number; aluminumCount: number; lowStockCount: number; outOfStockCount: number }
+}
+
+export function getProductsPage(options: {
+  limit?: number
+  cursor?: string | null
+  category?: 'all' | 'glass' | 'aluminum'
+  stock?: 'all' | 'low' | 'healthy'
+  search?: string
+} = {}): Promise<ProductsPageResponse> {
+  const params = new URLSearchParams({ mode: 'page' })
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.cursor) params.set('cursor', options.cursor)
+  if (options.category) params.set('category', options.category)
+  if (options.stock) params.set('stock', options.stock)
+  if (options.search?.trim()) params.set('q', options.search.trim())
+  return apiFetch<ProductsPageResponse>(`/products?${params.toString()}`)
 }
 
 export function getDailySales(date: string, options: DailySalesPageOptions = {}): Promise<DailySalesSummary> {

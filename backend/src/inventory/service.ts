@@ -5,6 +5,8 @@
  * Last touched: 2026-07-07
  */
 
+import { isDbSyncActive } from '../db/syncState.js';
+import { listProductsPageDb } from '../db/postgresStore.js';
 import { sendNotificationEvent } from '../notifications/webhook.js';
 import {
   createProduct,
@@ -228,6 +230,53 @@ export function listProductRecords(filters: ProductFilters = {}): Product[] {
       .filter(Boolean)
       .some((value) => value!.toLowerCase().includes(q));
   });
+}
+
+export interface ProductPageInput {
+  limit: number;
+  category: 'all' | ProductCategory;
+  stock: 'all' | 'low' | 'healthy';
+  searchTokens: string[];
+  cursorName: string | null;
+  cursorId: string | null;
+}
+
+export async function listProductPageRecords(input: ProductPageInput) {
+  if (isDbSyncActive()) {
+    const page = await listProductsPageDb(input);
+    if (!page) throw new Error('Database unavailable');
+    return page;
+  }
+
+  const products = listProducts();
+  const searchable = (product: Product) => [product.id, product.sku, product.name, product.category, product.unit, product.description]
+    .filter(Boolean).join(' ').toLowerCase();
+  const filtered = products.filter((product) => {
+    if (input.category !== 'all' && product.category !== input.category) return false;
+    if (input.stock === 'low' && product.stock > product.threshold) return false;
+    if (input.stock === 'healthy' && product.stock <= product.threshold) return false;
+    const text = searchable(product);
+    return input.searchTokens.every((token) => text.includes(token));
+  }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const afterCursor = input.cursorName === null
+    ? filtered
+    : filtered.filter((product) => product.name > input.cursorName!
+      || (product.name === input.cursorName && product.id > (input.cursorId ?? '')));
+  const lookahead = afterCursor.slice(0, input.limit + 1);
+  const items = lookahead.slice(0, input.limit);
+  const hasMore = lookahead.length > input.limit;
+  const lastVisible = items[items.length - 1];
+  return {
+    items,
+    totalCount: filtered.length,
+    totalProducts: products.length,
+    glassCount: products.filter((product) => product.category === 'glass').length,
+    aluminumCount: products.filter((product) => product.category === 'aluminum').length,
+    lowStockCount: products.filter((product) => product.stock <= product.threshold).length,
+    outOfStockCount: products.filter((product) => product.stock <= 0).length,
+    hasMore,
+    nextCursor: hasMore && lastVisible ? { name: lastVisible.name, id: lastVisible.id } : null,
+  };
 }
 
 export function getProductRecord(id: string): ServiceResult<Product> {

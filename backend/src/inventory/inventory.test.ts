@@ -85,6 +85,40 @@ describe('product inventory routes', () => {
     expect(json.every((item) => item.category === 'glass')).toBe(true);
   });
 
+  it('serves cursor-paginated inventory pages with server filters and summaries', async () => {
+    const token = await login(app, STAFF);
+    const headers = { authorization: 'Bearer ' + token };
+    const first = await app.request('/products?mode=page&limit=1', { headers });
+    expect(first.status).toBe(200);
+    const firstBody = await first.json() as {
+      items: Array<{ id: string; name: string }>;
+      page: { totalCount: number; hasMore: boolean; nextCursor: string | null };
+      summary: { totalProducts: number; glassCount: number; aluminumCount: number; lowStockCount: number; outOfStockCount: number };
+    };
+    expect(firstBody.page).toMatchObject({ totalCount: 3, hasMore: true });
+    expect(firstBody.summary).toEqual({ totalProducts: 3, glassCount: 2, aluminumCount: 1, lowStockCount: 2, outOfStockCount: 1 });
+    expect(firstBody.items).toHaveLength(1);
+
+    const second = await app.request(`/products?mode=page&limit=1&cursor=${encodeURIComponent(firstBody.page.nextCursor!)}`, { headers });
+    expect(second.status).toBe(200);
+    const secondBody = await second.json() as { items: Array<{ id: string; name: string }> };
+    expect(secondBody.items).toHaveLength(1);
+    expect(secondBody.items[0].id).not.toBe(firstBody.items[0].id);
+
+    const matching = await app.request('/products?mode=page&q=PRD-001%20SHEET&category=glass', { headers });
+    const matchingBody = await matching.json() as { items: Array<{ id: string; name: string }>; page: { totalCount: number } };
+    expect(matching.status).toBe(200);
+    expect(matchingBody.page.totalCount).toBe(1);
+    expect(matchingBody.items[0]).toMatchObject({ id: 'PRD-001', name: 'Clear Glass 6mm' });
+
+    const lowStock = await app.request('/products?mode=page&stock=low', { headers });
+    expect((await lowStock.json() as { page: { totalCount: number } }).page.totalCount).toBe(2);
+    expect((await app.request('/products?mode=page&limit=101', { headers })).status).toBe(400);
+    expect((await app.request('/products?mode=page&category=wood', { headers })).status).toBe(400);
+    expect((await app.request('/products?mode=page&stock=critical', { headers })).status).toBe(400);
+    expect((await app.request('/products?mode=page&cursor=invalid', { headers })).status).toBe(400);
+  });
+
   it('blocks anonymous product access', async () => {
     const res = await app.request('/products');
     expect(res.status).toBe(401);

@@ -14,6 +14,7 @@ import {
   getProductMovementRecords,
   getProductRecord,
   listLowStockProductRecords,
+  listProductPageRecords,
   listProductRecords,
   removeProductRecord,
 } from './service.js';
@@ -29,7 +30,62 @@ function toStatus(value: string | undefined): ProductStatus | undefined {
   return undefined;
 }
 
-export function listProductsController(c: Context) {
+function parseProductCursor(value: string | undefined): { name: string; id: string } | null | false {
+  if (!value) return null;
+  if (value.length > 1024) return false;
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+    if (typeof parsed !== 'object' || parsed === null) return false;
+    const cursor = parsed as Record<string, unknown>;
+    if (typeof cursor.name !== 'string' || cursor.name.length > 200
+      || typeof cursor.id !== 'string' || cursor.id.length === 0 || cursor.id.length > 64) return false;
+    return { name: cursor.name, id: cursor.id };
+  } catch {
+    return false;
+  }
+}
+
+export async function listProductPageController(c: Context) {
+  const rawLimit = c.req.query('limit');
+  const limit = rawLimit === undefined ? 25 : Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) return c.json({ error: 'limit must be an integer between 1 and 100' }, 400);
+  const rawCategory = c.req.query('category') ?? 'all';
+  if (rawCategory !== 'all' && !toCategory(rawCategory)) return c.json({ error: 'category is invalid' }, 400);
+  const stock = c.req.query('stock') ?? 'all';
+  if (!['all', 'low', 'healthy'].includes(stock)) return c.json({ error: 'stock filter is invalid' }, 400);
+  const search = (c.req.query('q') ?? '').trim().toLowerCase();
+  if (search.length > 200) return c.json({ error: 'search query must be at most 200 characters' }, 400);
+  const cursor = parseProductCursor(c.req.query('cursor'));
+  if (cursor === false) return c.json({ error: 'cursor is invalid' }, 400);
+  try {
+    const result = await listProductPageRecords({
+      limit,
+      category: rawCategory as 'all' | ProductCategory,
+      stock: stock as 'all' | 'low' | 'healthy',
+      searchTokens: search.split(/\s+/).filter(Boolean),
+      cursorName: cursor?.name ?? null,
+      cursorId: cursor?.id ?? null,
+    });
+    const nextCursor = result.nextCursor ? Buffer.from(JSON.stringify(result.nextCursor)).toString('base64url') : null;
+    return c.json({
+      items: result.items,
+      page: { limit, totalCount: result.totalCount, hasMore: result.hasMore, nextCursor },
+      summary: {
+        totalProducts: result.totalProducts,
+        glassCount: result.glassCount,
+        aluminumCount: result.aluminumCount,
+        lowStockCount: result.lowStockCount,
+        outOfStockCount: result.outOfStockCount,
+      },
+    });
+  } catch (error) {
+    console.error('[inventory] paginated product list unavailable:', error);
+    return c.json({ error: 'inventory listing unavailable' }, 503);
+  }
+}
+
+export async function listProductsController(c: Context) {
+  if (c.req.query('mode') === 'page') return listProductPageController(c);
   const statusQuery = c.req.query('status');
   const categoryQuery = c.req.query('category');
   const status = toStatus(statusQuery);

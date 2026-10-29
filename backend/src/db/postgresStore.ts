@@ -109,6 +109,77 @@ function rowToProduct(row: Record<string, unknown>): Product {
   };
 }
 
+export interface ProductsDbPage {
+  items: Product[];
+  totalCount: number;
+  totalProducts: number;
+  glassCount: number;
+  aluminumCount: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+  hasMore: boolean;
+  nextCursor: { name: string; id: string } | null;
+}
+
+export async function listProductsPageDb(input: {
+  limit: number;
+  category: 'all' | 'glass' | 'aluminum';
+  stock: 'all' | 'low' | 'healthy';
+  searchTokens: string[];
+  cursorName: string | null;
+  cursorId: string | null;
+}): Promise<ProductsDbPage | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH filtered AS (
+      SELECT * FROM products p
+      WHERE p.deleted_at IS NULL
+        AND ($1::text = 'all' OR p.category = $1::text)
+        AND ($2::text = 'all' OR ($2::text = 'low' AND p.stock <= p.threshold) OR ($2::text = 'healthy' AND p.stock > p.threshold))
+        AND NOT EXISTS (
+          SELECT 1 FROM unnest($3::text[]) AS tokens(term)
+          WHERE POSITION(term IN LOWER(CONCAT_WS(' ', p.id, p.sku, p.name, p.category, p.unit, p.description))) = 0
+        )
+    ), summary AS (
+      SELECT COUNT(*)::int AS total_products,
+        COUNT(*) FILTER (WHERE category = 'glass')::int AS glass_count,
+        COUNT(*) FILTER (WHERE category = 'aluminum')::int AS aluminum_count,
+        COUNT(*) FILTER (WHERE stock <= threshold)::int AS low_stock_count,
+        COUNT(*) FILTER (WHERE stock <= 0)::int AS out_of_stock_count
+      FROM products WHERE deleted_at IS NULL
+    ), page_rows AS (
+      SELECT * FROM filtered
+      WHERE $4::text IS NULL
+        OR name COLLATE "C" > $4::text COLLATE "C"
+        OR (name COLLATE "C" = $4::text COLLATE "C" AND id::text COLLATE "C" > $5::text COLLATE "C")
+      ORDER BY name COLLATE "C" ASC, id::text COLLATE "C" ASC
+      LIMIT $6
+    )
+    SELECT (SELECT COUNT(*)::int FROM filtered) AS filtered_count,
+      summary.total_products, summary.glass_count, summary.aluminum_count, summary.low_stock_count, summary.out_of_stock_count,
+      COALESCE((SELECT jsonb_agg(to_jsonb(page_rows) ORDER BY page_rows.name COLLATE "C" ASC, page_rows.id::text COLLATE "C" ASC) FROM page_rows), '[]'::jsonb) AS page_items
+    FROM summary
+  `, [input.category, input.stock, input.searchTokens, input.cursorName, input.cursorId, input.limit + 1]);
+  const row = rows[0];
+  if (!row) return null;
+  const rawItems = (typeof row.page_items === 'string' ? JSON.parse(row.page_items) : row.page_items ?? []) as Record<string, unknown>[];
+  const visibleRows = rawItems.slice(0, input.limit);
+  const hasMore = rawItems.length > input.limit;
+  const lastVisible = visibleRows[visibleRows.length - 1];
+  return {
+    items: visibleRows.map(rowToProduct),
+    totalCount: Number(row.filtered_count ?? 0),
+    totalProducts: Number(row.total_products ?? 0),
+    glassCount: Number(row.glass_count ?? 0),
+    aluminumCount: Number(row.aluminum_count ?? 0),
+    lowStockCount: Number(row.low_stock_count ?? 0),
+    outOfStockCount: Number(row.out_of_stock_count ?? 0),
+    hasMore,
+    nextCursor: hasMore && lastVisible ? { name: String(lastVisible.name), id: String(lastVisible.id) } : null,
+  };
+}
+
 export async function listProductsDb(): Promise<Product[]> {
   const pool = getPool();
   if (!pool) return [];
