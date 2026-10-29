@@ -74,9 +74,7 @@ function toProductPayload(form: ProductFormData): Omit<Product, 'id'> {
   };
 }
 
-type ProductListMode = 'pages' | 'infinite';
-
-const PRODUCT_PAGE_SIZES = [10, 25, 50, 100] as const;
+const PRODUCT_BATCH_SIZES = [10, 25, 50, 100] as const;
 
 export const Inventory: React.FC = () => {
   const { products, addProduct, updateProduct, deleteProduct, restockProduct, loading } = useData();
@@ -85,9 +83,7 @@ export const Inventory: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'glass' | 'aluminum'>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'healthy'>('all');
-  const [listMode, setListMode] = useState<ProductListMode>('pages');
-  const [pageSize, setPageSize] = useState<number>(25);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [batchSize, setBatchSize] = useState<number>(25);
   const [visibleCount, setVisibleCount] = useState(25);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -102,8 +98,7 @@ export const Inventory: React.FC = () => {
   const [savingProduct, setSavingProduct] = useState(false);
 
   const resetListPosition = () => {
-    setCurrentPage(1);
-    setVisibleCount(pageSize);
+    setVisibleCount(batchSize);
   };
 
   const searchTokens = useMemo(
@@ -127,33 +122,26 @@ export const Inventory: React.FC = () => {
     })
     .map(({ product }) => product), [searchableProducts, searchTokens, categoryFilter, stockFilter]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
-  const effectivePage = Math.min(currentPage, pageCount);
-  const pageProducts = useMemo(() => {
-    const start = (effectivePage - 1) * pageSize;
-    return filteredProducts.slice(start, start + pageSize);
-  }, [filteredProducts, effectivePage, pageSize]);
   const infiniteProducts = useMemo(
     () => filteredProducts.slice(0, visibleCount),
     [filteredProducts, visibleCount],
   );
-  const displayedProducts = listMode === 'pages' ? pageProducts : infiniteProducts;
-  const displayedStart = filteredProducts.length === 0 ? 0 : listMode === 'pages' ? (effectivePage - 1) * pageSize + 1 : 1;
-  const displayedEnd = listMode === 'pages' ? Math.min(filteredProducts.length, effectivePage * pageSize) : Math.min(filteredProducts.length, visibleCount);
+  const displayedStart = filteredProducts.length === 0 ? 0 : 1;
+  const displayedEnd = Math.min(filteredProducts.length, visibleCount);
 
   useEffect(() => {
-    if (listMode !== 'infinite' || visibleCount >= filteredProducts.length) return;
+    if (visibleCount >= filteredProducts.length) return;
     const sentinel = loadMoreRef.current;
     if (!sentinel || typeof IntersectionObserver === 'undefined') return;
 
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
-        setVisibleCount((count) => Math.min(filteredProducts.length, count + pageSize));
+        setVisibleCount((count) => Math.min(filteredProducts.length, count + batchSize));
       }
     }, { rootMargin: '240px' });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [listMode, visibleCount, filteredProducts.length, pageSize]);
+  }, [visibleCount, filteredProducts.length, batchSize]);
 
   const handleOpenModal = (product?: Product) => {
     if (product) {
@@ -254,12 +242,6 @@ export const Inventory: React.FC = () => {
     toast.success(`Exported all ${exportRows.length} filtered products to CSV`);
   };
 
-  const statusPills: { key: typeof stockFilter; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'low', label: 'Low Stock' },
-    { key: 'healthy', label: 'In Stock' },
-  ];
-
   const isEmpty = !loading && products.length === 0;
 
   return (
@@ -319,7 +301,7 @@ export const Inventory: React.FC = () => {
               type="button"
               onClick={handleExportCSV}
               disabled={filteredProducts.length === 0}
-              title="Exports all products matching the current filters, across every page"
+              title="Exports all products matching the current filters, including rows not yet loaded by scrolling"
               aria-label="Export all filtered products to CSV"
               className="inline-flex items-center gap-2 self-start rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
             >
@@ -338,75 +320,26 @@ export const Inventory: React.FC = () => {
           </div>
         </div>
 
-        {/* Status filter pills */}
-        <div className="flex flex-wrap gap-2">
-          {statusPills.map((pill) => (
-            <button
-              key={pill.key}
-              type="button"
-              onClick={() => {
-                setStockFilter(pill.key);
-                resetListPosition();
-              }}
-              className={`rounded-2xl px-4 py-1.5 text-xs font-bold transition-all ${
-                stockFilter === pill.key
-                  ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
-                  : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
-              }`}
-            >
-              {pill.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Result count and view controls */}
+        {/* Result count and infinite-scroll batch size */}
         <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-slate-600" aria-live="polite">
             {filteredProducts.length} product{filteredProducts.length === 1 ? '' : 's'} match the current filters
           </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-              Rows per page / batch
-              <select
-                aria-label="Rows per page or infinite-scroll batch"
-                value={pageSize}
-                onChange={(e) => {
-                  const nextSize = Number(e.target.value);
-                  setPageSize(nextSize);
-                  setCurrentPage(1);
-                  setVisibleCount(nextSize);
-                }}
-                className="input !w-auto !py-1.5"
-              >
-                {PRODUCT_PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
-              </select>
-            </label>
-            <div className="inline-flex rounded-xl border border-slate-200 p-1" role="group" aria-label="Product list mode">
-              <button
-                type="button"
-                aria-pressed={listMode === 'pages'}
-                onClick={() => {
-                  setListMode('pages');
-                  setCurrentPage(1);
-                }}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold ${listMode === 'pages' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-              >
-                Pagination
-              </button>
-              <button
-                type="button"
-                aria-pressed={listMode === 'infinite'}
-                onClick={() => {
-                  setListMode('infinite');
-                  setCurrentPage(1);
-                  setVisibleCount(pageSize);
-                }}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold ${listMode === 'infinite' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-              >
-                Infinite scroll
-              </button>
-            </div>
-          </div>
+          <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+            Load batch size
+            <select
+              aria-label="Infinite-scroll batch size"
+              value={batchSize}
+              onChange={(e) => {
+                const nextSize = Number(e.target.value);
+                setBatchSize(nextSize);
+                setVisibleCount(nextSize);
+              }}
+              className="input !w-auto !py-1.5"
+            >
+              {PRODUCT_BATCH_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+            </select>
+          </label>
         </div>
 
         {/* Stats */}
@@ -445,7 +378,7 @@ export const Inventory: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {displayedProducts.map((product) => {
+                {infiniteProducts.map((product) => {
                   const stockStatus = checkStockStatus(product.stock, product.threshold);
                   return (
                     <tr key={product.id} className="hover:bg-gray-50 transition-colors">
@@ -555,49 +488,27 @@ export const Inventory: React.FC = () => {
             <p className="text-sm text-slate-500" aria-live="polite">
               Showing {displayedStart}–{displayedEnd} of {filteredProducts.length} matching products
             </p>
-            {listMode === 'pages' ? (
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(Math.max(1, effectivePage - 1))}
-                  disabled={effectivePage <= 1}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Previous
-                </button>
-                <span className="min-w-20 text-center text-sm font-semibold text-slate-600">
-                  Page {effectivePage} of {pageCount}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(Math.min(pageCount, effectivePage + 1))}
-                  disabled={effectivePage >= pageCount}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Next
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-center gap-3">
-                {filteredProducts.length > 0 && displayedEnd < filteredProducts.length ? (
-                  <>
-                    <span className="text-xs text-slate-500">Scroll down to load more, or use the button.</span>
+            <div className="flex flex-wrap items-center gap-3">
+              {filteredProducts.length === 0 ? (
+                <span className="text-xs text-slate-500">No matching products to load.</span>
+              ) : displayedEnd < filteredProducts.length ? (
+                <>
+                  <span className="text-xs text-slate-500">Keep scrolling to load more products.</span>
+                  {typeof IntersectionObserver === 'undefined' && (
                     <button
                       type="button"
-                      onClick={() => setVisibleCount((count) => Math.min(filteredProducts.length, count + pageSize))}
+                      onClick={() => setVisibleCount((count) => Math.min(filteredProducts.length, count + batchSize))}
                       className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                     >
                       Load more
                     </button>
-                    <div ref={loadMoreRef} className="h-1 w-full" aria-hidden="true" />
-                  </>
-                ) : (
-                  <span className="text-xs text-slate-500">
-                    {filteredProducts.length === 0 ? 'No matching products to load.' : 'All matching products are loaded.'}
-                  </span>
-                )}
-              </div>
-            )}
+                  )}
+                  <div ref={loadMoreRef} className="h-1 w-full" aria-hidden="true" />
+                </>
+              ) : (
+                <span className="text-xs text-slate-500">All matching products are loaded.</span>
+              )}
+            </div>
           </div>
         </div>
 
