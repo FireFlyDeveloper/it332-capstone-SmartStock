@@ -400,6 +400,108 @@ export async function listOrdersDb(): Promise<Order[]> {
   return rows.map(rowToOrder);
 }
 
+export interface DailySalesDbPage {
+  orderCount: number;
+  cancelledOrderCount: number;
+  grossSales: number;
+  collectedAmount: number;
+  refundsAmount: number;
+  netCollectedAmount: number;
+  totalCount: number;
+  hasMore: boolean;
+  orders: Order[];
+}
+
+export async function listDailySalesPageDb(input: {
+  date: string;
+  limit: number;
+  status: string;
+  search: string;
+  cursorReferenceNumber: string | null;
+  cursorId: string | null;
+}): Promise<DailySalesDbPage | null> {
+  const pool = getPool();
+  if (!pool) return null;
+
+  const start = new Date(`${input.date}T00:00:00.000Z`);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  const { rows } = await pool.query(`
+    WITH daily_orders AS MATERIALIZED (
+      SELECT * FROM orders
+      WHERE deleted_at IS NULL
+        AND created_at >= $1::timestamptz
+        AND created_at < $2::timestamptz
+    ), summary AS (
+      SELECT
+        COUNT(*) FILTER (WHERE order_status <> 'cancelled')::int AS order_count,
+        COUNT(*) FILTER (WHERE order_status = 'cancelled')::int AS cancelled_order_count,
+        COALESCE(SUM(total_amount) FILTER (WHERE order_status <> 'cancelled'), 0) AS gross_sales,
+        COALESCE(SUM(paid_amount), 0) AS net_collected_amount,
+        COALESCE(SUM(refunded_amount), 0) AS refunds_amount
+      FROM daily_orders
+    ), filtered_orders AS (
+      SELECT o.* FROM daily_orders o
+      WHERE ($3::text = 'all' OR o.order_status = $3)
+        AND (
+          $4::text = ''
+          OR POSITION(LOWER($4) IN LOWER(COALESCE(o.order_no, ''))) > 0
+          OR POSITION(LOWER($4) IN LOWER(COALESCE(o.customer_name, ''))) > 0
+          OR EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS item
+            WHERE POSITION(LOWER($4) IN LOWER(COALESCE(item.value ->> 'name', ''))) > 0
+          )
+        )
+    ), filtered_count AS (
+      SELECT COUNT(*)::int AS total_count FROM filtered_orders
+    ), page_rows AS (
+      SELECT o.* FROM filtered_orders o
+      WHERE $5::text IS NULL
+        OR o.order_no > $5
+        OR (o.order_no = $5 AND o.id > $6)
+      ORDER BY o.order_no ASC, o.id ASC
+      LIMIT $7
+    )
+    SELECT
+      summary.order_count,
+      summary.cancelled_order_count,
+      summary.gross_sales,
+      summary.net_collected_amount,
+      summary.refunds_amount,
+      filtered_count.total_count,
+      COALESCE((SELECT jsonb_agg(to_jsonb(page_rows) ORDER BY page_rows.order_no, page_rows.id) FROM page_rows), '[]'::jsonb) AS page_orders
+    FROM summary CROSS JOIN filtered_count
+  `, [
+    start.toISOString(),
+    end.toISOString(),
+    input.status,
+    input.search,
+    input.cursorReferenceNumber,
+    input.cursorId,
+    input.limit + 1,
+  ]);
+
+  const row = rows[0];
+  if (!row) return null;
+  const rawOrders = (typeof row.page_orders === 'string' ? JSON.parse(row.page_orders) : row.page_orders ?? []) as Record<string, unknown>[];
+  const hasMore = rawOrders.length > input.limit;
+  const orders = rawOrders.slice(0, input.limit).map(rowToOrder);
+  const netCollectedAmount = Number(row.net_collected_amount ?? 0);
+  const refundsAmount = Number(row.refunds_amount ?? 0);
+  return {
+    orderCount: Number(row.order_count ?? 0),
+    cancelledOrderCount: Number(row.cancelled_order_count ?? 0),
+    grossSales: Number(row.gross_sales ?? 0),
+    collectedAmount: netCollectedAmount + refundsAmount,
+    refundsAmount,
+    netCollectedAmount,
+    totalCount: Number(row.total_count ?? 0),
+    hasMore,
+    orders,
+  };
+}
+
 export async function findOrderByIdDb(id: string): Promise<Order | null> {
   const pool = getPool();
   if (!pool) return null;

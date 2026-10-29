@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
 import { requireAuth, requireStaffOrAdmin } from '../auth/middleware.js';
+import { isDbSyncActive } from '../db/syncState.js';
+import { listDailySalesPageDb } from '../db/postgresStore.js';
 import { listOrderRecords } from '../orders/service.js';
+import type { Order } from '../orders/store.js';
 import type { DailySalesOrder, DailySalesSummary } from './types.js';
 
 export const dailySalesRoutes = new Hono();
@@ -27,9 +30,24 @@ function encodeCursor(order: DailySalesOrder): string {
   return Buffer.from(JSON.stringify({ referenceNumber: order.referenceNumber, id: order.id })).toString('base64url');
 }
 
+function toDailySalesOrder(order: Order): DailySalesOrder {
+  return {
+    id: order.id,
+    referenceNumber: order.referenceNumber,
+    customerName: order.customerName,
+    items: order.items.map((item) => ({ ...item })),
+    total: order.total,
+    paidAmount: order.paidAmount,
+    refundedAmount: order.refundedAmount,
+    paymentStatus: order.paymentStatus,
+    orderStatus: order.orderStatus,
+    createdAt: order.createdAt,
+  };
+}
+
 dailySalesRoutes.use('*', requireAuth, requireStaffOrAdmin);
 
-dailySalesRoutes.get('/', (c) => {
+dailySalesRoutes.get('/', async (c) => {
   const date = c.req.query('date');
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return c.json({ error: 'date must be a valid YYYY-MM-DD date' }, 400);
@@ -53,20 +71,43 @@ dailySalesRoutes.get('/', (c) => {
   const query = (c.req.query('q') ?? '').trim().toLowerCase();
   if (query.length > 100) return c.json({ error: 'q must be at most 100 characters' }, 400);
 
+  if (isDbSyncActive()) {
+    try {
+      const dbPage = await listDailySalesPageDb({
+        date,
+        limit,
+        status: rawStatus,
+        search: query,
+        cursorReferenceNumber: cursor?.referenceNumber ?? null,
+        cursorId: cursor?.id ?? null,
+      });
+      if (!dbPage) return c.json({ error: 'Daily Sales database is unavailable' }, 503);
+      const pageOrders = dbPage.orders.map(toDailySalesOrder);
+      return c.json({
+        date,
+        orderCount: dbPage.orderCount,
+        cancelledOrderCount: dbPage.cancelledOrderCount,
+        grossSales: dbPage.grossSales,
+        collectedAmount: dbPage.collectedAmount,
+        refundsAmount: dbPage.refundsAmount,
+        netCollectedAmount: dbPage.netCollectedAmount,
+        orders: pageOrders,
+        page: {
+          limit,
+          totalCount: dbPage.totalCount,
+          hasMore: dbPage.hasMore,
+          nextCursor: dbPage.hasMore && pageOrders.length ? encodeCursor(pageOrders[pageOrders.length - 1]) : null,
+        },
+      } satisfies DailySalesSummary);
+    } catch (error) {
+      console.error('[daily-sales] PostgreSQL page query failed:', error);
+      return c.json({ error: 'Daily Sales could not be loaded from the database' }, 503);
+    }
+  }
+
   const orders: DailySalesOrder[] = listOrderRecords()
     .filter((order) => order.createdAt.slice(0, 10) === date)
-    .map((order) => ({
-      id: order.id,
-      referenceNumber: order.referenceNumber,
-      customerName: order.customerName,
-      items: order.items.map((item) => ({ ...item })),
-      total: order.total,
-      paidAmount: order.paidAmount,
-      refundedAmount: order.refundedAmount,
-      paymentStatus: order.paymentStatus,
-      orderStatus: order.orderStatus,
-      createdAt: order.createdAt,
-    }))
+    .map(toDailySalesOrder)
     .sort((a, b) => a.referenceNumber.localeCompare(b.referenceNumber) || a.id.localeCompare(b.id));
 
   const filteredOrders = orders.filter((order) => {
