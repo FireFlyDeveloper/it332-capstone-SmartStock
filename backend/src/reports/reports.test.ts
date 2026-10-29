@@ -83,11 +83,11 @@ async function seedReportInventory() {
   const aluminum = await createProduct({ sku: 'ALU-RP-01', name: 'Report Aluminum', category: 'aluminum', unit: 'length', stock: 1, price: 50, threshold: 5 });
   const glass = await createProduct({ sku: 'GLS-RP-01', name: 'Report Glass', category: 'glass', unit: 'sheet', stock: 0, price: 100, threshold: 5 });
 
-  recordInboundStock(glass.id, { quantity: 10, unitCost: 100, referenceNo: 'PO-RP-001', supplier: 'Supplier A', occurredAt: '2026-01-10T00:00:00.000Z' });
-  recordInboundStock(glass.id, { quantity: 4, unitCost: 100, referenceNo: 'PO-RP-002', supplier: 'Supplier B', occurredAt: '2026-03-10T00:00:00.000Z' });
-  recordInboundStock(aluminum.id, { quantity: 6, unitCost: 50, referenceNo: 'PO-RP-003', supplier: 'Supplier A', occurredAt: '2026-01-12T00:00:00.000Z' });
-  recordOutboundStock(glass.id, { quantity: 7, referenceNo: 'SO-RP-001', occurredAt: '2026-02-01T00:00:00.000Z' });
-  recordOutboundStock(aluminum.id, { quantity: 2, referenceNo: 'SO-RP-002', occurredAt: '2026-02-03T00:00:00.000Z' });
+  await recordInboundStock(glass.id, { quantity: 10, unitCost: 100, referenceNo: 'PO-RP-001', supplier: 'Supplier A', occurredAt: '2026-01-10T00:00:00.000Z' });
+  await recordInboundStock(glass.id, { quantity: 4, unitCost: 100, referenceNo: 'PO-RP-002', supplier: 'Supplier B', occurredAt: '2026-03-10T00:00:00.000Z' });
+  await recordInboundStock(aluminum.id, { quantity: 6, unitCost: 50, referenceNo: 'PO-RP-003', supplier: 'Supplier A', occurredAt: '2026-01-12T00:00:00.000Z' });
+  await recordOutboundStock(glass.id, { quantity: 7, referenceNo: 'SO-RP-001', occurredAt: '2026-02-01T00:00:00.000Z' });
+  await recordOutboundStock(aluminum.id, { quantity: 2, referenceNo: 'SO-RP-002', occurredAt: '2026-02-03T00:00:00.000Z' });
 }
 
 async function authedRequest(app: Hono, path: string, email = STAFF) {
@@ -224,10 +224,10 @@ describe('reports routes', () => {
     const product = await createProduct({ sku: 'POLICY-EVENT', name: 'Policy Event', category: 'glass', unit: 'sheet', stock: 4, price: 10, threshold: 2 });
     const baseline = listInventoryPolicyHistory().find((event) => event.productId === product.id);
     expect(baseline?.eventType).toBe('baseline');
-    recordInboundStock(product.id, { quantity: 1, referenceNo: 'POLICY-IN' });
-    recordOutboundStock(product.id, { quantity: 5, referenceNo: 'POLICY-OUT' });
-    updateProduct(product.id, { threshold: 3 });
-    updateProduct(product.id, { stock: 1, threshold: 2 });
+    await recordInboundStock(product.id, { quantity: 1, referenceNo: 'POLICY-IN' });
+    await recordOutboundStock(product.id, { quantity: 5, referenceNo: 'POLICY-OUT' });
+    await updateProduct(product.id, { threshold: 3 });
+    await updateProduct(product.id, { stock: 1, threshold: 2 });
     const changed = listInventoryPolicyHistory().filter((event) => event.productId === product.id);
     expect(changed.map((event) => event.eventType)).toEqual([
       'baseline', 'stock_changed', 'stock_changed', 'threshold_changed', 'stock_and_threshold_changed',

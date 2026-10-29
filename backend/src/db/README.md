@@ -31,3 +31,5 @@ DATABASE_URL=postgresql://user:password@localhost:5432/smartstock node scripts/a
 ```
 
 The script applies `db/schema.sql` and exits with a clear error when `DATABASE_URL` is missing.
+
+Daily Sales is derived directly from backend order records; no cashier cash-reconciliation workflow or tender-method field is used.

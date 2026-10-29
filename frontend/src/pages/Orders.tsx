@@ -27,6 +27,7 @@ import type { Order, OrderItem } from '../types';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 
@@ -69,7 +70,7 @@ const emptyForm = {
 
 // ── Component ──────────────────────────────────────────────────────
 export const Orders: React.FC = () => {
-  const { products, orders, addOrder, updateOrder, processPayment, processRefund, productsLoading, productsError, ordersLoading, ordersError, refreshProducts, refreshOrders } = useData();
+  const { products, orders, addOrder, updateOrder, cancelOrder, processPayment, processRefund, productsLoading, productsError, ordersLoading, ordersError, refreshProducts, refreshOrders } = useData();
 
   // ── Filter / search / modal state ────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
@@ -81,7 +82,7 @@ export const Orders: React.FC = () => {
   const [itemSearch, setItemSearch] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [selectedProduct, setSelectedProduct] = useState('');
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState(0);
   const [productSearch, setProductSearch] = useState('');
   const [savingOrder, setSavingOrder] = useState(false);
   const [savingFinanceAction, setSavingFinanceAction] = useState(false);
@@ -159,6 +160,7 @@ export const Orders: React.FC = () => {
       return matchesSearch && matchesStatus && matchesFrom && matchesTo;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [orders, searchTerm, statusFilter, fromDate, toDate]);
+  const { visibleItems: visibleOrders, sentinelRef, hasMore } = useInfiniteScroll(filteredOrders);
 
   // ── Order status transitions ─────────────────────────────────────
   const getNextStatus = (order: Order): Order['orderStatus'] | null => {
@@ -199,7 +201,7 @@ export const Orders: React.FC = () => {
     setEditingOrderId(null);
     setForm(emptyForm);
     setSelectedProduct('');
-    setQuantity(1);
+    setQuantity(0);
     setModalOpen(true);
   };
 
@@ -217,7 +219,7 @@ export const Orders: React.FC = () => {
       notes: order.notes || '',
     });
     setSelectedProduct('');
-    setQuantity(1);
+    setQuantity(0);
     setModalOpen(true);
     setViewOrder(null);
   };
@@ -261,7 +263,7 @@ export const Orders: React.FC = () => {
       }));
     }
     setSelectedProduct('');
-    setQuantity(1);
+    setQuantity(0);
   };
 
   const removeItem = (index: number) => {
@@ -335,9 +337,10 @@ export const Orders: React.FC = () => {
   // ── Delete order ─────────────────────────────────────────────────
   const handleDelete = async (orderId: string) => {
     try {
-      await updateOrder(orderId, { orderStatus: 'cancelled' });
-      toast.success('Order cancelled');
+      await cancelOrder(orderId);
+      toast.success('Order cancelled; remaining payment refund recorded and inventory restored.');
       setConfirmCancel(null);
+      closeViewModal();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not cancel order.');
     }
@@ -402,15 +405,6 @@ export const Orders: React.FC = () => {
     toast.success(`Exported ${filteredOrders.length} orders to CSV`);
   };
 
-  const statusPills: { key: typeof statusFilter; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'pending', label: 'Pending' },
-    { key: 'ready_for_pickup', label: 'Ready for Pickup' },
-    { key: 'packed', label: 'Packed' },
-    { key: 'out_for_delivery', label: 'Out for Delivery' },
-    { key: 'completed', label: 'Completed' },
-    { key: 'cancelled', label: 'Cancelled' },
-  ];
 
   const isEmpty = !ordersLoading && orders.length === 0;
 
@@ -496,35 +490,27 @@ export const Orders: React.FC = () => {
         {/* Date filter toolbar */}
         <div className="bg-white rounded-[24px] sm:rounded-[28px] p-4 sm:p-5 border border-[#f1f5f9] shadow-sm">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            {/* Quick Presets */}
+            {/* Date-range dropdown */}
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
                 <Calendar className="w-4 h-4 text-slate-400" />
                 <span>Date Range:</span>
               </div>
-              {(['all', '30d', '7d'] as const).map((key) => {
-                const label = key === 'all' ? 'All time' : key === '30d' ? 'Last 30 days' : 'Last 7 days';
-                const isActive = datePreset === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => handleDatePreset(key)}
-                    className={`rounded-2xl px-3.5 py-1.5 text-xs font-bold transition-all ${
-                      isActive
-                        ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
-                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/70'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-              {datePreset === 'custom' && (
-                <span className="rounded-2xl px-3.5 py-1.5 text-xs font-bold bg-indigo-50 text-[#4f46e5] border border-indigo-100">
-                  Custom Range
-                </span>
-              )}
+              <select
+                aria-label="Order date range"
+                value={datePreset}
+                onChange={(event) => {
+                  const value = event.target.value as DateRangePreset;
+                  if (value === 'custom') setDatePreset('custom');
+                  else handleDatePreset(value);
+                }}
+                className="input w-full sm:w-44"
+              >
+                <option value="all">All time</option>
+                <option value="30d">Last 30 days</option>
+                <option value="7d">Last 7 days</option>
+                <option value="custom">Custom range</option>
+              </select>
             </div>
 
             {/* Specific Date From -> To */}
@@ -574,23 +560,6 @@ export const Orders: React.FC = () => {
           </div>
         </div>
 
-        {/* Status filter pills */}
-        <div className="flex flex-wrap gap-2">
-          {statusPills.map((pill) => (
-            <button
-              key={pill.key}
-              type="button"
-              onClick={() => setStatusFilter(pill.key)}
-              className={`rounded-2xl px-4 py-1.5 text-xs font-bold transition-all ${
-                statusFilter === pill.key
-                  ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
-                  : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
-              }`}
-            >
-              {pill.label}
-            </button>
-          ))}
-        </div>
 
         {/* ── Stats ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -614,7 +583,7 @@ export const Orders: React.FC = () => {
 
         {/* ── Order cards ────────────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredOrders.map(order => {
+          {visibleOrders.map(order => {
             const remaining = order.total - order.paidAmount;
             return (
               <div
@@ -688,6 +657,7 @@ export const Orders: React.FC = () => {
             </div>
           )}
         </div>
+        {hasMore && <div ref={sentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more orders…</div>}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
@@ -792,8 +762,8 @@ export const Orders: React.FC = () => {
                   </div>
                   <div className="w-24">
                     <label className="label">Qty</label>
-                    <input type="number" value={quantity}
-                      onChange={e => setQuantity(Math.max(1, Number(e.target.value)))}
+                    <input type="number" value={quantity || ''}
+                      onChange={e => setQuantity(Math.max(0, Number(e.target.value)))}
                       className="input" min={1} />
                   </div>
                   <button type="button" onClick={addItem} className="btn-primary px-4 mt-0">Add</button>
@@ -866,7 +836,7 @@ export const Orders: React.FC = () => {
                     min={0}
                     max={form.total}
                     step="0.01"
-                    value={form.paidAmount}
+                    value={form.paidAmount || ''}
                     onChange={e => setForm({ ...form, paidAmount: Number(e.target.value) })}
                     className="input"
                   />
@@ -1175,7 +1145,7 @@ export const Orders: React.FC = () => {
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-slideIn text-center">
             <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Cancel Order?</h3>
-            <p className="text-sm text-gray-500 mb-6">This action cannot be undone.</p>
+            <p className="text-sm text-gray-500 mb-6">This will cancel the order, refund {formatCurrency(orders.find(order => order.id === confirmCancel)?.paidAmount ?? 0)} in cash, and return the ordered items to inventory. This cannot be undone.</p>
             <div className="flex gap-3">
               <button onClick={() => setConfirmCancel(null)} className="flex-1 btn-secondary">Keep Order</button>
               <button onClick={() => handleDelete(confirmCancel)} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-semibold">Yes, Cancel</button>

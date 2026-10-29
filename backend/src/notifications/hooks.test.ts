@@ -39,11 +39,11 @@ describe('notification service hooks', () => {
     sendNotificationEventMock.mockResolvedValue(undefined);
   });
 
-  it('emits inventory.low_stock when an outbound stock update leaves stock at or below threshold', () => {
+  it('emits inventory.low_stock when an outbound stock update leaves stock at or below threshold', async () => {
     const product = listProducts().find((item) => item.sku === 'GLS-CLR-6MM');
     expect(product).toBeDefined();
 
-    const result = addOutboundStockRecord(product!.id, { quantity: 16, referenceNo: 'SO-LOW-1', createdBy: 'admin@smartstock.local' });
+    const result = await addOutboundStockRecord(product!.id, { quantity: 16, referenceNo: 'SO-LOW-1', createdBy: 'admin@smartstock.local' });
 
     expect(result.ok).toBe(true);
     expect(sendNotificationEventMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -76,8 +76,8 @@ describe('notification service hooks', () => {
     }));
   });
 
-  it('emits delivery.status_changed when delivery status changes', () => {
-    const created = addDeliveryRecord({
+  it('emits delivery.status_changed when delivery status changes', async () => {
+    const created = await addDeliveryRecord({
       orderId: 'ORD-900',
       driver: 'Nina Ramos',
       truckNumber: 'Truck-900',
@@ -87,7 +87,7 @@ describe('notification service hooks', () => {
     });
     if (!created.ok) throw new Error(created.error);
 
-    const result = editDeliveryRecord(created.data.id, { status: 'assigned', currentStep: 1 });
+    const result = await editDeliveryRecord(created.data.id, { status: 'assigned', currentStep: 1 });
 
     expect(result.ok).toBe(true);
     expect(sendNotificationEventMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -101,11 +101,11 @@ describe('notification service hooks', () => {
     }));
   });
 
-  it('does not fail stock updates when notification delivery rejects', () => {
+  it('does not fail stock updates when notification delivery rejects', async () => {
     sendNotificationEventMock.mockRejectedValueOnce(new Error('webhook unavailable'));
     const product = listProducts().find((item) => item.sku === 'GLS-CLR-6MM')!;
 
-    const result = addOutboundStockRecord(product.id, { quantity: 16, referenceNo: 'SO-LOW-FAIL', createdBy: 'admin@smartstock.local' });
+    const result = await addOutboundStockRecord(product.id, { quantity: 16, referenceNo: 'SO-LOW-FAIL', createdBy: 'admin@smartstock.local' });
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.data.product.stock).toBe(8);

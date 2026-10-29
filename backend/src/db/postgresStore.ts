@@ -206,20 +206,23 @@ export async function recordInboundStockDb(
 ): Promise<{ product: Product; movement: StockMovement } | null> {
   const pool = getPool();
   if (!pool) return null;
-  const product = await findProductByIdDb(productId);
-  if (!product) return null;
 
   const movementId = input.id ?? `MOV-${randomUUID().slice(0, 8).toUpperCase()}`;
   const now = input.occurredAt ?? new Date().toISOString();
+  const client = await pool.connect();
 
-  await pool.query('BEGIN');
   try {
-    const { rows: prodRows } = await pool.query(`
+    await client.query('BEGIN');
+    const { rows: prodRows } = await client.query(`
       UPDATE products SET stock = stock + $2, updated_at = NOW()
-      WHERE id = $1 RETURNING *
+      WHERE id = $1 AND deleted_at IS NULL RETURNING *
     `, [productId, input.quantity]);
+    if (!prodRows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
 
-    await pool.query(`
+    await client.query(`
       INSERT INTO stock_movements (id, product_id, type, movement_type, quantity, reference_no, supplier, occurred_at, created_by, unit_cost)
       VALUES ($1, $2, 'inbound', 'inbound', $3, $4, $5, $6, $7, $8)
     `, [
@@ -233,7 +236,7 @@ export async function recordInboundStockDb(
       input.unitCost ?? null,
     ]);
 
-    await pool.query('COMMIT');
+    await client.query('COMMIT');
     const movement: StockMovement = {
       id: movementId,
       productId,
@@ -247,8 +250,10 @@ export async function recordInboundStockDb(
     };
     return { product: rowToProduct(prodRows[0]), movement };
   } catch (err) {
-    await pool.query('ROLLBACK');
+    await client.query('ROLLBACK');
     throw err;
+  } finally {
+    client.release();
   }
 }
 
@@ -258,21 +263,32 @@ export async function recordOutboundStockDb(
 ): Promise<{ product: Product; movement: StockMovement } | null> {
   const pool = getPool();
   if (!pool) return null;
-  const product = await findProductByIdDb(productId);
-  if (!product) return null;
-  if (product.stock < input.quantity) throw new Error('insufficient stock');
 
   const movementId = input.id ?? `MOV-${randomUUID().slice(0, 8).toUpperCase()}`;
   const now = input.occurredAt ?? new Date().toISOString();
+  const client = await pool.connect();
 
-  await pool.query('BEGIN');
   try {
-    const { rows: prodRows } = await pool.query(`
-      UPDATE products SET stock = stock - $2, updated_at = NOW()
-      WHERE id = $1 RETURNING *
-    `, [productId, input.quantity]);
+    await client.query('BEGIN');
+    const { rows: lockedRows } = await client.query(`
+      SELECT stock FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+    `, [productId]);
+    if (!lockedRows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    if (Number(lockedRows[0].stock) < input.quantity) throw new Error('insufficient stock');
 
-    await pool.query(`
+    const { rows: prodRows } = await client.query(`
+      UPDATE products SET stock = stock - $2, updated_at = NOW()
+      WHERE id = $1 AND deleted_at IS NULL RETURNING *
+    `, [productId, input.quantity]);
+    if (!prodRows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    await client.query(`
       INSERT INTO stock_movements (id, product_id, type, movement_type, quantity, reference_no, supplier, occurred_at, created_by)
       VALUES ($1, $2, 'outbound', 'outbound', $3, $4, $5, $6, $7)
     `, [
@@ -285,7 +301,7 @@ export async function recordOutboundStockDb(
       input.createdBy?.trim() || 'system',
     ]);
 
-    await pool.query('COMMIT');
+    await client.query('COMMIT');
     const movement: StockMovement = {
       id: movementId,
       productId,
@@ -298,8 +314,10 @@ export async function recordOutboundStockDb(
     };
     return { product: rowToProduct(prodRows[0]), movement };
   } catch (err) {
-    await pool.query('ROLLBACK');
+    await client.query('ROLLBACK');
     throw err;
+  } finally {
+    client.release();
   }
 }
 
@@ -566,8 +584,69 @@ export async function updateOrderDb(id: string, input: OrderUpdateInput): Promis
   return rows[0] ? rowToOrder(rows[0]) : null;
 }
 
-export async function cancelOrderDb(id: string): Promise<Order | null> {
-  return updateOrderDb(id, { orderStatus: 'cancelled' });
+export async function cancelOrderDb(id: string): Promise<{ order: Order; products: Product[]; movements: StockMovement[] } | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      'SELECT * FROM orders WHERE id = $1 AND deleted_at IS NULL FOR UPDATE',
+      [id],
+    );
+    if (!rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    const current = rowToOrder(rows[0]);
+    if (current.orderStatus === 'cancelled') {
+      await client.query('COMMIT');
+      return { order: current, products: [], movements: [] };
+    }
+
+    const products: Product[] = [];
+    const movements: StockMovement[] = [];
+    for (const [index, item] of current.items.entries()) {
+      const productRows = await client.query(
+        'UPDATE products SET stock = stock + $2, updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING *',
+        [item.productId, item.quantity],
+      );
+      if (!productRows.rows[0]) throw new Error(`Product not found while restoring stock for ${item.name}`);
+      const movement: StockMovement = {
+        id: randomUUID(),
+        productId: item.productId,
+        type: 'inbound',
+        quantity: item.quantity,
+        referenceNo: `CANCEL-${current.referenceNumber}-${index + 1}`.toUpperCase(),
+        occurredAt: new Date().toISOString(),
+        createdBy: 'order_cancel',
+      };
+      await client.query(`
+        INSERT INTO stock_movements (id, product_id, type, movement_type, quantity, reference_no, occurred_at, created_by)
+        VALUES ($1, $2, 'inbound', 'inbound', $3, $4, NOW(), 'order_cancel')
+      `, [movement.id, item.productId, item.quantity, movement.referenceNo]);
+      products.push(rowToProduct(productRows.rows[0]));
+      movements.push(movement);
+    }
+
+    const refundedAmount = current.refundedAmount + current.paidAmount;
+    const paymentStatus: PaymentStatus = current.paidAmount > 0 || refundedAmount > 0 ? 'refunded' : 'unpaid';
+    const { rows: updatedRows } = await client.query(`
+      UPDATE orders
+      SET order_status = 'cancelled', paid_amount = 0, refunded_amount = $2,
+          refund_reason = 'Order cancellation', refund_type = 'full',
+          payment_status = $3, updated_at = NOW()
+      WHERE id = $1 AND deleted_at IS NULL
+      RETURNING *
+    `, [id, refundedAmount, paymentStatus]);
+    await client.query('COMMIT');
+    return updatedRows[0] ? { order: rowToOrder(updatedRows[0]), products, movements } : null;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function applyPaymentDb(id: string, amount: number): Promise<Order | null> {

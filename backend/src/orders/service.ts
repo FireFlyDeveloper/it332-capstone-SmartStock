@@ -8,7 +8,7 @@
 import { isDbSyncActive } from '../db/syncState.js';
 import { createOrderWithInventoryDb } from '../db/postgresStore.js';
 import { applyPaymentDb, applyRefundDb, cancelOrderDb, updateOrderDb } from '../db/postgresStore.js';
-import { _applyPersistedOrderStock, findProductById, listProducts, recordOutboundStock } from '../inventory/store.js';
+import { _applyPersistedOrderStock, findProductById, listProducts, recordInboundStock, recordOutboundStock } from '../inventory/store.js';
 import { sendNotificationEvent } from '../notifications/webhook.js';
 import {
   _upsertOrder,
@@ -208,7 +208,7 @@ export async function addOrderRecord(body: unknown): Promise<ServiceResult<Order
 
     const order = createOrder({ ...parsed.data, items: authoritativeItems });
     for (const [index, item] of authoritativeItems.entries()) {
-      const result = recordOutboundStock(item.productId, {
+      const result = await recordOutboundStock(item.productId, {
         quantity: item.quantity,
         referenceNo: `ORDER-${order.referenceNumber}-${index + 1}`,
         createdBy: 'order',
@@ -224,6 +224,9 @@ export async function addOrderRecord(body: unknown): Promise<ServiceResult<Order
 export async function editOrderRecord(id: string, body: unknown): Promise<ServiceResult<Order>> {
   const parsed = parseUpdate(body);
   if (!parsed.ok) return parsed;
+  if (parsed.data.orderStatus === 'cancelled') {
+    return { ok: false, status: 400, error: 'Use the order cancellation action to refund payment and restore inventory.' };
+  }
   const current = findOrderById(id);
   if (!current) return { ok: false, status: 404, error: 'order not found' };
   let order: Order | null;
@@ -258,7 +261,30 @@ export async function editOrderRecord(id: string, body: unknown): Promise<Servic
 export async function cancelOrderRecord(id: string): Promise<ServiceResult<{ ok: true; order: Order }>> {
   let order: Order | null;
   try {
-    order = isDbSyncActive() ? await cancelOrderDb(id) : cancelOrder(id);
+    if (isDbSyncActive()) {
+      const persisted = await cancelOrderDb(id);
+      order = persisted?.order ?? null;
+      if (persisted) {
+        persisted.products.forEach((product, index) => {
+          const movement = persisted.movements[index];
+          if (movement) _applyPersistedOrderStock(product, movement);
+        });
+      }
+    } else {
+      const current = findOrderById(id);
+      if (!current) return { ok: false, status: 404, error: 'order not found' };
+      if (current.orderStatus !== 'cancelled') {
+        for (const [index, item] of current.items.entries()) {
+          const restored = await recordInboundStock(item.productId, {
+            quantity: item.quantity,
+            referenceNo: `CANCEL-${current.referenceNumber}-${index + 1}`,
+            createdBy: 'order_cancel',
+          });
+          if (!restored) throw new Error(`Product not found while restoring stock for ${item.name}`);
+        }
+      }
+      order = cancelOrder(id);
+    }
     if (order && isDbSyncActive()) _upsertOrder(order);
   } catch (error) {
     console.error('[orders/service] database cancel failed:', error);

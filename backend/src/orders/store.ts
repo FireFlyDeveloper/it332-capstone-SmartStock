@@ -10,7 +10,6 @@ import { isDbSyncActive } from '../db/syncState.js';
 import {
   createOrderDb,
   updateOrderDb,
-  cancelOrderDb,
   applyPaymentDb,
   applyRefundDb,
 } from '../db/postgresStore.js';
@@ -171,13 +170,22 @@ export function updateOrder(id: string, input: OrderUpdateInput): Order | null {
 }
 
 export function cancelOrder(id: string): Order | null {
-  const result = updateOrder(id, { orderStatus: 'cancelled' });
-  if (result && isDbSyncActive()) {
-    cancelOrderDb(id).catch((err) => {
-      console.error('[orders/store] DB write error on cancelOrder:', err);
-    });
-  }
-  return result;
+  const current = orders.get(id);
+  if (!current) return null;
+  if (current.orderStatus === 'cancelled') return current;
+  const refundedAmount = current.refundedAmount + current.paidAmount;
+  const next: Order = {
+    ...current,
+    orderStatus: 'cancelled',
+    paidAmount: 0,
+    refundedAmount,
+    refundReason: 'Order cancellation',
+    refundType: 'full',
+    paymentStatus: current.paidAmount > 0 || refundedAmount > 0 ? 'refunded' : 'unpaid',
+    updatedAt: new Date().toISOString(),
+  };
+  orders.set(id, next);
+  return next;
 }
 
 export function applyPayment(id: string, amount: number): Order | null {

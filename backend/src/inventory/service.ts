@@ -252,28 +252,40 @@ export async function addProductRecord(body: unknown): Promise<ServiceResult<Pro
   }
 }
 
-export function editProductRecord(id: string, body: unknown): ServiceResult<Product> {
+export async function editProductRecord(id: string, body: unknown): Promise<ServiceResult<Product>> {
   const parsed = parseUpdate(body);
   if (!parsed.ok) return parsed;
   try {
-    const item = updateProduct(id, parsed.data);
+    const item = await updateProduct(id, parsed.data);
     return item ? { ok: true, data: item } : { ok: false, status: 404, error: 'product not found' };
   } catch (error) {
-    return { ok: false, status: 409, error: error instanceof Error ? error.message : 'product conflict' };
+    const code = typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code: unknown }).code)
+      : undefined;
+    if ((error instanceof Error && error.message === 'sku already exists') || code === '23505') {
+      return { ok: false, status: 409, error: 'sku already exists' };
+    }
+    console.error('[inventory/service] product update failed:', error);
+    return { ok: false, status: 503, error: 'product could not be saved; please try again' };
   }
 }
 
-export function removeProductRecord(id: string): ServiceResult<{ ok: true }> {
-  return deleteProduct(id)
-    ? { ok: true, data: { ok: true } }
-    : { ok: false, status: 404, error: 'product not found' };
+export async function removeProductRecord(id: string): Promise<ServiceResult<{ ok: true }>> {
+  try {
+    return await deleteProduct(id)
+      ? { ok: true, data: { ok: true } }
+      : { ok: false, status: 404, error: 'product not found' };
+  } catch (error) {
+    console.error('[inventory/service] product deletion failed:', error);
+    return { ok: false, status: 503, error: 'product could not be deleted; please try again' };
+  }
 }
 
-export function addInboundStockRecord(id: string, body: unknown): ServiceResult<{ product: Product; movement: StockMovement }> {
+export async function addInboundStockRecord(id: string, body: unknown): Promise<ServiceResult<{ product: Product; movement: StockMovement }>> {
   const parsed = parseStockMovement(body, 'inbound');
   if (!parsed.ok) return parsed;
   try {
-    const result = recordInboundStock(id, parsed.data);
+    const result = await recordInboundStock(id, parsed.data);
     if (result && result.product.stock <= result.product.threshold) {
       void sendNotificationEvent({
         type: 'inventory.low_stock',
@@ -294,15 +306,22 @@ export function addInboundStockRecord(id: string, body: unknown): ServiceResult<
     }
     return result ? { ok: true, data: result } : { ok: false, status: 404, error: 'product not found' };
   } catch (error) {
-    return { ok: false, status: 409, error: error instanceof Error ? error.message : 'stock movement conflict' };
+    const code = typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code: unknown }).code)
+      : undefined;
+    if ((error instanceof Error && error.message === 'referenceNo already exists') || code === '23505') {
+      return { ok: false, status: 409, error: 'referenceNo already exists' };
+    }
+    console.error('[inventory/service] inbound stock save failed:', error);
+    return { ok: false, status: 503, error: 'inbound stock could not be saved; please try again' };
   }
 }
 
-export function addOutboundStockRecord(id: string, body: unknown): ServiceResult<{ product: Product; movement: StockMovement }> {
+export async function addOutboundStockRecord(id: string, body: unknown): Promise<ServiceResult<{ product: Product; movement: StockMovement }>> {
   const parsed = parseStockMovement(body, 'outbound');
   if (!parsed.ok) return parsed;
   try {
-    const result = recordOutboundStock(id, parsed.data);
+    const result = await recordOutboundStock(id, parsed.data);
     if (result && result.product.stock <= result.product.threshold) {
       void sendNotificationEvent({
         type: 'inventory.low_stock',
@@ -324,7 +343,15 @@ export function addOutboundStockRecord(id: string, body: unknown): ServiceResult
     return result ? { ok: true, data: result } : { ok: false, status: 404, error: 'product not found' };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'stock movement conflict';
-    return { ok: false, status: message === 'insufficient stock' ? 400 : 409, error: message };
+    const code = typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code: unknown }).code)
+      : undefined;
+    if (message === 'insufficient stock') return { ok: false, status: 400, error: message };
+    if (message === 'referenceNo already exists' || code === '23505') {
+      return { ok: false, status: 409, error: 'referenceNo already exists' };
+    }
+    console.error('[inventory/service] outbound stock save failed:', error);
+    return { ok: false, status: 503, error: 'outbound stock could not be saved; please try again' };
   }
 }
 

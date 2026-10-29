@@ -94,20 +94,27 @@ export function findDeliveryById(id: string): Delivery | null {
   return deliveries.get(id) ?? null;
 }
 
-export function createDelivery(input: DeliveryCreateInput): Delivery {
+export async function createDelivery(input: DeliveryCreateInput): Promise<Delivery> {
   const record = toRecord(input);
-  deliveries.set(record.id, record);
   if (isDbSyncActive()) {
-    createDeliveryDb({ ...input, id: record.id }).catch((err) => {
-      console.error('[delivery/store] DB write error on createDelivery:', err);
-    });
+    const persisted = await createDeliveryDb({ ...input, id: record.id });
+    deliveries.set(persisted.id, persisted);
+    return persisted;
   }
+  deliveries.set(record.id, record);
   return record;
 }
 
-export function updateDelivery(id: string, input: DeliveryUpdateInput): Delivery | null {
+export async function updateDelivery(id: string, input: DeliveryUpdateInput): Promise<Delivery | null> {
   const current = deliveries.get(id);
   if (!current) return null;
+
+  if (isDbSyncActive()) {
+    const persisted = await updateDeliveryDb(id, input);
+    if (!persisted) return null;
+    deliveries.set(id, persisted);
+    return persisted;
+  }
 
   const next: Delivery = {
     ...current,
@@ -126,22 +133,13 @@ export function updateDelivery(id: string, input: DeliveryUpdateInput): Delivery
   };
 
   deliveries.set(id, next);
-  if (isDbSyncActive()) {
-    updateDeliveryDb(id, input).catch((err) => {
-      console.error('[delivery/store] DB write error on updateDelivery:', err);
-    });
-  }
   return next;
 }
 
-export function deleteDelivery(id: string): boolean {
-  const ok = deliveries.delete(id);
-  if (ok && isDbSyncActive()) {
-    deleteDeliveryDb(id).catch((err) => {
-      console.error('[delivery/store] DB write error on deleteDelivery:', err);
-    });
-  }
-  return ok;
+export async function deleteDelivery(id: string): Promise<boolean> {
+  if (!deliveries.has(id)) return false;
+  if (isDbSyncActive() && !(await deleteDeliveryDb(id))) return false;
+  return deliveries.delete(id);
 }
 
 export function _hydrateDeliveries(loaded: Delivery[]): void {

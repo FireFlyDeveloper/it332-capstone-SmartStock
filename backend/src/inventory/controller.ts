@@ -58,15 +58,15 @@ export async function updateProductController(c: Context) {
   const id = c.req.param('id');
   if (!id) return c.json({ error: 'product id is required' }, 400);
   const body = await c.req.json().catch(() => null);
-  const result = editProductRecord(id, body);
+  const result = await editProductRecord(id, body);
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data);
 }
 
-export function deleteProductController(c: Context) {
+export async function deleteProductController(c: Context) {
   const id = c.req.param('id');
   if (!id) return c.json({ error: 'product id is required' }, 400);
-  const result = removeProductRecord(id);
+  const result = await removeProductRecord(id);
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data);
 }
@@ -75,7 +75,7 @@ export async function inboundStockController(c: Context) {
   const id = c.req.param('id');
   if (!id) return c.json({ error: 'product id is required' }, 400);
   const body = await c.req.json().catch(() => null);
-  const result = addInboundStockRecord(id, { ...(typeof body === 'object' && body !== null ? body : {}), createdBy: c.get('user').email });
+  const result = await addInboundStockRecord(id, { ...(typeof body === 'object' && body !== null ? body : {}), createdBy: c.get('user').email });
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data, 201);
 }
@@ -84,7 +84,7 @@ export async function outboundStockController(c: Context) {
   const id = c.req.param('id');
   if (!id) return c.json({ error: 'product id is required' }, 400);
   const body = await c.req.json().catch(() => null);
-  const result = addOutboundStockRecord(id, { ...(typeof body === 'object' && body !== null ? body : {}), createdBy: c.get('user').email });
+  const result = await addOutboundStockRecord(id, { ...(typeof body === 'object' && body !== null ? body : {}), createdBy: c.get('user').email });
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data, 201);
 }

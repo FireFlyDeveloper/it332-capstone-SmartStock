@@ -5,7 +5,7 @@ import {
   Lock,
   Bell,
   Sliders,
-  ShieldCheck,
+
   Save,
   CheckCircle2,
   AlertCircle,
@@ -214,11 +214,13 @@ export const ProfilePage: React.FC = () => {
       const result = await Notification.requestPermission();
       setBrowserPermission(result);
       if (result === 'granted') {
-        toast.success('Browser notification permission granted.');
-        setNotifPrefs((prev) => ({ ...prev, browserPush: true }));
-        // Trigger a native test notification
-        new Notification('Browser notification permission enabled', {
-          body: 'This only confirms permission for local notifications shown by this page. It does not subscribe this browser to backend alerts.',
+        toast.success('Notifications enabled in this browser.');
+        const nextPreferences = { ...notifPrefs, browserPush: true };
+        setNotifPrefs(nextPreferences);
+        localStorage.setItem('smartstock_notif_prefs', JSON.stringify(nextPreferences));
+        window.dispatchEvent(new Event('smartstock-notif-prefs-changed'));
+        new Notification('Notifications enabled', {
+          body: 'SmartStock can show alerts while this app is open.',
           icon: '/favicon.ico',
         });
       } else if (result === 'denied') {
@@ -231,10 +233,10 @@ export const ProfilePage: React.FC = () => {
 
   const handleTestPushNotification = () => {
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification('SmartStock browser preview', {
-        body: 'This local preview does not verify server-side push delivery.',
+      new Notification('SmartStock notification test', {
+        body: 'Notifications are working while SmartStock is open.',
       });
-      toast.info('Local browser notification preview shown.');
+      toast.info('Test notification shown.');
     } else {
       toast.error('Grant browser notification permission before previewing a local notification.');
     }
@@ -243,7 +245,8 @@ export const ProfilePage: React.FC = () => {
   const handleSaveNotifPrefs = () => {
     try {
       localStorage.setItem('smartstock_notif_prefs', JSON.stringify(notifPrefs));
-      toast.success('Notification preferences saved on this browser. Server-side delivery is not configured.');
+      window.dispatchEvent(new Event('smartstock-notif-prefs-changed'));
+      toast.success('Notification preferences saved on this browser.');
     } catch {
       toast.error('Could not save notification preferences in this browser.');
     }
@@ -307,7 +310,7 @@ export const ProfilePage: React.FC = () => {
         {[
           { key: 'profile', label: 'Profile Info', icon: UserIcon },
           { key: 'security', label: 'Change Password', icon: Lock },
-          { key: 'notifications', label: 'Browser Notifications', icon: Bell },
+          { key: 'notifications', label: 'Notifications', icon: Bell },
           { key: 'settings', label: 'Preferences & Settings', icon: Sliders },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -494,21 +497,8 @@ export const ProfilePage: React.FC = () => {
             </form>
           </div>
 
-          {/* Two-Factor Authentication & Sessions */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-[28px] p-6 border border-[#f1f5f9] shadow-sm space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-extrabold text-slate-900">Two-Factor Authentication</h4>
-                  <p className="text-xs text-slate-400">Multi-factor authentication is not configured for this application.</p>
-                </div>
-              </div>
-              <p className="text-xs text-slate-500">This security feature is unavailable until server-side 2FA support is implemented.</p>
-            </div>
-
+          {/* Current session information */}
+          <div className="grid grid-cols-1 gap-6">
             <div className="bg-white rounded-[28px] p-6 border border-[#f1f5f9] shadow-sm space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -538,10 +528,10 @@ export const ProfilePage: React.FC = () => {
         </div>
       )}
 
-      {/* ── TAB 3: Browser Notifications ────────────────────────────── */}
+      {/* ── TAB 3: Notifications ───────────────────────────────────── */}
       {activeTab === 'notifications' && (
         <div className="space-y-6">
-          {/* Browser Notification Card */}
+          {/* Browser permission controls for Notifications */}
           <div className="bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/60 rounded-[28px] p-6 sm:p-8 border border-indigo-100 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-2xl bg-[#4f46e5] text-white flex items-center justify-center shrink-0 shadow-md shadow-indigo-900/15">
@@ -549,7 +539,7 @@ export const ProfilePage: React.FC = () => {
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-extrabold text-slate-900">Browser Notifications</h3>
+                  <h3 className="text-base font-extrabold text-slate-900">Notifications</h3>
                   <span
                     className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                       browserPermission === 'granted'
@@ -567,19 +557,19 @@ export const ProfilePage: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 max-w-xl">
-                  Receive local browser notifications when explicitly previewed here. Background and server-side event delivery are not configured.
+                  Receive alerts for new stock, order, and delivery notifications while SmartStock is open. Permission is required; notifications do not arrive after the app is closed.
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2.5 shrink-0">
-              {browserPermission !== 'granted' ? (
+              {browserPermission !== 'granted' || !notifPrefs.browserPush ? (
                 <button
                   type="button"
                   onClick={() => void handleRequestPushPermission()}
                   className="btn-primary text-xs font-bold py-2.5 px-4 shadow-sm"
                 >
-                  Enable Browser Notifications
+                  Enable Notifications
                 </button>
               ) : (
                 <button
@@ -588,7 +578,7 @@ export const ProfilePage: React.FC = () => {
                   className="btn-secondary flex items-center gap-1.5 text-xs font-bold py-2 px-3.5 shadow-2xs text-slate-700"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-[#4f46e5]" />
-                  <span>Preview Local Notification</span>
+                  <span>Test Notification</span>
                 </button>
               )}
             </div>

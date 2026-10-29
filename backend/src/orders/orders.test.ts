@@ -189,6 +189,31 @@ describe('order routes', () => {
     expect(paidJson.paymentStatus).toBe('paid');
   });
 
+  it('cancels an order, refunds the remaining payment, restores stock, and is idempotent', async () => {
+    const token = await login(app, STAFF);
+    const order = listOrders().find((item) => item.paidAmount > 0)!;
+    const beforeStock = findProductById(order.items[0].productId)!.stock;
+    const response = await app.request(`/orders/${order.id}/cancel`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(response.status).toBe(200);
+    const cancelled = await response.json() as { order: { orderStatus: string; paidAmount: number; refundedAmount: number } };
+    expect(cancelled.order.orderStatus).toBe('cancelled');
+    expect(cancelled.order.paidAmount).toBe(0);
+    expect(cancelled.order.refundedAmount).toBe(order.paidAmount);
+    expect(findProductById(order.items[0].productId)!.stock).toBe(beforeStock + order.items[0].quantity);
+
+    const repeated = await app.request(`/orders/${order.id}/cancel`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(repeated.status).toBe(200);
+    const repeatedResult = await repeated.json() as { order: { refundedAmount: number } };
+    expect(repeatedResult.order.refundedAmount).toBe(order.paidAmount);
+    expect(findProductById(order.items[0].productId)!.stock).toBe(beforeStock + order.items[0].quantity);
+  });
+
   it('processes refunds and updates refund fields and payment status', async () => {
     const token = await login(app, ADMIN);
     const create = await app.request('/orders', {

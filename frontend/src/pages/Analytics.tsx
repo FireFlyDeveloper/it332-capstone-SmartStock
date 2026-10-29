@@ -17,6 +17,7 @@ import { useData } from '../components/DataContext';
 import { formatCurrency, checkStockStatus, formatDateInput } from '../utils/helpers';
 import { getDemandForecast, type DemandForecastProduct } from '../api';
 import { toast } from 'sonner';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { 
   AreaChart, 
   Area, 
@@ -259,6 +260,12 @@ export const Analytics: React.FC = () => {
       };
     });
   }, [products, filteredOrders]);
+  const { visibleItems: visibleInventoryMovements, sentinelRef: inventorySentinelRef, hasMore: hasMoreInventory } = useInfiniteScroll(inventoryMovements);
+  const availableForecastRows = useMemo(
+    () => forecast.filter((item) => item.forecastQuantity !== null),
+    [forecast],
+  );
+  const { visibleItems: visibleForecastRows, sentinelRef: forecastSentinelRef, hasMore: hasMoreForecast } = useInfiniteScroll(availableForecastRows);
 
   // Dynamic sales and order trend data aggregated from filtered orders
   const salesTrendData = useMemo(() => {
@@ -362,7 +369,7 @@ export const Analytics: React.FC = () => {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-indigo-50 text-[#4f46e5] hover:bg-indigo-100/80 border border-indigo-100 text-xs font-bold transition-all shadow-2xs self-start sm:self-auto"
           >
             <Banknote className="w-4 h-4" />
-            <span>Daily Sales &amp; Cash Audit</span>
+            <span>Daily Sales</span>
           </button>
         </div>
 
@@ -376,29 +383,21 @@ export const Analytics: React.FC = () => {
                 <Calendar className="w-4 h-4 text-slate-400" />
                 <span>Delivery Date Range:</span>
               </div>
-              {(['all', '30d', '7d'] as const).map((key) => {
-                const label = key === 'all' ? 'All time' : key === '30d' ? 'Last 30 days' : 'Last 7 days';
-                const isActive = datePreset === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => handleDatePreset(key)}
-                    className={`rounded-2xl px-3.5 py-1.5 text-xs font-bold transition-all ${
-                      isActive
-                        ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
-                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/70'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-              {datePreset === 'custom' && (
-                <span className="rounded-2xl px-3.5 py-1.5 text-xs font-bold bg-indigo-50 text-[#4f46e5] border border-indigo-100">
-                  Custom Range
-                </span>
-              )}
+              <select
+                aria-label="Analytics date range"
+                value={datePreset}
+                onChange={(event) => {
+                  const value = event.target.value as DateRangePreset;
+                  if (value === 'custom') setDatePreset('custom');
+                  else handleDatePreset(value);
+                }}
+                className="input w-full sm:w-44"
+              >
+                <option value="all">All time</option>
+                <option value="30d">Last 30 days</option>
+                <option value="7d">Last 7 days</option>
+                <option value="custom">Custom range</option>
+              </select>
             </div>
 
             {/* Specific Date From -> To */}
@@ -850,7 +849,7 @@ export const Analytics: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f1f5f9]">
-                {inventoryMovements.map((item) => (
+                {visibleInventoryMovements.map((item) => (
                   <tr key={item.productId} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-4 py-3 text-sm text-slate-900 font-medium">{item.productName}</td>
                     <td className="px-4 py-3">
@@ -865,10 +864,12 @@ export const Analytics: React.FC = () => {
               </tbody>
             </table>
           </div>
+          {hasMoreInventory && <div ref={inventorySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more products…</div>}
         </div>
 
         {/* Order-history demand estimates */}
         <div className="bg-gradient-to-r from-violet-50/70 to-indigo-50/70 rounded-[28px] border border-violet-100/80 p-6">
+          <div hidden={!forecastLoading && !forecastError && availableForecastRows.length === 0}>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-violet-100 rounded-xl flex items-center justify-center shadow-2xs">
@@ -889,7 +890,9 @@ export const Analytics: React.FC = () => {
             <div className="border-b border-violet-100 bg-violet-50/60 p-4 text-xs text-slate-600">
               Backend historical forecast: simple exponential smoothing (α=0.3), next-month horizon, using delivered-order quantities grouped by order-creation month in UTC (up to 12 months, including the current month to date). At least 3 positive-quantity months are required; sparse-history products are shown without an estimate.
             </div>
-            {forecastLoading ? <p className="p-8 text-center text-sm text-slate-500">Loading historical forecast…</p> : forecastError ? <div role="alert" className="p-8 text-center text-sm text-rose-700"><p>{forecastError}</p><button type="button" onClick={() => setForecastRefreshKey((current) => current + 1)} className="mt-3 font-semibold text-indigo-600 hover:text-indigo-800">Retry</button></div> : forecast.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No forecast products are available.</p> : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-violet-50/70"><tr><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Product</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Stock / reorder point</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Forecast next month</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Suggested order</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Coverage</th><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Policy assessment</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">History</th></tr></thead><tbody className="divide-y divide-slate-100">{forecast.map(item => <tr key={item.productId}><td className="px-4 py-3"><p className="text-sm font-semibold text-slate-800">{item.name}</p><p className="text-xs text-slate-500">{item.sku} · {item.category}</p></td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.currentStock} / {item.reorderPoint} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-semibold text-slate-700">{item.forecastQuantity === null ? 'Unavailable' : `${item.forecastQuantity} ${item.unit}`}</td><td className="px-4 py-3 text-right text-sm font-bold text-violet-700">{item.recommendedOrderQuantity === null ? '—' : `${item.recommendedOrderQuantity} ${item.unit}`}</td><td className="px-4 py-3 text-right text-sm text-slate-600">{item.stockCoverageDays === null ? '—' : `${item.stockCoverageDays} days`}</td><td className="px-4 py-3 text-sm capitalize text-slate-700">{item.policyAssessment.replaceAll('_', ' ')}</td><td className="px-4 py-3 text-right text-xs text-slate-600">{item.positiveMonths} positive months</td></tr>)}</tbody></table></div>}
+            {forecastLoading ? <p className="p-8 text-center text-sm text-slate-500">Loading historical forecast…</p> : forecastError ? <div role="alert" className="p-8 text-center text-sm text-rose-700"><p>{forecastError}</p><button type="button" onClick={() => setForecastRefreshKey((current) => current + 1)} className="mt-3 font-semibold text-indigo-600 hover:text-indigo-800">Retry</button></div> : availableForecastRows.length === 0 ? null : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-violet-50/70"><tr><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Product</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Stock / reorder point</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Forecast next month</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Suggested order</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Coverage</th><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Policy assessment</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">History</th></tr></thead><tbody className="divide-y divide-slate-100">{visibleForecastRows.map(item => <tr key={item.productId}><td className="px-4 py-3"><p className="text-sm font-semibold text-slate-800">{item.name}</p><p className="text-xs text-slate-500">{item.sku} · {item.category}</p></td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.currentStock} / {item.reorderPoint} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-semibold text-slate-700">{item.forecastQuantity} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-bold text-violet-700">{item.recommendedOrderQuantity === null ? '—' : `${item.recommendedOrderQuantity} ${item.unit}`}</td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.stockCoverageDays === null ? '—' : `${item.stockCoverageDays} days`}</td><td className="px-4 py-3 text-sm text-slate-700">{item.policyAssessment.replaceAll('_', ' ')}</td><td className="px-4 py-3 text-right text-sm text-slate-500">{item.positiveMonths} positive months</td></tr>)}</tbody></table></div>}
+          </div>
+          {hasMoreForecast && <div ref={forecastSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more forecast rows…</div>}
           </div>
           
           {/* Rule-based stock alerts */}

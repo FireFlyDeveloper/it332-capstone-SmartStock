@@ -42,7 +42,6 @@ interface BackendOrder {
   total: number
   paidAmount: number
   paymentStatus: BackendPaymentStatus
-  paymentMethod?: 'cash' | 'gcash' | 'bank_transfer' | null
   orderStatus: BackendOrderStatus
   refundedAmount: number
   refundReason?: string
@@ -86,7 +85,6 @@ function toFrontendOrder(order: BackendOrder): Order {
     total: order.total,
     paidAmount: order.paidAmount,
     paymentStatus: toFrontendPaymentStatus(order.paymentStatus),
-    paymentMethod: order.paymentMethod ?? null,
     orderStatus: toFrontendOrderStatus(order.orderStatus),
     deliveryStatus: order.orderStatus === 'delivered' ? 'delivered' : order.orderStatus === 'in_transit' ? 'in_transit' : 'scheduled',
     orderType: order.deliveryAddress.toLowerCase() === 'pickup' ? 'pickup' : 'delivery',
@@ -122,7 +120,6 @@ function toBackendUpdateOrder(updates: Partial<Order>) {
   if (updates.address !== undefined) body.deliveryAddress = updates.address || 'Pickup'
   if (updates.date !== undefined) body.deliveryDate = updates.date
   if (updates.orderStatus !== undefined) body.orderStatus = toBackendOrderStatus(updates.orderStatus)
-  if (updates.paymentMethod !== undefined) body.paymentMethod = updates.paymentMethod
   return body
 }
 
@@ -156,6 +153,7 @@ interface DataContextValue {
   // Order mutators
   addOrder: (order: Omit<Order, 'id' | 'createdAt' | 'referenceNumber' | 'paymentStatus'>) => Promise<void>
   updateOrder: (id: string, order: Partial<Order>) => Promise<void>
+  cancelOrder: (id: string) => Promise<void>
   processPayment: (orderId: string, amount: number) => Promise<void>
   processRefund: (
     orderId: string,
@@ -336,6 +334,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshOrders])
 
+  const cancelOrder = useCallback(async (id: string) => {
+    const result = await apiFetch<{ ok: true; order: BackendOrder }>(`/orders/${id}/cancel`, { method: 'POST' })
+    const updated = result.order
+    setOrders((prev) => prev.map((order) => order.id === id ? toFrontendOrder(updated) : order))
+    await Promise.all([refreshProducts(), refreshOrders()])
+  }, [refreshOrders, refreshProducts])
+
   const processPayment = useCallback(
     async (orderId: string, amount: number) => {
       const updated = await apiFetch<BackendOrder>(`/orders/${orderId}/payment`, {
@@ -412,6 +417,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       listProductMovements,
       addOrder,
       updateOrder,
+      cancelOrder,
       processPayment,
       processRefund,
       updateDeliveryStatus,
@@ -439,6 +445,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       listProductMovements,
       addOrder,
       updateOrder,
+      cancelOrder,
       processPayment,
       processRefund,
       updateDeliveryStatus,

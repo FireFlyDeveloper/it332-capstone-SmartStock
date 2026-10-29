@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useData } from './DataContext';
 import { formatCurrency, formatDate, checkStockStatus } from '../utils/helpers';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 
 export interface NotificationItem {
   id: string;
@@ -28,6 +29,29 @@ export interface NotificationItem {
 
 const READ_STORAGE_KEY = 'smartstock_read_notifications';
 const DISMISSED_STORAGE_KEY = 'smartstock_dismissed_notifications';
+const PREFERENCES_STORAGE_KEY = 'smartstock_notif_prefs';
+
+interface BrowserNotificationPreferences {
+  browserPush: boolean;
+  lowStockAlerts: boolean;
+  orderStatusUpdates: boolean;
+  deliveryDispatches: boolean;
+}
+
+const readBrowserNotificationPreferences = (): BrowserNotificationPreferences => {
+  try {
+    const stored = localStorage.getItem(PREFERENCES_STORAGE_KEY);
+    const parsed = stored ? JSON.parse(stored) as Partial<BrowserNotificationPreferences> : {};
+    return {
+      browserPush: parsed.browserPush === true,
+      lowStockAlerts: parsed.lowStockAlerts !== false,
+      orderStatusUpdates: parsed.orderStatusUpdates !== false,
+      deliveryDispatches: parsed.deliveryDispatches !== false,
+    };
+  } catch {
+    return { browserPush: false, lowStockAlerts: true, orderStatusUpdates: true, deliveryDispatches: true };
+  }
+};
 
 export const NotificationDropdown: React.FC = () => {
   const {
@@ -42,10 +66,23 @@ export const NotificationDropdown: React.FC = () => {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
+  const [notificationPreferences, setNotificationPreferences] = useState(readBrowserNotificationPreferences);
+  const knownNotificationIdsRef = useRef<Set<string>>(new Set());
+  const initializedNotificationsRef = useRef(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const sourcesLoading = productsLoading || ordersLoading;
   const sourcesError = productsError || ordersError;
   const sourcesReady = !sourcesLoading && !sourcesError;
+
+  useEffect(() => {
+    const reloadPreferences = () => setNotificationPreferences(readBrowserNotificationPreferences());
+    window.addEventListener('storage', reloadPreferences);
+    window.addEventListener('smartstock-notif-prefs-changed', reloadPreferences);
+    return () => {
+      window.removeEventListener('storage', reloadPreferences);
+      window.removeEventListener('smartstock-notif-prefs-changed', reloadPreferences);
+    };
+  }, []);
 
   const retrySources = () => {
     void refresh();
@@ -201,6 +238,46 @@ export const NotificationDropdown: React.FC = () => {
     }
     return visibleNotifications;
   }, [visibleNotifications, activeTab, readIds]);
+  const { visibleItems: visibleDisplayedNotifications, sentinelRef, hasMore } = useInfiniteScroll(displayedNotifications);
+
+  useEffect(() => {
+    if (!sourcesReady) return;
+
+    if (!initializedNotificationsRef.current) {
+      allNotifications.forEach((item) => knownNotificationIdsRef.current.add(item.id));
+      initializedNotificationsRef.current = true;
+      return;
+    }
+
+    const newNotifications = allNotifications.filter((item) => !knownNotificationIdsRef.current.has(item.id));
+    allNotifications.forEach((item) => knownNotificationIdsRef.current.add(item.id));
+    if (!notificationPreferences.browserPush || !('Notification' in window) || Notification.permission !== 'granted') return;
+
+    newNotifications.forEach((item) => {
+      if (dismissedIds.has(item.id)) return;
+      const categoryEnabled = item.type === 'stock'
+        ? notificationPreferences.lowStockAlerts
+        : item.type === 'delivery'
+          ? notificationPreferences.deliveryDispatches
+          : notificationPreferences.orderStatusUpdates;
+      if (!categoryEnabled) return;
+      const browserNotification = new Notification(item.title, { body: item.message, tag: item.id });
+      browserNotification.onclick = () => {
+        window.focus();
+        setIsOpen(false);
+        navigate(item.link);
+        browserNotification.close();
+      };
+    });
+  }, [allNotifications, dismissedIds, navigate, notificationPreferences, sourcesReady]);
+
+  useEffect(() => {
+    if (!sourcesReady || !notificationPreferences.browserPush || !('Notification' in window) || Notification.permission !== 'granted') return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'hidden') void refresh();
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [notificationPreferences.browserPush, refresh, sourcesReady]);
 
   const markAllAsRead = () => {
     const newSet = new Set(readIds);
@@ -217,6 +294,10 @@ export const NotificationDropdown: React.FC = () => {
   const handleDismiss = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     setDismissedIds((prev) => new Set(prev).add(id));
+  };
+
+  const handleClearAll = () => {
+    setDismissedIds((previous) => new Set([...previous, ...visibleNotifications.map((item) => item.id)]));
   };
 
   const getIcon = (item: NotificationItem) => {
@@ -292,43 +373,42 @@ export const NotificationDropdown: React.FC = () => {
               </div>
             </div>
 
-            {sourcesReady && unreadCount > 0 && (
-              <button
-                type="button"
-                onClick={markAllAsRead}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold text-[#4f46e5] hover:bg-indigo-50 transition-colors"
-                title="Mark all as read"
-              >
-                <CheckCheck className="w-3.5 h-3.5" />
-                <span>Mark read</span>
-              </button>
-            )}
+            <div className="flex items-center gap-1">
+              {sourcesReady && unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={markAllAsRead}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold text-[#4f46e5] hover:bg-indigo-50 transition-colors"
+                  title="Mark all as read"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  <span>Mark read</span>
+                </button>
+              )}
+              {sourcesReady && visibleNotifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-colors"
+                  title="Clear all notifications"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Clear all</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {sourcesReady && (
-            <div className="flex items-center gap-1 px-4 py-2 bg-slate-50/70 border-b border-slate-100">
-              <button
-                type="button"
-                onClick={() => setActiveTab('all')}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'all'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                All ({visibleNotifications.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('unread')}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'unread'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Unread ({unreadCount})
-              </button>
+            <div className="flex items-center justify-between gap-3 px-4 py-2 bg-slate-50/70 border-b border-slate-100">
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                Show
+                <select value={activeTab} onChange={(event) => setActiveTab(event.target.value as typeof activeTab)} className="input !w-auto !py-1">
+                  <option value="all">All ({visibleNotifications.length})</option>
+                  <option value="unread">Unread ({unreadCount})</option>
+                </select>
+              </label>
+              <span className="text-[11px] text-slate-400">Browser notifications are local to this open app.</span>
             </div>
           )}
 
@@ -360,7 +440,7 @@ export const NotificationDropdown: React.FC = () => {
                 </p>
               </div>
             ) : (
-              displayedNotifications.map((item) => {
+              visibleDisplayedNotifications.map((item) => {
                 const isRead = readIds.has(item.id);
                 return (
                   <div
@@ -420,6 +500,7 @@ export const NotificationDropdown: React.FC = () => {
                 );
               })
             )}
+            {sourcesReady && hasMore && <div ref={sentinelRef} role="status" className="py-3 text-center text-[11px] text-slate-400">Scroll to load more notifications…</div>}
           </div>
 
           {/* Dropdown Footer */}

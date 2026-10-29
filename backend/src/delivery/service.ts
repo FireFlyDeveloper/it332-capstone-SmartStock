@@ -21,7 +21,7 @@ import {
   type TrafficLevel,
 } from './store.js';
 
-type ServiceResult<T> = { ok: true; data: T } | { ok: false; status: 400 | 404 | 409; error: string };
+type ServiceResult<T> = { ok: true; data: T } | { ok: false; status: 400 | 404 | 409 | 500; error: string };
 
 interface DeliveryFilters {
   q?: string;
@@ -307,40 +307,55 @@ export function getDeliveryRecord(id: string): ServiceResult<Delivery> {
   return item ? { ok: true, data: item } : { ok: false, status: 404, error: 'delivery not found' };
 }
 
-export function addDeliveryRecord(body: unknown): ServiceResult<Delivery> {
+export async function addDeliveryRecord(body: unknown): Promise<ServiceResult<Delivery>> {
   const parsed = parseCreate(body);
   if (!parsed.ok) return parsed;
-  return { ok: true, data: createDelivery(parsed.data) };
+  try {
+    return { ok: true, data: await createDelivery(parsed.data) };
+  } catch (error) {
+    console.error('[delivery/service] failed to persist delivery create:', error);
+    return { ok: false, status: 500, error: 'could not save delivery' };
+  }
 }
 
-export function editDeliveryRecord(id: string, body: unknown): ServiceResult<Delivery> {
+export async function editDeliveryRecord(id: string, body: unknown): Promise<ServiceResult<Delivery>> {
   const current = findDeliveryById(id);
   if (!current) return { ok: false, status: 404, error: 'delivery not found' };
   const parsed = parseUpdate(body);
   if (!parsed.ok) return parsed;
   const checked = assertLegalTransition(current, parsed.data);
   if (!checked.ok) return checked;
-  const item = updateDelivery(id, checked.data);
-  if (item && checked.data.status !== undefined && current.status !== item.status) {
-    void sendNotificationEvent({
-      type: 'delivery.status_changed',
-      occurredAt: new Date().toISOString(),
-      data: {
-        deliveryId: item.id,
-        orderId: item.orderId,
-        previousStatus: current.status,
-        status: item.status,
-      },
-    }).catch((error) => {
-      const message = error instanceof Error ? error.message : 'unknown notification error';
-      console.warn(`[notifications] delivery status event failed: ${message}`);
-    });
+  try {
+    const item = await updateDelivery(id, checked.data);
+    if (item && checked.data.status !== undefined && current.status !== item.status) {
+      void sendNotificationEvent({
+        type: 'delivery.status_changed',
+        occurredAt: new Date().toISOString(),
+        data: {
+          deliveryId: item.id,
+          orderId: item.orderId,
+          previousStatus: current.status,
+          status: item.status,
+        },
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : 'unknown notification error';
+        console.warn(`[notifications] delivery status event failed: ${message}`);
+      });
+    }
+    return item ? { ok: true, data: item } : { ok: false, status: 404, error: 'delivery not found' };
+  } catch (error) {
+    console.error('[delivery/service] failed to persist delivery update:', error);
+    return { ok: false, status: 500, error: 'could not update delivery' };
   }
-  return item ? { ok: true, data: item } : { ok: false, status: 404, error: 'delivery not found' };
 }
 
-export function removeDeliveryRecord(id: string): ServiceResult<{ ok: true }> {
-  return deleteDelivery(id)
-    ? { ok: true, data: { ok: true } }
-    : { ok: false, status: 404, error: 'delivery not found' };
+export async function removeDeliveryRecord(id: string): Promise<ServiceResult<{ ok: true }>> {
+  try {
+    return await deleteDelivery(id)
+      ? { ok: true, data: { ok: true } }
+      : { ok: false, status: 404, error: 'delivery not found' };
+  } catch (error) {
+    console.error('[delivery/service] failed to persist delivery deletion:', error);
+    return { ok: false, status: 500, error: 'could not delete delivery' };
+  }
 }

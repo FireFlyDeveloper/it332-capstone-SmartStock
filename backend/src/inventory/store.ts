@@ -180,7 +180,17 @@ export async function createProduct(input: ProductCreateInput): Promise<Product>
   return record;
 }
 
-export function updateProduct(id: string, input: ProductUpdateInput): Product | null {
+export async function updateProduct(id: string, input: ProductUpdateInput): Promise<Product | null> {
+  if (isDbSyncActive()) {
+    const persisted = await updateProductDb(id, input);
+    if (!persisted) return null;
+    const cached = products.get(id);
+    if (cached && persisted.sku !== cached.sku) bySku.delete(cached.sku);
+    bySku.set(persisted.sku, id);
+    products.set(id, persisted);
+    return persisted;
+  }
+
   const current = products.get(id);
   if (!current) return null;
 
@@ -206,12 +216,7 @@ export function updateProduct(id: string, input: ProductUpdateInput): Product | 
     bySku.set(next.sku, id);
   }
   products.set(id, next);
-  if (!isDbSyncActive()) recordInventoryPolicyEvent(id, current, next);
-  if (isDbSyncActive()) {
-    updateProductDb(id, input).catch((err) => {
-      console.error('[inventory/store] DB write error on updateProduct:', err);
-    });
-  }
+  recordInventoryPolicyEvent(id, current, next);
   return next;
 }
 
@@ -219,7 +224,7 @@ function createMovement(productId: string, type: StockMovementType, input: Stock
   const referenceNo = normalizeReference(input.referenceNo);
   if (movementRefs.has(referenceNo)) throw new Error('referenceNo already exists');
 
-  const movement: StockMovement = {
+  return {
     id: randomUUID(),
     productId,
     type,
@@ -230,41 +235,52 @@ function createMovement(productId: string, type: StockMovementType, input: Stock
     occurredAt: input.occurredAt ?? new Date().toISOString(),
     createdBy: input.createdBy?.trim() || 'system',
   };
-
-  movements.set(movement.id, movement);
-  movementRefs.set(movement.referenceNo, movement.id);
-  movementIdsByProduct.set(productId, [...(movementIdsByProduct.get(productId) ?? []), movement.id]);
-  return movement;
 }
 
-export function recordInboundStock(productId: string, input: StockMovementInput): { product: Product; movement: StockMovement } | null {
+function cacheMovement(movement: StockMovement): void {
+  movements.set(movement.id, movement);
+  movementRefs.set(movement.referenceNo, movement.id);
+  movementIdsByProduct.set(movement.productId, [...(movementIdsByProduct.get(movement.productId) ?? []), movement.id]);
+}
+
+export async function recordInboundStock(productId: string, input: StockMovementInput): Promise<{ product: Product; movement: StockMovement } | null> {
+  if (isDbSyncActive()) {
+    const movement = createMovement(productId, 'inbound', input);
+    const persisted = await recordInboundStockDb(productId, { ...input, id: movement.id });
+    if (!persisted) return null;
+    products.set(persisted.product.id, persisted.product);
+    cacheMovement(persisted.movement);
+    return persisted;
+  }
+
   const current = products.get(productId);
   if (!current) return null;
   const movement = createMovement(productId, 'inbound', input);
   const product: Product = { ...current, stock: current.stock + input.quantity };
   products.set(productId, product);
-  if (!isDbSyncActive()) recordInventoryPolicyEvent(productId, current, product);
-  if (isDbSyncActive()) {
-    recordInboundStockDb(productId, { ...input, id: movement.id }).catch((err) => {
-      console.error('[inventory/store] DB write error on recordInboundStock:', err);
-    });
-  }
+  cacheMovement(movement);
+  recordInventoryPolicyEvent(productId, current, product);
   return { product, movement };
 }
 
-export function recordOutboundStock(productId: string, input: StockMovementInput): { product: Product; movement: StockMovement } | null {
+export async function recordOutboundStock(productId: string, input: StockMovementInput): Promise<{ product: Product; movement: StockMovement } | null> {
+  if (isDbSyncActive()) {
+    const movement = createMovement(productId, 'outbound', input);
+    const persisted = await recordOutboundStockDb(productId, { ...input, id: movement.id });
+    if (!persisted) return null;
+    products.set(persisted.product.id, persisted.product);
+    cacheMovement(persisted.movement);
+    return persisted;
+  }
+
   const current = products.get(productId);
   if (!current) return null;
   if (current.stock < input.quantity) throw new Error('insufficient stock');
   const movement = createMovement(productId, 'outbound', input);
   const product: Product = { ...current, stock: current.stock - input.quantity };
   products.set(productId, product);
-  if (!isDbSyncActive()) recordInventoryPolicyEvent(productId, current, product);
-  if (isDbSyncActive()) {
-    recordOutboundStockDb(productId, { ...input, id: movement.id }).catch((err) => {
-      console.error('[inventory/store] DB write error on recordOutboundStock:', err);
-    });
-  }
+  cacheMovement(movement);
+  recordInventoryPolicyEvent(productId, current, product);
   return { product, movement };
 }
 
@@ -276,11 +292,17 @@ export function listProductMovements(productId: string): StockMovement[] | null 
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
 }
 
-export function deleteProduct(id: string): boolean {
+export async function deleteProduct(id: string): Promise<boolean> {
   const current = products.get(id);
-  if (!current) return false;
+  if (!isDbSyncActive() && !current) return false;
+
+  if (isDbSyncActive()) {
+    const deleted = await deleteProductDb(id);
+    if (!deleted) return false;
+  }
+
   products.delete(id);
-  bySku.delete(current.sku);
+  if (current) bySku.delete(current.sku);
   const productMovementIds = movementIdsByProduct.get(id) ?? [];
   for (const movementId of productMovementIds) {
     const movement = movements.get(movementId);
@@ -288,11 +310,6 @@ export function deleteProduct(id: string): boolean {
     movements.delete(movementId);
   }
   movementIdsByProduct.delete(id);
-  if (isDbSyncActive()) {
-    deleteProductDb(id).catch((err) => {
-      console.error('[inventory/store] DB write error on deleteProduct:', err);
-    });
-  }
   return true;
 }
 

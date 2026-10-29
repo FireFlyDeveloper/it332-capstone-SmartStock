@@ -25,6 +25,7 @@ import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
 import { apiFetchBlob, getAnalyticsPurchases, getDemandForecast, getPolicyPerformance, type ApiError, type PurchaseAnalyticsResponse, type DemandForecastProduct, type PolicyPerformanceResponse } from '../api';
 import { useAuth } from '../components/AuthContext';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 type ExportType = 'sales' | 'purchases' | 'inventory' | 'spending';
@@ -218,6 +219,11 @@ export const Reports: React.FC = () => {
       return matchesSearch && matchesStatus;
     });
   }, [searchTerm, statusFilter, transactionHistory]);
+  const availablePolicyRows = useMemo(() => policyRows.filter((row) => row.forecastQuantity !== null), [policyRows]);
+  const { visibleItems: visiblePurchaseGroups, sentinelRef: purchaseSentinelRef, hasMore: hasMorePurchaseGroups } = useInfiniteScroll(purchaseData?.groups ?? []);
+  const { visibleItems: visiblePolicyRows, sentinelRef: policySentinelRef, hasMore: hasMorePolicyRows } = useInfiniteScroll(availablePolicyRows);
+  const { visibleItems: visibleObservedRows, sentinelRef: observedSentinelRef, hasMore: hasMoreObservedRows } = useInfiniteScroll(observedPolicy?.rows ?? []);
+  const { visibleItems: visibleTransactions, sentinelRef: transactionSentinelRef, hasMore: hasMoreTransactions } = useInfiniteScroll(filteredTransactions);
 
   // Calculate summary stats dynamically based on filtered orders
   const totalSales = filteredOrders.filter(o => o.orderStatus === 'completed').reduce((sum, o) => sum + o.total, 0);
@@ -373,7 +379,7 @@ export const Reports: React.FC = () => {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-indigo-50 text-[#4f46e5] hover:bg-indigo-100/80 border border-indigo-100 text-xs font-bold transition-all shadow-2xs self-start sm:self-auto"
           >
             <Banknote className="w-4 h-4" />
-            <span>Daily Cash Reconciliation</span>
+            <span>Daily Sales</span>
           </button>
         </div>
 
@@ -388,29 +394,21 @@ export const Reports: React.FC = () => {
                 <Calendar className="w-4 h-4 text-slate-400" />
                 <span>Date Range:</span>
               </div>
-              {(['all', '30d', '7d'] as const).map((key) => {
-                const label = key === 'all' ? 'All time' : key === '30d' ? 'Last 30 days' : 'Last 7 days';
-                const isActive = datePreset === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => handleDatePreset(key)}
-                    className={`rounded-2xl px-3.5 py-1.5 text-xs font-bold transition-all ${
-                      isActive
-                        ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
-                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/70'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-              {datePreset === 'custom' && (
-                <span className="rounded-2xl px-3.5 py-1.5 text-xs font-bold bg-indigo-50 text-[#4f46e5] border border-indigo-100">
-                  Custom Range
-                </span>
-              )}
+              <select
+                aria-label="Report date range"
+                value={datePreset}
+                onChange={(event) => {
+                  const value = event.target.value as DateRangePreset;
+                  if (value === 'custom') setDatePreset('custom');
+                  else handleDatePreset(value);
+                }}
+                className="input w-full sm:w-44"
+              >
+                <option value="all">All time</option>
+                <option value="30d">Last 30 days</option>
+                <option value="7d">Last 7 days</option>
+                <option value="custom">Custom range</option>
+              </select>
             </div>
 
             {/* Specific Date From -> To */}
@@ -616,14 +614,16 @@ export const Reports: React.FC = () => {
 
         <section className="space-y-4 rounded-[28px] border border-[#f1f5f9] bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Annual procurement spending</h2><p className="text-xs text-slate-500">Recorded receipt acquisition costs only. Unknown costs are excluded, never estimated from selling prices.</p></div><label className="text-xs font-semibold text-slate-600">Year <input className="input ml-2 w-28" type="number" min="2000" max="2100" value={purchaseYear} onChange={e => setPurchaseYear(Number(e.target.value))}/></label></div>
-          {purchaseLoading ? <p className="py-6 text-sm text-slate-500">Loading purchase costs…</p> : purchaseError ? <p role="alert" className="py-6 text-sm text-rose-700">{purchaseError}</p> : purchaseData ? <><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-500">Priced spend · {purchaseYear}</p><p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(purchaseData.totalSpend)}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced receipts</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedReceiptCount}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced quantity</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedQuantity}</p></div></div><div className="mt-4 overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Material</th><th className="px-4 py-3">Supplier</th><th className="px-4 py-3 text-right">Priced receipts</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Recorded spend</th><th className="px-4 py-3 text-right">Unpriced qty</th></tr></thead><tbody className="divide-y divide-slate-100">{purchaseData.groups.map((row,i)=><tr key={`${row.materialType}-${row.supplier}-${i}`}><td className="px-4 py-3 text-sm capitalize">{row.materialType}</td><td className="px-4 py-3 text-sm">{row.supplier || '—'}</td><td className="px-4 py-3 text-right text-sm">{Math.max(0, row.transactionCount - row.unpricedReceiptCount)}</td><td className="px-4 py-3 text-right text-sm">{row.totalQuantity}</td><td className="px-4 py-3 text-right text-sm font-semibold">{formatCurrency(row.totalCost)}</td><td className="px-4 py-3 text-right text-sm">{row.unpricedQuantity ?? 0}</td></tr>)}{purchaseData.groups.length===0&&<tr><td colSpan={6} className="p-6 text-center text-sm text-slate-500">No purchase receipts recorded for this year.</td></tr>}</tbody></table></div></> : null}
+          {purchaseLoading ? <p className="py-6 text-sm text-slate-500">Loading purchase costs…</p> : purchaseError ? <p role="alert" className="py-6 text-sm text-rose-700">{purchaseError}</p> : purchaseData ? <><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-500">Priced spend · {purchaseYear}</p><p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(purchaseData.totalSpend)}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced receipts</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedReceiptCount}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced quantity</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedQuantity}</p></div></div><div className="mt-4 overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Material</th><th className="px-4 py-3">Supplier</th><th className="px-4 py-3 text-right">Priced receipts</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Recorded spend</th><th className="px-4 py-3 text-right">Unpriced qty</th></tr></thead><tbody className="divide-y divide-slate-100">{visiblePurchaseGroups.map((row,i)=><tr key={`${row.materialType}-${row.supplier}-${i}`}><td className="px-4 py-3 text-sm capitalize">{row.materialType}</td><td className="px-4 py-3 text-sm">{row.supplier || '—'}</td><td className="px-4 py-3 text-right text-sm">{Math.max(0, row.transactionCount - row.unpricedReceiptCount)}</td><td className="px-4 py-3 text-right text-sm">{row.totalQuantity}</td><td className="px-4 py-3 text-right text-sm font-semibold">{formatCurrency(row.totalCost)}</td><td className="px-4 py-3 text-right text-sm">{row.unpricedQuantity ?? 0}</td></tr>)}{purchaseData.groups.length===0&&<tr><td colSpan={6} className="p-6 text-center text-sm text-slate-500">No purchase receipts recorded for this year.</td></tr>}</tbody></table></div></> : null}
         </section>
+        {hasMorePurchaseGroups && <div ref={purchaseSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more purchase groups…</div>}
 
-        <section className="space-y-4 rounded-[28px] border border-violet-100 bg-violet-50/30 p-5 shadow-sm sm:p-6">
+        <section hidden={!policyLoading && !policyError && availablePolicyRows.length === 0} className="space-y-4 rounded-[28px] border border-violet-100 bg-violet-50/30 p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Current stock-policy assessment</h2><p className="max-w-3xl text-xs text-slate-600">This is a current assessment comparing present stock with the configured reorder threshold and next-month forecast. It does not measure historical policy decisions or causal effects.</p></div><div className="flex gap-2"><button onClick={() => void handleForecastExport('pdf')} className="btn-secondary text-xs">Download PDF</button><button onClick={() => void handleForecastExport('xlsx')} className="btn-secondary text-xs">Download XLSX</button></div></div>
           <p className="text-xs text-slate-500">Method: simple exponential smoothing (α=0.3), up to 12 complete UTC months of delivered-order sales, one-month horizon. A forecast requires at least three positive-quantity months; sparse histories remain unavailable.</p>
-          {policyLoading ? <p className="py-6 text-sm text-slate-500">Loading current policy assessment…</p> : policyError ? <p role="alert" className="py-6 text-sm text-rose-700">{policyError}</p> : policyRows.length===0 ? <p className="py-6 text-sm text-slate-500">No policy assessments available.</p> : <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-white text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3 text-right">Stock / threshold</th><th className="px-4 py-3 text-right">Next-month forecast</th><th className="px-4 py-3 text-right">Recommended order</th><th className="px-4 py-3">Assessment</th><th className="px-4 py-3">History</th></tr></thead><tbody className="divide-y divide-violet-100">{policyRows.map(row=><tr key={row.productId}><td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">{row.sku}</span></td><td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.reorderPoint} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.forecastQuantity===null?'Unavailable':`${row.forecastQuantity} ${row.unit}`}</td><td className="px-4 py-3 text-right text-sm">{row.recommendedOrderQuantity===null?'—':`${row.recommendedOrderQuantity} ${row.unit}`}</td><td className="px-4 py-3 text-sm capitalize">{row.policyAssessment.replaceAll('_',' ')}</td><td className="px-4 py-3 text-sm">{row.positiveMonths} positive months</td></tr>)}</tbody></table></div>}
+          {policyLoading ? <p className="py-6 text-sm text-slate-500">Loading current policy assessment…</p> : policyError ? <p role="alert" className="py-6 text-sm text-rose-700">{policyError}</p> : availablePolicyRows.length === 0 ? null : <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-white text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3 text-right">Stock / threshold</th><th className="px-4 py-3 text-right">Next-month forecast</th><th className="px-4 py-3 text-right">Recommended order</th><th className="px-4 py-3">Assessment</th><th className="px-4 py-3">History</th></tr></thead><tbody className="divide-y divide-violet-100">{visiblePolicyRows.map(row=><tr key={row.productId}><td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">{row.sku}</span></td><td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.reorderPoint} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.forecastQuantity} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.recommendedOrderQuantity===null?'—':`${row.recommendedOrderQuantity} ${row.unit}`}</td><td className="px-4 py-3 text-sm capitalize">{row.policyAssessment.replaceAll('_',' ')}</td><td className="px-4 py-3 text-sm">{row.positiveMonths} positive months</td></tr>)}</tbody></table></div>}
         </section>
+        {hasMorePolicyRows && <div ref={policySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more policy rows…</div>}
 
         <section className="space-y-4 rounded-[28px] border border-emerald-100 bg-emerald-50/30 p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -664,7 +664,7 @@ export const Reports: React.FC = () => {
                       <th className="px-4 py-3 text-right">Days ≤ threshold</th><th className="px-4 py-3 text-right">Time ≤ threshold</th><th className="px-4 py-3 text-right">Out-of-stock days</th>
                       <th className="px-4 py-3 text-right">Threshold changes</th><th className="px-4 py-3">Tracking</th>
                     </tr></thead>
-                    <tbody className="divide-y divide-emerald-100">{observedPolicy.rows.map(row => <tr key={row.productId}>
+                    <tbody className="divide-y divide-emerald-100">{visibleObservedRows.map(row => <tr key={row.productId}>
                       <td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">{row.sku}</span></td>
                       <td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.currentReorderPoint} {row.unit}</td>
                       <td className="px-4 py-3 text-right text-sm">{row.timeWeightedAverageOnHand === null ? '—' : `${row.timeWeightedAverageOnHand.toFixed(2)} ${row.unit}`}</td>
@@ -675,6 +675,7 @@ export const Reports: React.FC = () => {
                       <td className="px-4 py-3 text-sm">{row.trackingStartedAt ? `${row.trackingDays.toFixed(2)} days` : 'awaiting baseline'}</td>
                     </tr>)}</tbody>
                   </table></div>
+                  {hasMoreObservedRows && <div ref={observedSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more observed policy rows…</div>}
                 </>}
         </section>
 
@@ -754,7 +755,7 @@ export const Reports: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f1f5f9]">
-                {filteredTransactions.map((txn) => {
+                {visibleTransactions.map((txn) => {
                   const Icon = getTransactionIcon(txn.type);
                   return (
                     <tr key={txn.id} className="hover:bg-slate-50/50 transition-colors">
@@ -789,6 +790,7 @@ export const Reports: React.FC = () => {
             </table>
           </div>
           
+          {hasMoreTransactions && <div ref={transactionSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more orders…</div>}
           {filteredTransactions.length === 0 && (
             <div className="p-12 text-center">
               <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
@@ -797,54 +799,7 @@ export const Reports: React.FC = () => {
           )}
         </div>
 
-        {/* Print-friendly report preview */}
-        <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 print:hidden">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Print-Friendly Report Preview</h3>
-              <p className="text-xs text-slate-500 mt-0.5">How the report will look when printed</p>
-            </div>
-            <button
-              onClick={handlePrint}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Printer className="w-5 h-5" />
-              Print Now
-            </button>
-          </div>
-          
-          <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 bg-slate-50/50">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">SMARTSTOCK</h2>
-              <p className="text-slate-500 text-sm font-medium">Glassram Glass and Aluminum Supply</p>
-              <p className="text-xs text-slate-400 mt-2 font-medium">
-                {EXPORT_TYPE_LABELS[exportType]}
-              </p>
-              <p className="text-xs text-slate-400">
-                Period: {fromDate ? formatDate(fromDate) : 'All Time'} {toDate ? `to ${formatDate(toDate)}` : ''} • Generated: {new Date().toLocaleDateString()}
-              </p>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-8">
-              <div className="p-5 border border-[#f1f5f9] rounded-2xl bg-white shadow-2xs">
-                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Revenue</p>
-                <p className="text-xl font-black text-slate-900 mt-1">{formatCurrency(totalRevenue)}</p>
-              </div>
-              <div className="p-5 border border-[#f1f5f9] rounded-2xl bg-white shadow-2xs">
-                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Total Orders</p>
-                <p className="text-xl font-black text-slate-900 mt-1">{totalOrders}</p>
-              </div>
-              <div className="p-5 border border-[#f1f5f9] rounded-2xl bg-white shadow-2xs">
-                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Completed Orders</p>
-                <p className="text-xl font-black text-slate-900 mt-1">{completedOrders}</p>
-              </div>
-              <div className="p-5 border border-[#f1f5f9] rounded-2xl bg-white shadow-2xs">
-                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Pending Orders</p>
-                <p className="text-xl font-black text-slate-900 mt-1">{pendingOrders}</p>
-              </div>
-            </div>
-          </div>
-        </div>
+
       </div>
   );
 };

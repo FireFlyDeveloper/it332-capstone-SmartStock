@@ -49,7 +49,7 @@ export function getDeliveryController(c: Context) {
 
 export async function createDeliveryController(c: Context) {
   const body = await c.req.json().catch(() => null);
-  const result = addDeliveryRecord(body);
+  const result = await addDeliveryRecord(body);
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data, 201);
 }
@@ -58,15 +58,15 @@ export async function updateDeliveryController(c: Context) {
   const id = c.req.param('id');
   if (!id) return c.json({ error: 'delivery id is required' }, 400);
   const body = await c.req.json().catch(() => null);
-  const result = editDeliveryRecord(id, body);
+  const result = await editDeliveryRecord(id, body);
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data);
 }
 
-export function deleteDeliveryController(c: Context) {
+export async function deleteDeliveryController(c: Context) {
   const id = c.req.param('id');
   if (!id) return c.json({ error: 'delivery id is required' }, 400);
-  const result = removeDeliveryRecord(id);
+  const result = await removeDeliveryRecord(id);
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data);
 }

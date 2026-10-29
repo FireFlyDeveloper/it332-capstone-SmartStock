@@ -4,7 +4,7 @@ import {
   MapPin,
   Phone,
   Package,
-  User,
+
   ChevronRight,
   CheckCircle,
   Circle,
@@ -17,6 +17,7 @@ import type { Delivery } from '../types';
 import { getStatusColor } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 
 const deliverySteps = [
   { key: 'pending', label: 'Pending', icon: Package },
@@ -36,6 +37,7 @@ export const DeliveryPage: React.FC = () => {
       return d.status === filterStatus;
     });
   }, [deliveries, filterStatus]);
+  const { visibleItems: visibleDeliveries, sentinelRef, hasMore } = useInfiniteScroll(filteredDeliveries);
 
   const getNextStatus = (currentStatus: Delivery['status']): Delivery['status'] | null => {
     if (currentStatus === 'pending') return 'in_transit';
@@ -84,7 +86,7 @@ export const DeliveryPage: React.FC = () => {
         orderId: d.orderId,
         customer: order?.customerName ?? '',
         destination: d.destination ?? '',
-        driver: d.driver ?? '',
+
         truckNumber: d.truckNumber ?? '',
         status: d.status,
         trafficLevel: d.trafficLevel ?? '',
@@ -97,7 +99,7 @@ export const DeliveryPage: React.FC = () => {
       { key: 'orderId', header: 'Order ID' },
       { key: 'customer', header: 'Customer' },
       { key: 'destination', header: 'Destination' },
-      { key: 'driver', header: 'Driver' },
+
       { key: 'truckNumber', header: 'Truck' },
       { key: 'status', header: 'Status' },
       { key: 'trafficLevel', header: 'Traffic' },
@@ -108,12 +110,6 @@ export const DeliveryPage: React.FC = () => {
     toast.success(`Exported ${filteredDeliveries.length} deliveries to CSV`);
   };
 
-  const statusPills: { key: typeof filterStatus; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'pending', label: 'Pending' },
-    { key: 'in_transit', label: 'In Transit' },
-    { key: 'delivered', label: 'Delivered' },
-  ];
 
   const hasNoDeliveries =
     !deliveriesLoading &&
@@ -175,22 +171,15 @@ export const DeliveryPage: React.FC = () => {
 
         {/* Filter */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-2">
-            {statusPills.map((pill) => (
-              <button
-                key={pill.key}
-                type="button"
-                onClick={() => setFilterStatus(pill.key)}
-                className={`rounded-2xl px-4 py-1.5 text-xs font-bold transition-all ${
-                  filterStatus === pill.key
-                    ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
-                    : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
-                }`}
-              >
-                {pill.label}
-              </button>
-            ))}
-          </div>
+          <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+            Status
+            <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value as typeof filterStatus)} className="input w-44">
+              <option value="all">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="in_transit">In Transit</option>
+              <option value="delivered">Delivered</option>
+            </select>
+          </label>
           <button
             type="button"
             onClick={handleExportCSV}
@@ -203,7 +192,7 @@ export const DeliveryPage: React.FC = () => {
 
         {/* Deliveries Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredDeliveries.map((delivery) => {
+          {visibleDeliveries.map((delivery) => {
             const order = orders.find(o => o.id === delivery.orderId);
             const currentStep = getStepIndex(delivery.status);
             const isDelivered = delivery.status === 'delivered';
@@ -248,7 +237,7 @@ export const DeliveryPage: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Destination & Driver info */}
+                    {/* Destination and vehicle details */}
                     <div className="space-y-2 text-xs">
                       <div className="flex items-start gap-2.5">
                         <MapPin className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
@@ -258,11 +247,7 @@ export const DeliveryPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs text-slate-500">
-                        <span className="flex items-center gap-1.5 truncate">
-                          <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate font-medium">{delivery.driver || 'Not assigned'}</span>
-                        </span>
+                      <div className="flex items-center justify-end pt-2 border-t border-slate-100 text-xs text-slate-500">
                         <span className="font-bold text-slate-700 shrink-0 bg-slate-100 px-2 py-0.5 rounded-md text-[11px]">
                           {delivery.truckNumber || 'Not assigned'}
                         </span>
@@ -362,6 +347,7 @@ export const DeliveryPage: React.FC = () => {
             </div>
           )}
         </div>
+        {hasMore && <div ref={sentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more deliveries…</div>}
       </div>
   );
 };

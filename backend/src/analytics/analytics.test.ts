@@ -87,11 +87,11 @@ async function seedDeterministicInventory() {
   const glass = await createProduct({ sku: 'GLS-AN-01', name: 'Analytics Glass', category: 'glass', unit: 'sheet', stock: 0, price: 100, threshold: 5 });
   const aluminum = await createProduct({ sku: 'ALU-AN-01', name: 'Analytics Aluminum', category: 'aluminum', unit: 'length', stock: 0, price: 50, threshold: 5 });
 
-  recordInboundStock(glass.id, { quantity: 10, unitCost: 100, referenceNo: 'PO-AN-001', supplier: 'Supplier A', occurredAt: '2026-01-10T00:00:00.000Z' });
-  recordInboundStock(glass.id, { quantity: 4, unitCost: 100, referenceNo: 'PO-AN-002', supplier: 'Supplier B', occurredAt: '2026-03-10T00:00:00.000Z' });
-  recordInboundStock(aluminum.id, { quantity: 6, unitCost: 50, referenceNo: 'PO-AN-003', supplier: 'Supplier A', occurredAt: '2026-01-12T00:00:00.000Z' });
-  recordOutboundStock(glass.id, { quantity: 7, referenceNo: 'SO-AN-001', occurredAt: '2026-02-01T00:00:00.000Z' });
-  recordOutboundStock(aluminum.id, { quantity: 2, referenceNo: 'SO-AN-002', occurredAt: '2026-02-03T00:00:00.000Z' });
+  await recordInboundStock(glass.id, { quantity: 10, unitCost: 100, referenceNo: 'PO-AN-001', supplier: 'Supplier A', occurredAt: '2026-01-10T00:00:00.000Z' });
+  await recordInboundStock(glass.id, { quantity: 4, unitCost: 100, referenceNo: 'PO-AN-002', supplier: 'Supplier B', occurredAt: '2026-03-10T00:00:00.000Z' });
+  await recordInboundStock(aluminum.id, { quantity: 6, unitCost: 50, referenceNo: 'PO-AN-003', supplier: 'Supplier A', occurredAt: '2026-01-12T00:00:00.000Z' });
+  await recordOutboundStock(glass.id, { quantity: 7, referenceNo: 'SO-AN-001', occurredAt: '2026-02-01T00:00:00.000Z' });
+  await recordOutboundStock(aluminum.id, { quantity: 2, referenceNo: 'SO-AN-002', occurredAt: '2026-02-03T00:00:00.000Z' });
 }
 
 describe('analytics pure functions', () => {

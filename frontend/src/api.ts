@@ -99,6 +99,30 @@ export interface ManagedStaff {
   createdAt: string
 }
 
+export interface DailySalesOrder {
+  id: string
+  referenceNumber: string
+  customerName: string
+  items: { productId: string; name: string; quantity: number; unitPrice: number; lineTotal: number }[]
+  total: number
+  paidAmount: number
+  refundedAmount: number
+  paymentStatus: 'unpaid' | 'partial' | 'paid' | 'refunded'
+  orderStatus: 'processing' | 'in_transit' | 'delivered' | 'cancelled'
+  createdAt: string
+}
+
+export interface DailySalesSummary {
+  date: string
+  orderCount: number
+  cancelledOrderCount: number
+  grossSales: number
+  collectedAmount: number
+  refundsAmount: number
+  netCollectedAmount: number
+  orders: DailySalesOrder[]
+}
+
 export interface DemandForecastProduct {
   productId: string; sku: string; name: string; category: string; unit: string; currentStock: number; reorderPoint: number;
   history: { month: string; quantity: number }[]; positiveMonths: number; forecastQuantity: number | null;
@@ -255,6 +279,10 @@ export async function updateStaff(id: string, input: { email?: string; name?: st
 }
 export function deleteStaff(id: string): Promise<{ ok: boolean }> {
   return apiFetch<{ ok: boolean }>(`/auth/staff/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function getDailySales(date: string): Promise<DailySalesSummary> {
+  return apiFetch<DailySalesSummary>(`/daily-sales?date=${encodeURIComponent(date)}`)
 }
 
 export function getAnalyticsMovement(threshold: number): Promise<AnalyticsMovementMetric[]> {

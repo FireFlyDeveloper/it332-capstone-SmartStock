@@ -70,7 +70,7 @@ const navGroups: NavGroup[] = [
     items: [
       { icon: BarChart3, label: 'Analytics', path: '/analytics' },
       { icon: FileText, label: 'Reports & Sales', path: '/reports' },
-      { icon: Banknote, label: 'Daily Sales & Cash', path: '/daily-sales' },
+      { icon: Banknote, label: 'Daily Sales', path: '/daily-sales' },
       { icon: Sliders, label: 'Settings', path: '/profile' },
     ],
   },
