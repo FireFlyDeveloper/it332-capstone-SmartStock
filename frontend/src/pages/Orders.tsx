@@ -1145,7 +1145,7 @@ export const Orders: React.FC = () => {
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-slideIn text-center">
             <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Cancel Order?</h3>
-            <p className="text-sm text-gray-500 mb-6">This will cancel the order, refund {formatCurrency(orders.find(order => order.id === confirmCancel)?.paidAmount ?? 0)} in cash, and return the ordered items to inventory. This cannot be undone.</p>
+            <p className="text-sm text-gray-500 mb-6">This will cancel the order, record a refund of {formatCurrency(orders.find(order => order.id === confirmCancel)?.paidAmount ?? 0)} from its remaining paid balance, and return the ordered items to inventory. This updates SmartStock&apos;s records only; any cash handoff must be completed separately. This cannot be undone.</p>
             <div className="flex gap-3">
               <button onClick={() => setConfirmCancel(null)} className="flex-1 btn-secondary">Keep Order</button>
               <button onClick={() => handleDelete(confirmCancel)} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-semibold">Yes, Cancel</button>
