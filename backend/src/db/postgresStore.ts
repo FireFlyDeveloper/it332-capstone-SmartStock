@@ -889,6 +889,106 @@ export async function listDeliveriesDb(): Promise<Delivery[]> {
   return rows.map(rowToDelivery);
 }
 
+export interface DeliveriesDbPageItem extends Delivery {
+  customerName: string;
+  customerPhone: string;
+  referenceNumber: string;
+  createdAt: string;
+}
+
+export interface DeliveriesDbPage {
+  items: DeliveriesDbPageItem[];
+  totalCount: number;
+  pendingCount: number;
+  inTransitCount: number;
+  deliveredCount: number;
+  hasMore: boolean;
+  nextCursor: { createdAt: string; orderId: string } | null;
+}
+
+export async function listDeliveriesPageDb(input: {
+  limit: number;
+  status: 'all' | 'pending' | 'in_transit' | 'delivered';
+  cursorCreatedAt: string | null;
+  cursorOrderId: string | null;
+}): Promise<DeliveriesDbPage | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH candidates AS MATERIALIZED (
+      SELECT o.id AS order_id, o.order_no AS reference_number, o.customer_name, o.customer_phone,
+        o.delivery_address AS destination, o.created_at,
+        CASE o.order_status WHEN 'processing' THEN 'pending' WHEN 'in_transit' THEN 'in_transit' WHEN 'delivered' THEN 'delivered' END AS delivery_status,
+        CASE o.order_status WHEN 'processing' THEN 0 WHEN 'in_transit' THEN 1 WHEN 'delivered' THEN 2 END AS page_current_step,
+        d.id AS delivery_id, d.driver, d.truck_number, d.location, d.current_location,
+        d.traffic_level, d.predicted_delay, d.route_efficiency_score, d.notes
+      FROM orders o
+      LEFT JOIN LATERAL (
+        SELECT * FROM deliveries WHERE order_id = o.id ORDER BY updated_at DESC, id DESC LIMIT 1
+      ) d ON TRUE
+      WHERE o.deleted_at IS NULL
+        AND o.order_status IN ('processing', 'in_transit', 'delivered')
+        AND LOWER(BTRIM(COALESCE(o.delivery_address, ''))) <> 'pickup'
+    ), filtered AS (
+      SELECT * FROM candidates WHERE $1::text = 'all' OR delivery_status = $1::text
+    ), summary AS (
+      SELECT COUNT(*)::int AS total_count,
+        COUNT(*) FILTER (WHERE delivery_status = 'pending')::int AS pending_count,
+        COUNT(*) FILTER (WHERE delivery_status = 'in_transit')::int AS in_transit_count,
+        COUNT(*) FILTER (WHERE delivery_status = 'delivered')::int AS delivered_count
+      FROM candidates
+    ), page_rows AS (
+      SELECT * FROM filtered
+      WHERE $2::timestamptz IS NULL
+        OR created_at < $2::timestamptz
+        OR (created_at = $2::timestamptz AND order_id::text < $3::text)
+      ORDER BY created_at DESC, order_id::text DESC
+      LIMIT $4
+    )
+    SELECT summary.total_count, summary.pending_count, summary.in_transit_count, summary.delivered_count,
+      COALESCE((SELECT jsonb_agg(to_jsonb(page_rows) ORDER BY page_rows.created_at DESC, page_rows.order_id::text DESC) FROM page_rows), '[]'::jsonb) AS page_items
+    FROM summary
+  `, [input.status, input.cursorCreatedAt, input.cursorOrderId, input.limit + 1]);
+  const row = rows[0];
+  if (!row) return null;
+  const rawItems = (typeof row.page_items === 'string' ? JSON.parse(row.page_items) : row.page_items ?? []) as Record<string, unknown>[];
+  const visibleRows = rawItems.slice(0, input.limit);
+  const hasMore = rawItems.length > input.limit;
+  const lastVisible = visibleRows[visibleRows.length - 1];
+  const items = visibleRows.map((item): DeliveriesDbPageItem => {
+    const currentLocation = typeof item.current_location === 'string' ? JSON.parse(item.current_location) : item.current_location ?? null;
+    const traffic = item.traffic_level;
+    return {
+      id: String(item.delivery_id ?? item.order_id),
+      orderId: String(item.order_id),
+      driver: item.driver == null ? null : String(item.driver),
+      truckNumber: item.truck_number == null ? null : String(item.truck_number),
+      destination: item.destination == null ? null : String(item.destination),
+      status: String(item.delivery_status) as Delivery['status'],
+      location: item.location == null ? null : String(item.location),
+      currentStep: Number(item.page_current_step),
+      currentLocation: currentLocation as Delivery['currentLocation'],
+      trafficLevel: traffic === 'low' || traffic === 'medium' || traffic === 'high' ? traffic : null,
+      predictedDelay: item.predicted_delay == null ? null : Boolean(item.predicted_delay),
+      routeEfficiencyScore: item.route_efficiency_score == null ? null : Number(item.route_efficiency_score),
+      notes: item.notes == null ? null : String(item.notes),
+      customerName: String(item.customer_name ?? ''),
+      customerPhone: String(item.customer_phone ?? ''),
+      referenceNumber: String(item.reference_number ?? ''),
+      createdAt: String(item.created_at),
+    };
+  });
+  return {
+    items,
+    totalCount: Number(row.total_count ?? 0),
+    pendingCount: Number(row.pending_count ?? 0),
+    inTransitCount: Number(row.in_transit_count ?? 0),
+    deliveredCount: Number(row.delivered_count ?? 0),
+    hasMore,
+    nextCursor: hasMore && lastVisible ? { createdAt: String(lastVisible.created_at), orderId: String(lastVisible.order_id) } : null,
+  };
+}
+
 export async function findDeliveryByIdDb(id: string): Promise<Delivery | null> {
   const pool = getPool();
   if (!pool) return null;

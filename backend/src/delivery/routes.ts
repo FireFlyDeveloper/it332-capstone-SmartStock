@@ -11,6 +11,7 @@ import {
   createDeliveryController,
   deleteDeliveryController,
   getDeliveryController,
+  listDeliveriesPageController,
   listDeliveriesController,
   updateDeliveryController,
 } from './controller.js';
@@ -19,6 +20,7 @@ export const deliveryRoutes = new Hono();
 
 deliveryRoutes.use('*', requireAuth);
 deliveryRoutes.get('/', listDeliveriesController);
+deliveryRoutes.get('/page', listDeliveriesPageController);
 deliveryRoutes.get('/:id', getDeliveryController);
 deliveryRoutes.post('/', requireRole('admin'), createDeliveryController);
 deliveryRoutes.put('/:id', requireStaffOrAdmin, updateDeliveryController);

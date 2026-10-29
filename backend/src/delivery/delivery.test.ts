@@ -111,6 +111,43 @@ describe('delivery routes', () => {
     expect(await get.json()).toEqual(expect.objectContaining({ orderId: inTransit.id, status: 'in_transit' }));
   });
 
+  it('serves cursor-paginated, filtered order-backed delivery pages', async () => {
+    const pending = seedOrder();
+    const inTransit = seedOrder();
+    const delivered = seedOrder();
+    seedOrder('Pickup');
+    const cancelled = seedOrder();
+    updateOrder(inTransit.id, { orderStatus: 'in_transit' });
+    updateOrder(delivered.id, { orderStatus: 'delivered' });
+    updateOrder(cancelled.id, { orderStatus: 'cancelled' });
+
+    const token = await login(app, STAFF);
+    const headers = { authorization: 'Bearer ' + token };
+    const first = await app.request('/deliveries?mode=page&limit=1&status=all', { headers });
+    expect(first.status, await first.clone().text()).toBe(200);
+    const firstBody = await first.json();
+    expect(firstBody.page).toMatchObject({ limit: 1, totalCount: 3, hasMore: true });
+    expect(firstBody.summary).toEqual({ totalCount: 3, pendingCount: 1, inTransitCount: 1, deliveredCount: 1 });
+    expect(firstBody.items).toHaveLength(1);
+
+    const second = await app.request(`/deliveries?mode=page&limit=1&status=all&cursor=${encodeURIComponent(firstBody.page.nextCursor)}`, { headers });
+    expect(second.status).toBe(200);
+    const secondBody = await second.json();
+    expect(secondBody.items).toHaveLength(1);
+    expect(secondBody.items[0].orderId).not.toBe(firstBody.items[0].orderId);
+
+    const transit = await app.request('/deliveries?mode=page&status=in_transit', { headers });
+    expect(transit.status).toBe(200);
+    const transitBody = await transit.json();
+    expect(transitBody.page.totalCount).toBe(1);
+    expect(transitBody.items[0]).toMatchObject({ orderId: inTransit.id, status: 'in_transit', customerName: 'Test Customer' });
+    expect([pending.id, inTransit.id, delivered.id]).toContain(firstBody.items[0].orderId);
+
+    expect((await app.request('/deliveries?mode=page&limit=101', { headers })).status).toBe(400);
+    expect((await app.request('/deliveries?mode=page&status=failed', { headers })).status).toBe(400);
+    expect((await app.request('/deliveries?mode=page&cursor=invalid', { headers })).status).toBe(400);
+  });
+
   it('filters deliveries by status and traffic level', async () => {
     const order = seedOrder();
     updateOrder(order.id, { orderStatus: 'in_transit' });

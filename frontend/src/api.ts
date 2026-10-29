@@ -11,6 +11,7 @@
  */
 
 import type { BackendOrder } from './components/orderMapper'
+import type { Delivery } from './types'
 
 const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined)?.trim().replace(/\/+$/, '')) ?? ''
 
@@ -332,6 +333,31 @@ export function getOrdersPage(options: OrdersPageOptions = {}): Promise<OrdersPa
   if (options.fromDate) params.set('from', options.fromDate)
   if (options.toDate) params.set('to', options.toDate)
   return apiFetch<OrdersPageResponse>(`/orders/page?${params.toString()}`)
+}
+
+export interface DeliveryPageItem extends Delivery {
+  customerName: string
+  customerPhone: string
+  referenceNumber: string
+  createdAt: string
+}
+
+export interface DeliveriesPageResponse {
+  items: DeliveryPageItem[]
+  page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null }
+  summary: { totalCount: number; pendingCount: number; inTransitCount: number; deliveredCount: number }
+}
+
+export function getDeliveriesPage(options: {
+  limit?: number
+  cursor?: string | null
+  status?: 'all' | 'pending' | 'in_transit' | 'delivered'
+} = {}): Promise<DeliveriesPageResponse> {
+  const params = new URLSearchParams()
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.cursor) params.set('cursor', options.cursor)
+  if (options.status) params.set('status', options.status)
+  return apiFetch<DeliveriesPageResponse>(`/deliveries?${params.toString()}&mode=page`)
 }
 
 export function getDailySales(date: string, options: DailySalesPageOptions = {}): Promise<DailySalesSummary> {

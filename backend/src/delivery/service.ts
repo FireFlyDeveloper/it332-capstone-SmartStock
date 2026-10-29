@@ -5,6 +5,8 @@
  * Last touched: 2026-07-08
  */
 
+import { isDbSyncActive } from '../db/syncState.js';
+import { listDeliveriesPageDb } from '../db/postgresStore.js';
 import { sendNotificationEvent } from '../notifications/webhook.js';
 import { listOrders, type Order } from '../orders/store.js';
 import {
@@ -299,6 +301,59 @@ export function listDeliveryRecords(filters: DeliveryFilters = {}): Delivery[] {
       .some((value) => value!.toLowerCase().includes(q))) return [];
     return [delivery];
   });
+}
+
+export interface DeliveryPageItem extends Delivery {
+  customerName: string;
+  customerPhone: string;
+  referenceNumber: string;
+  createdAt: string;
+}
+
+export interface DeliveryPageInput {
+  limit: number;
+  status: 'all' | 'pending' | 'in_transit' | 'delivered';
+  cursorCreatedAt: string | null;
+  cursorOrderId: string | null;
+}
+
+export async function listDeliveryPageRecords(input: DeliveryPageInput) {
+  if (isDbSyncActive()) {
+    const page = await listDeliveriesPageDb(input);
+    if (!page) throw new Error('Database unavailable');
+    return page;
+  }
+
+  const ordersById = new Map(listOrders().map((order) => [order.id, order]));
+  const allItems: DeliveryPageItem[] = listDeliveryRecords().flatMap((delivery) => {
+    const order = ordersById.get(delivery.orderId);
+    return order ? [{
+      ...delivery,
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      referenceNumber: order.referenceNumber,
+      createdAt: order.createdAt,
+    }] : [];
+  }).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.orderId.localeCompare(a.orderId));
+
+  const filtered = input.status === 'all' ? allItems : allItems.filter((item) => item.status === input.status);
+  const afterCursor = input.cursorCreatedAt === null
+    ? filtered
+    : filtered.filter((item) => item.createdAt < input.cursorCreatedAt!
+      || (item.createdAt === input.cursorCreatedAt && item.orderId < (input.cursorOrderId ?? '')));
+  const lookahead = afterCursor.slice(0, input.limit + 1);
+  const items = lookahead.slice(0, input.limit);
+  const hasMore = lookahead.length > input.limit;
+  const lastVisible = items[items.length - 1];
+  return {
+    items,
+    totalCount: filtered.length,
+    pendingCount: allItems.filter((item) => item.status === 'pending').length,
+    inTransitCount: allItems.filter((item) => item.status === 'in_transit').length,
+    deliveredCount: allItems.filter((item) => item.status === 'delivered').length,
+    hasMore,
+    nextCursor: hasMore && lastVisible ? { createdAt: lastVisible.createdAt, orderId: lastVisible.orderId } : null,
+  };
 }
 
 export function getDeliveryRecord(id: string): ServiceResult<Delivery> {
