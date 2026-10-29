@@ -275,6 +275,17 @@ export function getDemandForecast(historyMonths = 12): Promise<DemandForecastRes
   return apiFetch<DemandForecastResponse>(`/analytics/demand-forecast?historyMonths=${encodeURIComponent(String(historyMonths))}`)
 }
 
+export interface DemandForecastPageResponse extends DemandForecastResponse {
+  page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null }
+}
+
+export function getDemandForecastPage(options: { historyMonths?: number; limit?: number; cursor?: string | null } = {}): Promise<DemandForecastPageResponse> {
+  const params = new URLSearchParams({ historyMonths: String(options.historyMonths ?? 12) })
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.cursor) params.set('cursor', options.cursor)
+  return apiFetch<DemandForecastPageResponse>(`/analytics/demand-forecast/page?${params.toString()}`)
+}
+
 export function getPolicyPerformance(): Promise<PolicyPerformanceResponse> {
   return apiFetch<PolicyPerformanceResponse>('/reports/policy-performance')
 }

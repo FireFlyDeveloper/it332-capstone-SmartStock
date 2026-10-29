@@ -295,3 +295,33 @@ export function buildDemandForecast(orders: Order[], products: Product[], histor
       recommendedOrderQuantity: reportProducts.reduce((sum, p) => sum + (p.recommendedOrderQuantity ?? 0), 0) },
   };
 }
+
+export interface DemandForecastCursor { name: string; productId: string }
+
+export function paginateDemandForecast(report: DemandForecastReport, limit: number, cursor: DemandForecastCursor | null = null) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('limit must be an integer between 1 and 100');
+  const compare = (left: DemandForecastProduct, right: DemandForecastProduct) => {
+    if (left.name !== right.name) return left.name < right.name ? -1 : 1;
+    if (left.productId === right.productId) return 0;
+    return left.productId < right.productId ? -1 : 1;
+  };
+  const available = report.products.filter((product) => product.forecastQuantity !== null).sort(compare);
+  const afterCursor = cursor
+    ? available.filter((product) => product.name > cursor.name
+      || (product.name === cursor.name && product.productId > cursor.productId))
+    : available;
+  const lookahead = afterCursor.slice(0, limit + 1);
+  const products = lookahead.slice(0, limit);
+  const hasMore = lookahead.length > limit;
+  const last = products[products.length - 1];
+  return {
+    ...report,
+    products,
+    page: {
+      limit,
+      totalCount: available.length,
+      hasMore,
+      nextCursor: hasMore && last ? { name: last.name, productId: last.productId } : null,
+    },
+  };
+}

@@ -15,12 +15,48 @@ import {
   getRecentActivity,
   getSalesTrends,
   getDemandForecast,
+  getDemandForecastPage,
 } from './service.js';
-import type { DashboardSalesRange } from './analytics.js';
+import type { DashboardSalesRange, DemandForecastCursor } from './analytics.js';
 
 export const analyticsRoutes = new Hono();
 
 analyticsRoutes.use('*', requireAuth);
+
+analyticsRoutes.get('/demand-forecast/page', (c) => {
+  const rawHistoryMonths = c.req.query('historyMonths');
+  const historyMonths = rawHistoryMonths === undefined ? 12 : Number(rawHistoryMonths);
+  if (!Number.isInteger(historyMonths) || historyMonths < 1 || historyMonths > 60) {
+    return c.json({ error: 'historyMonths must be an integer between 1 and 60' }, 400);
+  }
+  const rawLimit = c.req.query('limit');
+  const limit = rawLimit === undefined ? 25 : Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    return c.json({ error: 'limit must be an integer between 1 and 100' }, 400);
+  }
+  let cursor: DemandForecastCursor | null = null;
+  const rawCursor = c.req.query('cursor');
+  if (rawCursor) {
+    if (rawCursor.length > 1024) return c.json({ error: 'cursor is invalid' }, 400);
+    try {
+      const parsed: unknown = JSON.parse(Buffer.from(rawCursor, 'base64url').toString('utf8'));
+      if (typeof parsed !== 'object' || parsed === null) return c.json({ error: 'cursor is invalid' }, 400);
+      const value = parsed as Record<string, unknown>;
+      if (typeof value.name !== 'string' || value.name.length > 200
+        || typeof value.productId !== 'string' || value.productId.length === 0 || value.productId.length > 64) {
+        return c.json({ error: 'cursor is invalid' }, 400);
+      }
+      cursor = { name: value.name, productId: value.productId };
+    } catch {
+      return c.json({ error: 'cursor is invalid' }, 400);
+    }
+  }
+  const result = getDemandForecastPage(historyMonths, limit, cursor);
+  const nextCursor = result.page.nextCursor
+    ? Buffer.from(JSON.stringify(result.page.nextCursor)).toString('base64url')
+    : null;
+  return c.json({ ...result, page: { ...result.page, nextCursor } });
+});
 
 analyticsRoutes.get('/demand-forecast', (c) => {
   const raw = c.req.query('historyMonths');

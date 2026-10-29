@@ -17,6 +17,7 @@ import {
   buildAnnualPurchaseSummary,
   buildMonthlySalesTrend,
   buildDemandForecast,
+  paginateDemandForecast,
   classifyMovement,
   simpleExponentialSmoothingForecast,
 } from './analytics.js';
@@ -190,6 +191,29 @@ describe('analytics pure functions', () => {
     expect(result.products[0].history).toHaveLength(12);
   });
 
+  it('paginates only forecast rows with sufficient history using a stable name/id cursor', () => {
+    const products = [
+      { id: 'P2', sku: 'S-2', name: 'Alpha', category: 'glass' as const, unit: 'sheet', stock: 5, price: 10, threshold: 1, status: 'active' as const },
+      { id: 'P1', sku: 'S-1', name: 'Alpha', category: 'glass' as const, unit: 'sheet', stock: 5, price: 10, threshold: 1, status: 'active' as const },
+      { id: 'P3', sku: 'S-3', name: 'Zulu', category: 'glass' as const, unit: 'sheet', stock: 5, price: 10, threshold: 1, status: 'active' as const },
+    ];
+    const report = buildDemandForecast([], products, 3, new Date('2026-07-01T00:00:00.000Z'));
+    const withAvailableRows = {
+      ...report,
+      products: report.products.map((product) => product.productId === 'P3'
+        ? product
+        : { ...product, forecastQuantity: 1, status: 'available' as const }),
+    };
+
+    const first = paginateDemandForecast(withAvailableRows, 1);
+    expect(first.products.map((product) => product.productId)).toEqual(['P1']);
+    expect(first.page).toMatchObject({ totalCount: 2, hasMore: true, nextCursor: { name: 'Alpha', productId: 'P1' } });
+    const second = paginateDemandForecast(withAvailableRows, 1, first.page.nextCursor);
+    expect(second.products.map((product) => product.productId)).toEqual(['P2']);
+    expect(second.page).toMatchObject({ totalCount: 2, hasMore: false, nextCursor: null });
+    expect(() => paginateDemandForecast(withAvailableRows, 0)).toThrow('limit must be an integer between 1 and 100');
+  });
+
   it('forecasts the next quantity using simple exponential smoothing and validates alpha', () => {
     expect(simpleExponentialSmoothingForecast([10, 20, 30], 0.5)).toEqual({ alpha: 0.5, forecast: 22.5 });
     expect(simpleExponentialSmoothingForecast([10, 20, 30])).toEqual({ alpha: 0.3, forecast: 18.1 });
@@ -298,6 +322,14 @@ describe('analytics routes', () => {
     const body = await res.json() as { method: string; historyMonths: number; products: Array<{ history: unknown[]; status: string }> };
     expect(body).toMatchObject({ method: 'simple_exponential_smoothing', alpha: 0.3, horizonMonths: 1, minimumPositiveMonths: 3, historyMonths: 3 });
     expect(body.products.every((product) => product.history.length === 3)).toBe(true);
+
+    const paged = await app.request('/analytics/demand-forecast/page?historyMonths=3&limit=1', { headers: { authorization: 'Bearer ' + token } });
+    expect(paged.status).toBe(200);
+    const pagedBody = await paged.json() as { products: Array<{ forecastQuantity: number | null }>; page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null } };
+    expect(pagedBody.page.limit).toBe(1);
+    expect(pagedBody.products.every((product) => product.forecastQuantity !== null)).toBe(true);
+    expect((await app.request('/analytics/demand-forecast/page?limit=0', { headers: { authorization: 'Bearer ' + token } })).status).toBe(400);
+    expect((await app.request('/analytics/demand-forecast/page?cursor=not-a-cursor', { headers: { authorization: 'Bearer ' + token } })).status).toBe(400);
     expect((await app.request('/analytics/demand-forecast?historyMonths=61', { headers: { authorization: 'Bearer ' + token } })).status).toBe(400);
   });
 

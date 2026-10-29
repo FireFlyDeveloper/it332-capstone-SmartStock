@@ -15,7 +15,9 @@ import {
   classifyMovement,
   simpleExponentialSmoothingForecast,
   buildDemandForecast,
+  paginateDemandForecast,
   type DashboardSalesRange,
+  type DemandForecastCursor,
 } from './analytics.js';
 
 function listAllMovements() {
@@ -40,6 +42,10 @@ export function getMovementClassification(threshold = 10) {
 
 export function getDemandForecast(historyMonths = 12, now = new Date()) {
   return buildDemandForecast(listOrders(), listProducts(), historyMonths, now);
+}
+
+export function getDemandForecastPage(historyMonths: number, limit: number, cursor: DemandForecastCursor | null) {
+  return paginateDemandForecast(getDemandForecast(historyMonths), limit, cursor);
 }
 
 export function getForecast(quantities: number[], alpha = 0.3) {

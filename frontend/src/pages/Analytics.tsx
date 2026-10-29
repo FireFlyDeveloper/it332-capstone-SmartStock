@@ -15,9 +15,8 @@ import {
 
 import { useData } from '../components/DataContext';
 import { formatCurrency, checkStockStatus, formatDateInput } from '../utils/helpers';
-import { getDemandForecast, getProductsPage, type DemandForecastProduct, type ProductsPageResponse } from '../api';
+import { getDemandForecastPage, getProductsPage, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse } from '../api';
 import { toast } from 'sonner';
-import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { 
   AreaChart, 
   Area, 
@@ -46,6 +45,12 @@ export const Analytics: React.FC = () => {
   const [forecastLoading, setForecastLoading] = useState(true);
   const [forecastError, setForecastError] = useState('');
   const [forecastRefreshKey, setForecastRefreshKey] = useState(0);
+  const [forecastPage, setForecastPage] = useState<DemandForecastPageResponse['page'] | null>(null);
+  const [forecastLoadingMore, setForecastLoadingMore] = useState(false);
+  const [forecastLoadMoreError, setForecastLoadMoreError] = useState('');
+  const forecastSentinelRef = useRef<HTMLDivElement | null>(null);
+  const forecastRequestRef = useRef(0);
+  const forecastLoadingMoreRef = useRef(false);
   const [snapshotProducts, setSnapshotProducts] = useState<ProductsPageResponse['items']>([]);
   const [snapshotPage, setSnapshotPage] = useState<ProductsPageResponse['page'] | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(true);
@@ -158,13 +163,61 @@ export const Analytics: React.FC = () => {
   }, [orders, fromDate, toDate]);
 
   useEffect(() => {
-    let active = true;
-    setForecastLoading(true); setForecastError('');
-    getDemandForecast(12).then(result => { if (active) setForecast(result.products) })
-      .catch(error => { if (active) setForecastError(error instanceof Error ? error.message : 'Could not load demand forecast.') })
-      .finally(() => { if (active) setForecastLoading(false) });
-    return () => { active = false };
+    const requestId = ++forecastRequestRef.current;
+    setForecast([]);
+    setForecastPage(null);
+    setForecastLoading(true);
+    setForecastError('');
+    setForecastLoadMoreError('');
+    forecastLoadingMoreRef.current = false;
+    setForecastLoadingMore(false);
+    getDemandForecastPage({ historyMonths: 12, limit: 25 })
+      .then((result) => {
+        if (requestId !== forecastRequestRef.current) return;
+        setForecast(result.products);
+        setForecastPage(result.page);
+      })
+      .catch((error) => {
+        if (requestId === forecastRequestRef.current) setForecastError(error instanceof Error ? error.message : 'Could not load demand forecast.');
+      })
+      .finally(() => {
+        if (requestId === forecastRequestRef.current) setForecastLoading(false);
+      });
+    return () => {
+      if (requestId === forecastRequestRef.current) forecastRequestRef.current += 1;
+    };
   }, [forecastRefreshKey]);
+
+  const loadMoreForecast = useCallback(async () => {
+    if (!forecastPage?.hasMore || !forecastPage.nextCursor || forecastLoading || forecastLoadingMoreRef.current) return;
+    const requestId = forecastRequestRef.current;
+    forecastLoadingMoreRef.current = true;
+    setForecastLoadingMore(true);
+    setForecastLoadMoreError('');
+    try {
+      const result = await getDemandForecastPage({ historyMonths: 12, limit: 25, cursor: forecastPage.nextCursor });
+      if (requestId !== forecastRequestRef.current) return;
+      setForecast((current) => [...current, ...result.products]);
+      setForecastPage(result.page);
+    } catch (error) {
+      if (requestId === forecastRequestRef.current) setForecastLoadMoreError(error instanceof Error ? error.message : 'Could not load more forecast rows.');
+    } finally {
+      if (requestId === forecastRequestRef.current) {
+        forecastLoadingMoreRef.current = false;
+        setForecastLoadingMore(false);
+      }
+    }
+  }, [forecastPage, forecastLoading]);
+
+  useEffect(() => {
+    const sentinel = forecastSentinelRef.current;
+    if (!sentinel || !forecastPage?.hasMore || forecastLoading || forecastLoadingMore || forecastLoadMoreError || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMoreForecast();
+    }, { rootMargin: '320px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [forecastPage?.hasMore, forecastLoading, forecastLoadingMore, forecastLoadMoreError, loadMoreForecast]);
 
   // Calculate inventory stats
   const totalInventoryValue = products.reduce((sum, p) => sum + (p.stock * p.price), 0);
@@ -328,7 +381,6 @@ export const Analytics: React.FC = () => {
     () => forecast.filter((item) => item.forecastQuantity !== null),
     [forecast],
   );
-  const { visibleItems: visibleForecastRows, sentinelRef: forecastSentinelRef, hasMore: hasMoreForecast } = useInfiniteScroll(availableForecastRows);
 
   // Dynamic sales and order trend data aggregated from filtered orders
   const salesTrendData = useMemo(() => {
@@ -972,9 +1024,24 @@ export const Analytics: React.FC = () => {
             <div className="border-b border-violet-100 bg-violet-50/60 p-4 text-xs text-slate-600">
               Backend historical forecast: simple exponential smoothing (α=0.3), next-month horizon, using delivered-order quantities grouped by order-creation month in UTC (up to 12 months, including the current month to date). At least 3 positive-quantity months are required; sparse-history products are shown without an estimate.
             </div>
-            {forecastLoading ? <p className="p-8 text-center text-sm text-slate-500">Loading historical forecast…</p> : forecastError ? <div role="alert" className="p-8 text-center text-sm text-rose-700"><p>{forecastError}</p><button type="button" onClick={() => setForecastRefreshKey((current) => current + 1)} className="mt-3 font-semibold text-indigo-600 hover:text-indigo-800">Retry</button></div> : availableForecastRows.length === 0 ? null : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-violet-50/70"><tr><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Product</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Stock / reorder point</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Forecast next month</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Suggested order</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Coverage</th><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Policy assessment</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">History</th></tr></thead><tbody className="divide-y divide-slate-100">{visibleForecastRows.map(item => <tr key={item.productId}><td className="px-4 py-3"><p className="text-sm font-semibold text-slate-800">{item.name}</p><p className="text-xs text-slate-500">{item.sku} · {item.category}</p></td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.currentStock} / {item.reorderPoint} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-semibold text-slate-700">{item.forecastQuantity} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-bold text-violet-700">{item.recommendedOrderQuantity === null ? '—' : `${item.recommendedOrderQuantity} ${item.unit}`}</td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.stockCoverageDays === null ? '—' : `${item.stockCoverageDays} days`}</td><td className="px-4 py-3 text-sm text-slate-700">{item.policyAssessment.replaceAll('_', ' ')}</td><td className="px-4 py-3 text-right text-sm text-slate-500">{item.positiveMonths} positive months</td></tr>)}</tbody></table></div>}
+            {forecastLoading ? <p className="p-8 text-center text-sm text-slate-500">Loading historical forecast…</p> : forecastError ? <div role="alert" className="p-8 text-center text-sm text-rose-700"><p>{forecastError}</p><button type="button" onClick={() => setForecastRefreshKey((current) => current + 1)} className="mt-3 font-semibold text-indigo-600 hover:text-indigo-800">Retry</button></div> : availableForecastRows.length === 0 ? null : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-violet-50/70"><tr><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Product</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Stock / reorder point</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Forecast next month</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Suggested order</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Coverage</th><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Policy assessment</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">History</th></tr></thead><tbody className="divide-y divide-slate-100">{availableForecastRows.map(item => <tr key={item.productId}><td className="px-4 py-3"><p className="text-sm font-semibold text-slate-800">{item.name}</p><p className="text-xs text-slate-500">{item.sku} · {item.category}</p></td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.currentStock} / {item.reorderPoint} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-semibold text-slate-700">{item.forecastQuantity} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-bold text-violet-700">{item.recommendedOrderQuantity === null ? '—' : `${item.recommendedOrderQuantity} ${item.unit}`}</td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.stockCoverageDays === null ? '—' : `${item.stockCoverageDays} days`}</td><td className="px-4 py-3 text-sm text-slate-700">{item.policyAssessment.replaceAll('_', ' ')}</td><td className="px-4 py-3 text-right text-sm text-slate-500">{item.positiveMonths} positive months</td></tr>)}</tbody></table></div>}
           </div>
-          {hasMoreForecast && <div ref={forecastSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more forecast rows…</div>}
+          {forecastPage && <p className="text-xs text-slate-500 mt-2">Showing {availableForecastRows.length} of {forecastPage.totalCount} products with sufficient history.</p>}
+          {forecastPage?.hasMore && <div ref={forecastSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more forecast rows…</div>}
+          {forecastPage?.hasMore && typeof IntersectionObserver === 'undefined' && (
+            <div className="py-3 text-center">
+              <button type="button" onClick={() => void loadMoreForecast()} disabled={forecastLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">
+                {forecastLoadingMore ? 'Loading…' : 'Load more forecast rows'}
+              </button>
+            </div>
+          )}
+          {forecastLoadingMore && <div role="status" className="py-3 text-center text-xs text-slate-400">Loading more forecast rows…</div>}
+          {forecastLoadMoreError && (
+            <div role="alert" className="py-3 text-center text-sm text-rose-700">
+              <p>{forecastLoadMoreError}</p>
+              <button type="button" onClick={() => void loadMoreForecast()} className="mt-2 font-semibold text-indigo-600">Retry</button>
+            </div>
+          )}
           </div>
           
           {/* Rule-based stock alerts */}
