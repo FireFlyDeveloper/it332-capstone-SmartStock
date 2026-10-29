@@ -58,11 +58,11 @@ describe('notification service hooks', () => {
     }));
   });
 
-  it('emits order.status_changed when order status changes', () => {
-    const created = addOrderRecord(validOrderPayload());
+  it('emits order.status_changed when order status changes', async () => {
+    const created = await addOrderRecord(validOrderPayload());
     if (!created.ok) throw new Error(created.error);
 
-    const result = editOrderRecord(created.data.id, { orderStatus: 'in_transit' });
+    const result = await editOrderRecord(created.data.id, { orderStatus: 'in_transit' });
 
     expect(result.ok).toBe(true);
     expect(sendNotificationEventMock).toHaveBeenCalledWith(expect.objectContaining({

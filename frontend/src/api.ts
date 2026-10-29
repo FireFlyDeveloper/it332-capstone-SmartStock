@@ -10,7 +10,7 @@
  * Last touched: 2026-07-17
  */
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
+const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined)?.trim().replace(/\/+$/, '')) ?? ''
 
 // Token store. Updated via setAuthToken(). The apiFetch helper reads this
 // and adds the Authorization header automatically.

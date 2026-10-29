@@ -223,5 +223,3 @@ export function _resetDeliveryStore(seed = true): void {
 
   for (const item of seedDeliveries) createDelivery(item);
 }
-
-_resetDeliveryStore();

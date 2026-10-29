@@ -229,6 +229,10 @@ export function _hydrateOrders(loaded: Order[]): void {
   }
 }
 
+export function _upsertOrder(order: Order): void {
+  orders.set(order.id, order);
+}
+
 export function _resetOrderStore(seed = true): void {
   orders.clear();
   referenceSequence = 1;
@@ -253,5 +257,3 @@ export function _resetOrderStore(seed = true): void {
     items: [{ productId: 'PRD-002', name: 'Aluminum Frame', quantity: 2, unitPrice: 1250 }],
   });
 }
-
-_resetOrderStore();

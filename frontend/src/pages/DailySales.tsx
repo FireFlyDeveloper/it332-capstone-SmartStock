@@ -16,7 +16,7 @@ import {
   History,
   Save,
   RotateCcw,
-  Sparkles,
+
   UserCheck,
   ChevronLeft,
   ChevronRight,
@@ -109,17 +109,21 @@ export const DailySales: React.FC = () => {
   const [paymentMethodOverrides, setPaymentMethodOverrides] = useState<Record<string, 'cash' | 'gcash' | 'bank_transfer'>>({});
 
   // Audit sign-off form
-  const [auditorName, setAuditorName] = useState<string>(() => user?.name || 'Kim Eduard Saludes');
+  const [auditorName, setAuditorName] = useState<string>(() => user?.name || '');
   const [auditNotes, setAuditNotes] = useState<string>('');
+
+  useEffect(() => {
+    if (!auditorName && user?.name) setAuditorName(user.name);
+  }, [auditorName, user?.name]);
 
   // Search & Filter within the day's receipts
   const [receiptSearch, setReceiptSearch] = useState<string>('');
-  const [paymentFilter, setPaymentFilter] = useState<'all' | 'cash' | 'digital'>('all');
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'cash' | 'digital' | 'unclassified'>('all');
 
   // Modal view for individual receipt
   const [selectedReceipt, setSelectedReceipt] = useState<Order | null>(null);
 
-  // Historical reconciliation records from localStorage
+  // Browser-local reconciliation history; no server-side reconciliation API exists yet.
   const [reconciledLogs, setReconciledLogs] = useState<DailyReconciliationRecord[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -129,39 +133,7 @@ export const DailySales: React.FC = () => {
     } catch {
       // fallback
     }
-    // Seed initial realistic reconciliation history
-    return [
-      {
-        id: 'REC-2026-0722',
-        date: '2026-07-22',
-        reconciledAt: '2026-07-22 18:30:00',
-        cashierName: 'Kim Eduard Saludes',
-        startingFloat: 1000,
-        totalReceiptsAmount: 89925,
-        receiptsCount: 2,
-        expectedCash: 90925,
-        actualCash: 90925,
-        variance: 0,
-        status: 'balanced',
-        denominations: { ...initialDenominations, d1000: 90, d500: 1, d200: 2, d20: 1, d5: 1 },
-        notes: 'End of day register closed. Physical cash matches receipts exactly. Cash deposited to safe.'
-      },
-      {
-        id: 'REC-2026-0719',
-        date: '2026-07-19',
-        reconciledAt: '2026-07-19 18:15:00',
-        cashierName: 'Hazel Store Admin',
-        startingFloat: 1000,
-        totalReceiptsAmount: 45200,
-        receiptsCount: 2,
-        expectedCash: 46200,
-        actualCash: 46200,
-        variance: 0,
-        status: 'balanced',
-        denominations: { ...initialDenominations, d1000: 45, d500: 2, d200: 1 },
-        notes: 'All delivery and pickup receipts verified.'
-      }
-    ];
+    return [];
   });
 
   // Save logs to localStorage on change
@@ -184,24 +156,20 @@ export const DailySales: React.FC = () => {
 
 
   // Determine payment method for an order
-  const getOrderPaymentMethod = useCallback((order: Order): 'cash' | 'gcash' | 'bank_transfer' => {
+  const getOrderPaymentMethod = useCallback((order: Order): 'cash' | 'gcash' | 'bank_transfer' | 'unclassified' => {
     if (paymentMethodOverrides[order.id]) {
       return paymentMethodOverrides[order.id];
     }
-    const note = (order.notes || '').toLowerCase();
-    if (note.includes('gcash')) return 'gcash';
-    if (note.includes('bank') || note.includes('transfer')) return 'bank_transfer';
-    // Default pickup/delivery to cash on delivery / cash in store
-    return 'cash';
+    return 'unclassified';
   }, [paymentMethodOverrides]);
 
-  const togglePaymentMethod = (orderId: string, currentMethod: 'cash' | 'gcash' | 'bank_transfer') => {
+  const togglePaymentMethod = (orderId: string, currentMethod: 'cash' | 'gcash' | 'bank_transfer' | 'unclassified') => {
     const nextMethod = currentMethod === 'cash' ? 'gcash' : currentMethod === 'gcash' ? 'bank_transfer' : 'cash';
     setPaymentMethodOverrides(prev => ({
       ...prev,
       [orderId]: nextMethod,
     }));
-    toast.info(`Updated order ${orderId} payment to ${nextMethod.toUpperCase()}`);
+    toast.info(`Classified ${orderId} as ${nextMethod.toUpperCase()} on this browser only.`);
   };
 
   // Financial aggregates for the day
@@ -225,7 +193,11 @@ export const DailySales: React.FC = () => {
   }, [activeOrdersToday, getOrderPaymentMethod]);
 
   const digitalReceipts = useMemo(() => {
-    return activeOrdersToday.filter(o => getOrderPaymentMethod(o) !== 'cash');
+    return activeOrdersToday.filter(o => ['gcash', 'bank_transfer'].includes(getOrderPaymentMethod(o)));
+  }, [activeOrdersToday, getOrderPaymentMethod]);
+
+  const unclassifiedReceipts = useMemo(() => {
+    return activeOrdersToday.filter(o => getOrderPaymentMethod(o) === 'unclassified');
   }, [activeOrdersToday, getOrderPaymentMethod]);
 
 
@@ -239,8 +211,11 @@ export const DailySales: React.FC = () => {
 
   // Expected Physical Cash in Drawer = Float + Cash Sales - Cash Refunds
   const expectedCashInDrawer = useMemo(() => {
-    return Math.max(0, startingFloat + totalCashReceipts - totalRefundsToday);
-  }, [startingFloat, totalCashReceipts, totalRefundsToday]);
+    const cashRefunds = ordersToday
+      .filter((order) => getOrderPaymentMethod(order) === 'cash')
+      .reduce((sum, order) => sum + (order.refundAmount || 0), 0);
+    return Math.max(0, startingFloat + totalCashReceipts - cashRefunds);
+  }, [ordersToday, startingFloat, totalCashReceipts, getOrderPaymentMethod]);
 
   // Actual Physical Cash on Hand Counted
   const totalCountedCash = useMemo(() => {
@@ -308,57 +283,13 @@ export const DailySales: React.FC = () => {
       const matchesPayment =
         paymentFilter === 'all' ||
         (paymentFilter === 'cash' && method === 'cash') ||
-        (paymentFilter === 'digital' && method !== 'cash');
+        (paymentFilter === 'digital' && (method === 'gcash' || method === 'bank_transfer')) ||
+        (paymentFilter === 'unclassified' && method === 'unclassified');
 
       return matchesSearch && matchesPayment;
     });
   }, [ordersToday, receiptSearch, paymentFilter, getOrderPaymentMethod]);
 
-
-  // Auto-fill denominations to match expected cash
-  const handleAutoMatch = () => {
-    let remaining = expectedCashInDrawer;
-    const newDenoms: DenominationCounts = { ...initialDenominations };
-
-    const denomValues: [keyof DenominationCounts, number][] = [
-      ['d1000', 1000],
-      ['d500', 500],
-      ['d200', 200],
-      ['d100', 100],
-      ['d50', 50],
-      ['d20', 20],
-      ['d10', 10],
-      ['d5', 5],
-      ['d1', 1],
-    ];
-
-    for (const [key, val] of denomValues) {
-      if (remaining >= val) {
-        const count = Math.floor(remaining / val);
-        newDenoms[key] = count;
-        remaining -= count * val;
-      }
-    }
-
-    newDenoms.coins = Math.round(remaining * 100) / 100;
-    setDenominations(newDenoms);
-    setDirectCash(expectedCashInDrawer);
-    toast.success(`Drawer counts matched to expected cash: ${formatCurrency(expectedCashInDrawer)}`);
-  };
-
-  const handleSimulateDiscrepancy = (delta: number) => {
-    handleAutoMatch();
-    if (entryMode === 'direct') {
-      setDirectCash(prev => Math.max(0, prev + delta));
-    } else {
-      if (delta > 0) {
-        setDenominations(prev => ({ ...prev, d100: prev.d100 + 1 }));
-      } else {
-        setDenominations(prev => ({ ...prev, d100: Math.max(0, prev.d100 - 1) }));
-      }
-    }
-    toast.info(`Simulated ${delta > 0 ? '+₱100 overage' : '-₱100 shortage'} for audit testing.`);
-  };
 
   const handleResetCounts = () => {
     setDenominations(initialDenominations);
@@ -367,11 +298,15 @@ export const DailySales: React.FC = () => {
   };
 
   const handleSaveAudit = () => {
+    if (!auditorName.trim()) {
+      toast.error('Enter the cashier or auditor name before finalizing.');
+      return;
+    }
     const record: DailyReconciliationRecord = {
       id: `REC-${selectedDate.replace(/-/g, '')}-${Date.now().toString(36).slice(-4).toUpperCase()}`,
       date: selectedDate,
       reconciledAt: new Date().toLocaleString(),
-      cashierName: auditorName.trim() || user?.name || 'Staff Auditor',
+      cashierName: auditorName.trim(),
       startingFloat,
       totalReceiptsAmount: grossSalesToday,
       receiptsCount: activeOrdersToday.length,
@@ -384,7 +319,7 @@ export const DailySales: React.FC = () => {
     };
 
     setReconciledLogs(prev => [record, ...prev.filter(r => r.date !== selectedDate)]);
-    toast.success(`Daily sales & cash audit for ${selectedDate} saved successfully!`);
+    toast.success(`Reconciliation saved on this browser for ${selectedDate}. It is not synced to the server.`);
   };
 
   const handleLoadPastAudit = (record: DailyReconciliationRecord) => {
@@ -617,6 +552,11 @@ export const DailySales: React.FC = () => {
             <p className="text-xs text-slate-500 font-medium">
               Cash receipts: <span className="font-bold text-slate-700">{formatCurrency(totalCashReceipts)}</span>
             </p>
+            {unclassifiedReceipts.length > 0 && (
+              <p className="text-xs text-amber-700 font-medium">
+                {unclassifiedReceipts.length} receipt(s) have no recorded payment method and are excluded.
+              </p>
+            )}
           </div>
         </div>
 
@@ -1029,38 +969,7 @@ export const DailySales: React.FC = () => {
             </div>
           )}
 
-          {/* Quick Action Helpers */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 no-print">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleAutoMatch}
-                title="Automatically set denominations to match expected cash"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 text-[#4f46e5] hover:bg-indigo-100 text-xs font-bold transition-colors"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Quick Match Expected ({formatCurrency(expectedCashInDrawer)})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSimulateDiscrepancy(-100)}
-                title="Simulate a ₱100 cash shortage to test alert"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-semibold transition-colors"
-              >
-                <span>-₱100 Short</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSimulateDiscrepancy(100)}
-                title="Simulate a ₱100 cash overage to test alert"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-semibold transition-colors"
-              >
-                <span>+₱100 Over</span>
-              </button>
-            </div>
-
+          <div className="flex justify-end pt-2 border-t border-slate-100 no-print">
             <button
               type="button"
               onClick={handleResetCounts}
@@ -1264,7 +1173,7 @@ export const DailySales: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
-              {(['all', 'cash', 'digital'] as const).map(f => (
+              {(['all', 'cash', 'digital', 'unclassified'] as const).map(f => (
                 <button
                   key={f}
                   type="button"
@@ -1275,7 +1184,7 @@ export const DailySales: React.FC = () => {
                       : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
-                  {f === 'all' ? 'All' : f === 'cash' ? 'Cash' : 'Digital'}
+                  {f === 'all' ? 'All' : f === 'cash' ? 'Cash' : f === 'digital' ? 'Digital' : 'Unclassified'}
                 </button>
               ))}
             </div>

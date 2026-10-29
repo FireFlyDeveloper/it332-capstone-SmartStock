@@ -9,26 +9,10 @@ import { Hono } from 'hono';
 import { setCookie, deleteCookie } from 'hono/cookie';
 import { hashPassword, verifyPassword } from './hash.js';
 import { signToken } from './jwt.js';
-import { createUser, findByEmail, findById, updateUser, type Role } from './users.js';
-import { requireAuth } from './middleware.js';
+import { createUserRecord, findByEmail, findById, findUserByEmailRecord, updateUserRecord, type Role } from './users.js';
+import { requireAuth, requireRole } from './middleware.js';
 
 export const authRoutes = new Hono();
-
-const demoUsers: Array<{ email: string; name: string; password: string; role: Role }> = [
-  { email: 'admin@smartstock.local', name: 'Admin', password: 'admin123', role: 'admin' },
-  { email: 'staff@smartstock.local', name: 'Staff', password: 'staff123', role: 'staff' },
-];
-let demoSeeded = false;
-
-async function ensureDemoUsers(): Promise<void> {
-  if (demoSeeded) return;
-  for (const user of demoUsers) {
-    if (!findByEmail(user.email)) {
-      createUser({ ...user, passwordHash: await hashPassword(user.password) });
-    }
-  }
-  demoSeeded = true;
-}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -49,24 +33,38 @@ function validateLogin(body: unknown): { ok: true; data: { email: string; passwo
   return { ok: true, data: { email, password } };
 }
 
-authRoutes.post('/register', async (c) => {
+authRoutes.post('/register', requireAuth, requireRole('admin'), async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = validateRegister(body);
   if (!parsed.ok) return c.json({ error: parsed.error }, 400);
   if (findByEmail(parsed.data.email)) return c.json({ error: 'email already registered' }, 409);
   const passwordHash = await hashPassword(parsed.data.password);
-  const user = createUser({ ...parsed.data, passwordHash });
+  let user;
+  try {
+    user = await createUserRecord({ ...parsed.data, passwordHash });
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
+      return c.json({ error: 'email already registered' }, 409);
+    }
+    console.error('[auth] user creation could not be saved:', error);
+    return c.json({ error: 'user creation could not be saved' }, 503);
+  }
   const token = signToken({ sub: user.id, email: user.email, role: user.role });
   setCookie(c, 'auth_token', token, { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 60 * 60 * 24 * 7 });
   return c.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } }, 201);
 });
 
 authRoutes.post('/login', async (c) => {
-  await ensureDemoUsers();
   const body = await c.req.json().catch(() => null);
   const parsed = validateLogin(body);
   if (!parsed.ok) return c.json({ error: parsed.error }, 400);
-  const user = findByEmail(parsed.data.email);
+  let user;
+  try {
+    user = await findUserByEmailRecord(parsed.data.email);
+  } catch {
+    console.error('[auth] user lookup failed');
+    return c.json({ error: 'authentication unavailable' }, 503);
+  }
   if (!user) return c.json({ error: 'invalid credentials' }, 401);
   const ok = await verifyPassword(parsed.data.password, user.passwordHash);
   if (!ok) return c.json({ error: 'invalid credentials' }, 401);
@@ -91,7 +89,13 @@ authRoutes.patch('/profile', requireAuth, async (c) => {
   if (!body || typeof body !== 'object') return c.json({ error: 'invalid body' }, 400);
   const name = typeof body.name === 'string' ? body.name.trim() : undefined;
   if (name !== undefined && name.length === 0) return c.json({ error: 'name cannot be empty' }, 400);
-  const updated = updateUser(authUser.id, { name });
+  let updated;
+  try {
+    updated = await updateUserRecord(authUser.id, { name });
+  } catch (error) {
+    console.error('[auth] profile update could not be saved:', error);
+    return c.json({ error: 'profile update could not be saved' }, 503);
+  }
   if (!updated) return c.json({ error: 'user not found' }, 404);
   return c.json({ ok: true, user: { id: updated.id, email: updated.email, name: updated.name, role: updated.role } });
 });
@@ -110,6 +114,12 @@ authRoutes.post('/change-password', requireAuth, async (c) => {
   if (!valid) return c.json({ error: 'current password is incorrect' }, 400);
   if (newPassword.length < 8) return c.json({ error: 'new password must be at least 8 characters' }, 400);
   const newHash = await hashPassword(newPassword);
-  updateUser(user.id, { passwordHash: newHash });
+  try {
+    const updated = await updateUserRecord(user.id, { passwordHash: newHash });
+    if (!updated) return c.json({ error: 'user not found' }, 404);
+  } catch (error) {
+    console.error('[auth] password change could not be saved:', error);
+    return c.json({ error: 'password change could not be saved' }, 503);
+  }
   return c.json({ ok: true, message: 'password changed successfully' });
 });

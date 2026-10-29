@@ -83,6 +83,8 @@ export const Orders: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [productSearch, setProductSearch] = useState('');
+  const [savingOrder, setSavingOrder] = useState(false);
+  const [savingFinanceAction, setSavingFinanceAction] = useState(false);
 
   // ── Cancel confirmation ──────────────────────────────────────────
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
@@ -182,9 +184,13 @@ export const Orders: React.FC = () => {
     return flow[order.orderStatus];
   };
 
-  const advanceOrder = (orderId: string, newStatus: Order['orderStatus']) => {
-    updateOrder(orderId, { orderStatus: newStatus });
-    toast.success(`Order → ${newStatus.replace(/_/g, ' ')}`);
+  const advanceOrder = async (orderId: string, newStatus: Order['orderStatus']) => {
+    try {
+      await updateOrder(orderId, { orderStatus: newStatus });
+      toast.success(`Order → ${newStatus.replace(/_/g, ' ')}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update order status.');
+    }
   };
 
   // ── Modal handlers ───────────────────────────────────────────────
@@ -280,54 +286,90 @@ export const Orders: React.FC = () => {
   };
 
   // ── Submit ───────────────────────────────────────────────────────
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingOrder) return;
     if (form.items.length === 0) { toast.error('Add at least one item'); return; }
     if (!form.customerName.trim()) { toast.error('Enter customer name'); return; }
     if (!form.contact.trim()) { toast.error('Enter contact number'); return; }
 
-    if (modalMode === 'edit' && editingOrderId) {
-      updateOrder(editingOrderId, {
-        customerName: form.customerName,
-        contact: form.contact,
-        address: form.address,
-        items: form.items,
-        total: form.total,
-        orderType: form.deliveryOption,
-        notes: form.notes,
-      });
-      toast.success('Order updated');
+    setSavingOrder(true);
+    try {
+      if (modalMode === 'edit' && editingOrderId) {
+        await updateOrder(editingOrderId, {
+          customerName: form.customerName,
+          contact: form.contact,
+          address: form.address,
+        });
+        toast.success('Order updated');
+      } else {
+        await addOrder({
+          customerName: form.customerName,
+          contact: form.contact,
+          address: form.address,
+          items: form.items,
+          total: form.total,
+          paidAmount:
+            form.paymentStatus === 'paid' ? form.total :
+            form.paymentStatus === 'partial' ? Math.round(form.total * 0.5) : 0,
+          paymentStatus: form.paymentStatus,
+          orderStatus: form.deliveryOption === 'pickup' ? 'ready_for_pickup' : 'packed',
+          deliveryStatus: form.deliveryOption === 'delivery' ? 'scheduled' : 'not_required',
+          orderType: form.deliveryOption,
+          date: new Date().toISOString().split('T')[0],
+          refundAmount: 0,
+          refundStatus: 'none',
+          notes: form.notes,
+        });
+        toast.success('Order created!');
+      }
       closeModal();
-      return;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save order.');
+    } finally {
+      setSavingOrder(false);
     }
-
-    addOrder({
-      customerName: form.customerName,
-      contact: form.contact,
-      address: form.address,
-      items: form.items,
-      total: form.total,
-      paidAmount:
-        form.paymentStatus === 'paid' ? form.total :
-        form.paymentStatus === 'partial' ? Math.round(form.total * 0.5) : 0,
-      paymentStatus: form.paymentStatus,
-      orderStatus: form.deliveryOption === 'pickup' ? 'ready_for_pickup' : 'packed',
-      deliveryStatus: form.deliveryOption === 'delivery' ? 'scheduled' : 'not_required',
-      orderType: form.deliveryOption,
-      date: new Date().toISOString().split('T')[0],
-      refundAmount: 0,
-      refundStatus: 'none',
-      notes: form.notes,
-    });
-    toast.success('Order created!');
-    closeModal();
   };
 
   // ── Delete order ─────────────────────────────────────────────────
-  const handleDelete = (orderId: string) => {
-    updateOrder(orderId, { orderStatus: 'cancelled' });
-    toast.success('Order cancelled');
-    setConfirmCancel(null);
+  const handleDelete = async (orderId: string) => {
+    try {
+      await updateOrder(orderId, { orderStatus: 'cancelled' });
+      toast.success('Order cancelled');
+      setConfirmCancel(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not cancel order.');
+    }
+  };
+
+  const handleRecordPayment = async () => {
+    if (!payModal || savingFinanceAction) return;
+    setSavingFinanceAction(true);
+    try {
+      await processPayment(payModal.id, payAmount);
+      closeViewModal();
+      setPayModal(null);
+      toast.success(`Payment of ${formatCurrency(payAmount)} recorded`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not record payment.');
+    } finally {
+      setSavingFinanceAction(false);
+    }
+  };
+
+  const handleRecordRefund = async () => {
+    if (!refundModal || savingFinanceAction) return;
+    setSavingFinanceAction(true);
+    try {
+      await processRefund(refundModal.id, refundAmount, refundReason || 'No reason specified', refundType);
+      closeViewModal();
+      setRefundModal(null);
+      toast.success(`Refund of ${formatCurrency(refundAmount)} processed`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not process refund.');
+    } finally {
+      setSavingFinanceAction(false);
+    }
   };
 
   const closeViewModal = () => {
@@ -614,12 +656,11 @@ export const Orders: React.FC = () => {
               </div>
               <h3 className="text-lg font-semibold text-gray-900">No orders yet</h3>
               <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
-                Demo data will appear once the backend is connected. In the meantime, you can
-                create a demo order below.
+                No orders are available yet. Create a new order to start using this page.
               </p>
               <button
                 type="button"
-                onClick={() => toast.info('Demo build — this would open the create form.')}
+                onClick={openCreate}
                 className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700"
               >
                 <Plus className="h-4 w-4" /> Create your first order
@@ -664,15 +705,21 @@ export const Orders: React.FC = () => {
                       onChange={e => setForm({ ...form, contact: e.target.value })}
                       className="input" placeholder="0912-345-6789" required />
                   </div>
-                  <div>
-                    <label className="label">Delivery Option</label>
-                    <select value={form.deliveryOption}
-                      onChange={e => setForm({ ...form, deliveryOption: e.target.value as 'delivery' | 'pickup' })}
-                      className="input">
-                      <option value="delivery">Delivery</option>
-                      <option value="pickup">Pickup</option>
-                    </select>
-                  </div>
+                  {modalMode === 'create' ? (
+                    <div>
+                      <label className="label">Delivery Option</label>
+                      <select value={form.deliveryOption}
+                        onChange={e => setForm({ ...form, deliveryOption: e.target.value as 'delivery' | 'pickup' })}
+                        className="input">
+                        <option value="delivery">Delivery</option>
+                        <option value="pickup">Pickup</option>
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="self-end text-sm text-gray-600">
+                      Order type: {form.deliveryOption === 'pickup' ? 'Pickup' : 'Delivery'}
+                    </div>
+                  )}
                   {form.deliveryOption === 'delivery' && (
                     <div className="sm:col-span-2">
                       <label className="label">Delivery Address *</label>
@@ -685,7 +732,7 @@ export const Orders: React.FC = () => {
               </div>
 
               {/* ── Items ─────────────────────────────────────────── */}
-              <div className="space-y-4">
+              {modalMode === 'create' && <div className="space-y-4">
                 <h4 className="font-medium text-gray-900 flex items-center gap-2">
                   <Package className="w-4 h-4 text-gray-400" /> Order Items
                 </h4>
@@ -774,15 +821,20 @@ export const Orders: React.FC = () => {
                     </table>
                   </div>
                 )}
-              </div>
+              </div>}
 
-              {/* ── Notes ─────────────────────────────────────────── */}
-              <div>
-                <label className="label">Notes (optional)</label>
-                <textarea value={form.notes}
-                  onChange={e => setForm({ ...form, notes: e.target.value })}
-                  className="input" rows={2} placeholder="Special instructions, remarks…" />
-              </div>
+              {modalMode === 'edit' && (
+                <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
+                  <p>Order items and notes are read-only here. Only customer name, contact number, and address can be saved.</p>
+                  <ul className="mt-2 space-y-1">
+                    {form.items.map((item, index) => (
+                      <li key={`${item.productId}-${index}`}>
+                        {item.productName} × {item.quantity} — {formatCurrency(item.total)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* ── Payment & Summary ─────────────────────────────── */}
               {modalMode === 'create' && (
@@ -807,7 +859,7 @@ export const Orders: React.FC = () => {
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={closeModal} className="flex-1 btn-secondary">Cancel</button>
                 <button type="submit" className="flex-1 btn-primary" disabled={form.items.length === 0}>
-                  {modalMode === 'create' ? 'Create Order' : 'Save Changes'}
+                  {savingOrder ? 'Saving…' : modalMode === 'create' ? 'Create Order' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -1135,12 +1187,9 @@ export const Orders: React.FC = () => {
             </div>
             <div className="flex gap-3">
               <button onClick={() => setPayModal(null)} className="flex-1 btn-secondary">Cancel</button>
-              <button onClick={() => {
-                processPayment(payModal.id, payAmount);
-                closeViewModal();
-                setPayModal(null);
-                toast.success(`Payment of ${formatCurrency(payAmount)} recorded`);
-              }} className="flex-1 btn-primary">Pay {formatCurrency(payAmount)}</button>
+              <button onClick={() => void handleRecordPayment()} disabled={savingFinanceAction} className="flex-1 btn-primary disabled:opacity-60">
+                {savingFinanceAction ? 'Saving…' : `Pay ${formatCurrency(payAmount)}`}
+              </button>
             </div>
           </div>
         </div>
@@ -1186,13 +1235,8 @@ export const Orders: React.FC = () => {
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setRefundModal(null)} className="flex-1 btn-secondary">Cancel</button>
-              <button onClick={() => {
-                processRefund(refundModal.id, refundAmount, refundReason || 'No reason specified', refundType);
-                closeViewModal();
-                setRefundModal(null);
-                toast.success(`Refund of ${formatCurrency(refundAmount)} processed`);
-              }} className="flex-1 px-4 py-2.5 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-colors font-semibold">
-                Process Refund
+              <button onClick={() => void handleRecordRefund()} disabled={savingFinanceAction} className="flex-1 px-4 py-2.5 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-colors font-semibold disabled:opacity-60">
+                {savingFinanceAction ? 'Saving…' : 'Process Refund'}
               </button>
             </div>
           </div>

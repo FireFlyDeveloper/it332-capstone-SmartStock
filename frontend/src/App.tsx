@@ -111,27 +111,15 @@ function AppRoutes() {
       />
       <Route
         path="/tracking"
-        element={
-          <DataProvider>
-            <TrackingPage />
-          </DataProvider>
-        }
+        element={<TrackingPage />}
       />
       <Route
         path="/tracking/:referenceNumber"
-        element={
-          <DataProvider>
-            <TrackingPage />
-          </DataProvider>
-        }
+        element={<TrackingPage />}
       />
       <Route
         path="/track/:referenceNumber"
-        element={
-          <DataProvider>
-            <TrackingPage />
-          </DataProvider>
-        }
+        element={<TrackingPage />}
       />
       <Route
         path="/analytics"

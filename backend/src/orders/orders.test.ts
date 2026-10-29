@@ -12,6 +12,7 @@ import { createUser, _resetUserStore, type Role } from '../auth/users.js';
 import { hashPassword } from '../auth/hash.js';
 import { orderRoutes } from './routes.js';
 import { _resetOrderStore, listOrders } from './store.js';
+import { _resetInventoryStore, findProductById } from '../inventory/store.js';
 
 function buildApp() {
   const app = new Hono();
@@ -57,6 +58,7 @@ describe('order routes', () => {
   beforeEach(async () => {
     _resetUserStore();
     _resetOrderStore();
+    _resetInventoryStore();
     app = buildApp();
     await seedUser(ADMIN, 'admin');
     await seedUser(STAFF, 'staff');
@@ -116,6 +118,8 @@ describe('order routes', () => {
     expect(created.paidAmount).toBe(1000);
     expect(created.orderStatus).toBe('processing');
     expect(created.paymentStatus).toBe('partial');
+    expect(findProductById('PRD-001')?.stock).toBe(22);
+    expect(findProductById('PRD-002')?.stock).toBe(6);
 
     const update = await app.request('/orders/' + created.id, {
       method: 'PATCH',
@@ -140,7 +144,7 @@ describe('order routes', () => {
     expect(cancelled.order.referenceNumber).toBe(created.referenceNumber);
   });
 
-  it('blocks anonymous access and staff mutations', async () => {
+  it('blocks anonymous access and allows staff to create orders', async () => {
     const anonymous = await app.request('/orders');
     expect(anonymous.status).toBe(401);
 
@@ -150,7 +154,8 @@ describe('order routes', () => {
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
       body: JSON.stringify(validOrderPayload),
     });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(201);
+    expect(findProductById('PRD-001')?.stock).toBe(22);
   });
 
   it('processes payments through unpaid, partial, and paid status transitions', async () => {

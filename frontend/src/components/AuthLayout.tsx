@@ -9,7 +9,6 @@
  */
 
 import type { ReactNode } from 'react'
-import { Sparkles } from 'lucide-react'
 import './AuthLayout.css'
 
 export function AuthLayout({
@@ -22,10 +21,6 @@ export function AuthLayout({
   return (
     <main className="auth">
       <section className="auth__form-pane">
-        <div className="auth__demo-badge" aria-label="Demo build indicator" title="Demo build - data is mock data.">
-          <Sparkles className="auth__demo-icon" aria-hidden="true" />
-          <span>Demo</span>
-        </div>
         {form}
       </section>
       {art && (

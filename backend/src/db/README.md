@@ -1,6 +1,6 @@
 # SmartStock database foundation
 
-The backend can run without `DATABASE_URL`; in that case `/health/db` reports in-memory mode for the existing fallback stores.
+The backend requires `DATABASE_URL` before starting. `/health/db` returns HTTP 503 with `{"mode":"unavailable","ok":false}` when persistent storage is not configured, and HTTP 503 when PostgreSQL is unreachable. It reports `{"mode":"postgres","ok":true}` only after a successful database query.
 
 ## Local PostgreSQL setup
 

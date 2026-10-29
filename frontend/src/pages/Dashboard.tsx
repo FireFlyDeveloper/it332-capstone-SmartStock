@@ -5,8 +5,7 @@ import {
   ShoppingBag,
   Truck,
   AlertTriangle,
-  ArrowUpRight,
-  ArrowDownRight,
+
   Star,
   Sparkles,
   Calendar,
@@ -14,11 +13,12 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
+import { useAuth } from '../components/AuthContext';
 import { formatCurrency, formatCurrencyWhole } from '../utils/helpers';
-import { KpiSparkline } from '../components/KpiSparkline';
+
 import { InteractiveDonut, type DonutSegment } from '../components/InteractiveDonut';
 import { RecentActivityTimeline } from '../components/RecentActivityTimeline';
-import { GlassPromoBanner } from '../components/GlassPromoBanner';
+import { OperationsInsightsBanner } from '../components/GlassPromoBanner';
 import { QuickActionsGrid } from '../components/QuickActionsGrid';
 import {
   AreaChart,
@@ -37,15 +37,9 @@ interface KpiCardProps {
   label: string;
   value: string | number;
   unit?: string;
-  change: string;
-  isPositive?: boolean;
   icon: React.ElementType;
   iconBoxBg: string;
   iconColor: string;
-  sparklineColor: string;
-  sparklineData: number[];
-  badgeBg?: string;
-  badgeColor?: string;
 }
 
 /**
@@ -55,27 +49,19 @@ interface KpiCardProps {
  * - Icon in colored background box (12px radius)
  * - Label in 10px bold uppercase, tracking 0.08em
  * - Value sized to fit comfortably without clipping or overflowing
- * - Percentage change badge (emerald-50 bg for positive)
- * - Bottom SVG sparkline smoothly interpolating points across width
+ * - Shows backend-derived KPI values without implying unverified trends.
  */
 const KpiCard: React.FC<KpiCardProps> = ({
   label,
   value,
   unit,
-  change,
-  isPositive = true,
   icon: Icon,
   iconBoxBg,
   iconColor,
-  sparklineColor,
-  sparklineData,
-  badgeBg = isPositive ? 'bg-emerald-50' : 'bg-rose-50',
-  badgeColor = isPositive ? 'text-[#10b981]' : 'text-[#f43f5e]',
 }) => {
   return (
     <div className="bg-white rounded-[28px] p-4 sm:p-5 border border-[#f1f5f9] shadow-[0_2px_4px_-1px_rgb(0_0_0/0.04)] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:scale-[1.02] hover:shadow-md flex flex-col justify-between group min-w-0 overflow-hidden">
       <div className="min-w-0">
-        {/* Top Icon Box + Change Badge */}
         <div className="flex items-center justify-between gap-2 mb-3 min-w-0">
           <div
             className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${iconBoxBg} ${iconColor} flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 shadow-2xs`}
@@ -83,16 +69,6 @@ const KpiCard: React.FC<KpiCardProps> = ({
             <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
 
-          <div
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${badgeBg} ${badgeColor} text-[10px] sm:text-[11px] font-bold shrink-0 whitespace-nowrap`}
-          >
-            {isPositive ? (
-              <ArrowUpRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-            ) : (
-              <ArrowDownRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-            )}
-            <span>{change}</span>
-          </div>
         </div>
 
         {/* Label & KPI Value */}
@@ -116,20 +92,14 @@ const KpiCard: React.FC<KpiCardProps> = ({
         </div>
       </div>
 
-      {/* Bottom Sparkline (36px height, smoothly interpolating) */}
-      <div className="mt-3.5 pt-1 w-full overflow-hidden">
-        <KpiSparkline
-          data={sparklineData}
-          color={sparklineColor}
-          height={36}
-        />
-      </div>
+
     </div>
   );
 };
 
 export const Dashboard: React.FC = () => {
   const { products, orders, deliveries } = useData();
+  const { user } = useAuth();
   const [timeRange, setTimeRange] = useState<'6M' | '1Y' | 'ALL'>('6M');
 
   // Real data calculations
@@ -156,34 +126,21 @@ export const Dashboard: React.FC = () => {
     [deliveries]
   );
 
-  // Dynamic monthly sales aggregated from real orders
   const monthlySales = useMemo(() => {
     const monthMap = new Map<string, number>();
-    const monthOrder: string[] = [];
+    const monthLabels = new Map<string, string>();
     orders.forEach((o) => {
       if (o.orderStatus === 'cancelled') return;
-      const d = new Date(o.createdAt || o.date);
-      if (isNaN(d.getTime())) return;
-      const label = d.toLocaleDateString('en-US', { month: 'short' });
-      if (!monthMap.has(label)) {
-        monthMap.set(label, 0);
-        monthOrder.push(label);
-      }
-      monthMap.set(label, (monthMap.get(label) || 0) + o.total);
+      const date = new Date(o.createdAt || o.date);
+      if (isNaN(date.getTime())) return;
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      monthLabels.set(key, date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }));
+      monthMap.set(key, (monthMap.get(key) || 0) + o.total);
     });
 
-    if (monthOrder.length === 0) {
-      return [
-        { month: 'Jul', sales: 0 },
-        { month: 'Aug', sales: 0 },
-        { month: 'Sep', sales: 0 },
-      ];
-    }
-
-    return monthOrder.map((month) => ({
-      month,
-      sales: monthMap.get(month) || 0,
-    }));
+    return [...monthMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, sales]) => ({ month: monthLabels.get(key) ?? key, sales }));
   }, [orders]);
 
   // Top selling items computed from real orders
@@ -209,9 +166,15 @@ export const Dashboard: React.FC = () => {
   }, [orders, products]);
 
   const currentMonthSales = useMemo(() => {
-    if (monthlySales.length === 0) return 0;
-    return monthlySales[monthlySales.length - 1].sales;
-  }, [monthlySales]);
+    const now = new Date();
+    return orders
+      .filter((order) => {
+        if (order.orderStatus === 'cancelled') return false;
+        const date = new Date(order.createdAt || order.date);
+        return !isNaN(date.getTime()) && date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+      })
+      .reduce((sum, order) => sum + order.total, 0);
+  }, [orders]);
 
   const totalSalesAll = useMemo(() => {
     return monthlySales.reduce((sum, m) => sum + m.sales, 0);
@@ -221,37 +184,6 @@ export const Dashboard: React.FC = () => {
     if (monthlySales.length === 0) return 0;
     return Math.round(totalSalesAll / monthlySales.length);
   }, [totalSalesAll, monthlySales]);
-
-  // Dynamic Sparkline datasets
-  const sparkInventory = useMemo(() => {
-    if (products.length === 0) return [0, 0, 0];
-    const chunks: number[] = [];
-    const chunkSize = Math.max(1, Math.floor(products.length / 8));
-    for (let i = 0; i < products.length; i += chunkSize) {
-      const slice = products.slice(i, i + chunkSize);
-      chunks.push(slice.reduce((acc, p) => acc + p.stock * p.price, 0) / 1000);
-    }
-    return chunks.slice(0, 8);
-  }, [products]);
-
-  const sparkRevenue = useMemo(() => {
-    if (monthlySales.length === 0) return [0, 0, 0];
-    return monthlySales.map((m) => Math.round(m.sales / 1000));
-  }, [monthlySales]);
-
-  const sparkOrders = useMemo(() => {
-    if (orders.length === 0) return [0, 0, 0];
-    return [Math.max(1, Math.floor(orders.length * 0.4)), Math.max(1, Math.floor(orders.length * 0.7)), orders.length];
-  }, [orders]);
-
-  const sparkDeliveries = useMemo(() => {
-    if (deliveries.length === 0) return [0, 0, 0];
-    return [Math.max(1, Math.floor(deliveries.length * 0.5)), Math.max(1, Math.floor(deliveries.length * 0.8)), deliveries.length];
-  }, [deliveries]);
-
-  const sparkLowStock = useMemo(() => {
-    return [lowStockItems + 2, lowStockItems + 1, lowStockItems];
-  }, [lowStockItems]);
 
   // Material category distribution for Donut Chart
   const glassTotalStock = useMemo(
@@ -297,7 +229,7 @@ export const Dashboard: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
-              Hello, Kim <span className="inline-block animate-wave">👋</span>
+              Hello, {user?.name || 'there'} <span className="inline-block animate-wave">👋</span>
             </h1>
             <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-[#4f46e5] text-xs font-bold border border-indigo-100/80">
               <Sparkles className="w-3.5 h-3.5" />
@@ -313,7 +245,7 @@ export const Dashboard: React.FC = () => {
         <div className="flex items-center gap-2.5 self-start sm:self-auto">
           <div className="flex items-center gap-2 px-3.5 py-2 bg-white rounded-2xl border border-[#f1f5f9] shadow-2xs text-xs font-bold text-slate-700">
             <Calendar className="w-4 h-4 text-slate-400" />
-            <span>Tuesday, September 22, 2026</span>
+            <span>{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
           </div>
           <button
             type="button"
@@ -332,26 +264,18 @@ export const Dashboard: React.FC = () => {
         <KpiCard
           label="INVENTORY VALUE"
           value={formatCurrencyWhole(totalInventoryValue)}
-          change="+8.4%"
-          isPositive={true}
           icon={Package}
           iconBoxBg="bg-indigo-50"
           iconColor="text-[#4f46e5]"
-          sparklineColor="#4f46e5"
-          sparklineData={sparkInventory}
         />
 
         {/* KPI 2: Monthly Revenue (Emerald) */}
         <KpiCard
           label="MONTHLY SALES"
           value={formatCurrencyWhole(currentMonthSales)}
-          change="+18.2%"
-          isPositive={true}
           icon={TrendingUp}
           iconBoxBg="bg-emerald-50"
           iconColor="text-[#10b981]"
-          sparklineColor="#10b981"
-          sparklineData={sparkRevenue}
         />
 
         {/* KPI 3: Active Orders (Blue/Info) */}
@@ -359,13 +283,9 @@ export const Dashboard: React.FC = () => {
           label="ACTIVE ORDERS"
           value={activeOrders}
           unit="orders"
-          change="+12.0%"
-          isPositive={true}
           icon={ShoppingBag}
           iconBoxBg="bg-blue-50"
           iconColor="text-[#3b82f6]"
-          sparklineColor="#3b82f6"
-          sparklineData={sparkOrders}
         />
 
         {/* KPI 4: In-Transit Deliveries (Amber) */}
@@ -373,13 +293,9 @@ export const Dashboard: React.FC = () => {
           label="IN TRANSIT"
           value={inTransitDeliveries}
           unit="trucks"
-          change="+5.0%"
-          isPositive={true}
           icon={Truck}
           iconBoxBg="bg-amber-50"
           iconColor="text-[#f59e0b]"
-          sparklineColor="#f59e0b"
-          sparklineData={sparkDeliveries}
         />
 
         {/* KPI 5: Low Stock Alerts (Rose) */}
@@ -387,13 +303,9 @@ export const Dashboard: React.FC = () => {
           label="LOW STOCK"
           value={lowStockItems}
           unit="alerts"
-          change="-4.2%"
-          isPositive={false}
           icon={AlertTriangle}
           iconBoxBg="bg-rose-50"
           iconColor="text-[#f43f5e]"
-          sparklineColor="#f43f5e"
-          sparklineData={sparkLowStock}
         />
       </div>
 
@@ -491,9 +403,8 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span>Steady demand for tempered glass &amp; aluminum profiles</span>
-              <span className="font-extrabold text-emerald-600">+24.5% quarterly peak</span>
+            <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500">
+              Sales trend is calculated from non-cancelled backend orders.
             </div>
           </div>
 
@@ -610,16 +521,12 @@ export const Dashboard: React.FC = () => {
                     OVERALL PERFORMANCE
                   </span>
                   <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Quarterly Revenue Performance
+                    Revenue Performance
                   </p>
                   {/* Large Currency Total */}
-                  <div className="flex items-baseline gap-3 mt-2">
+                  <div className="mt-2">
                     <span className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
                       {formatCurrency(totalSalesAll)}
-                    </span>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 font-extrabold text-xs">
-                      <ArrowUpRight className="w-3.5 h-3.5" />
-                      +22.4%
                     </span>
                   </div>
                 </div>
@@ -785,7 +692,7 @@ export const Dashboard: React.FC = () => {
       {/* A two-part grid: Left (8-col) Glassmorphism Promo Banner, Right (4-col) Actions Rapides */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-8">
-          <GlassPromoBanner />
+          <OperationsInsightsBanner />
         </div>
         <div className="lg:col-span-4">
           <QuickActionsGrid />

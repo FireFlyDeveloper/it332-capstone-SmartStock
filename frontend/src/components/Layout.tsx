@@ -35,6 +35,7 @@ import {
   Banknote,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
+import { useData } from './DataContext';
 import { NotificationDropdown } from './NotificationDropdown';
 
 interface LayoutProps {
@@ -64,7 +65,7 @@ const navGroups: NavGroup[] = [
   {
     label: 'FINANCES & ANALYTICS',
     items: [
-      { icon: BarChart3, label: 'AI Analytics', path: '/analytics' },
+      { icon: BarChart3, label: 'Analytics', path: '/analytics' },
       { icon: FileText, label: 'Reports & Sales', path: '/reports' },
       { icon: Banknote, label: 'Daily Sales & Cash', path: '/daily-sales' },
       { icon: Sliders, label: 'Settings', path: '/profile' },
@@ -75,6 +76,7 @@ const navGroups: NavGroup[] = [
 
 export function Layout({ children }: LayoutProps) {
   const { user, logout } = useAuth();
+  const { error, refresh } = useData();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -242,15 +244,15 @@ export function Layout({ children }: LayoutProps) {
               >
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-emerald-400 p-0.5 shadow-sm">
                   <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center font-extrabold text-sm text-[#4f46e5]">
-                    {user?.name ? user.name[0].toUpperCase() : 'K'}
+                    {user?.name ? user.name[0].toUpperCase() : '?'}
                   </div>
                 </div>
                 <div className="hidden md:flex flex-col text-left">
                   <span className="font-extrabold text-[13px] text-slate-900 leading-tight">
-                    {user?.name || 'Kim Saludes'}
+                    {user?.name || 'Account'}
                   </span>
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    {user?.role ? `${user.role} Manager` : 'Super Admin'}
+                    {user?.role ? `${user.role} account` : 'Account'}
                   </span>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden md:block group-hover:translate-y-0.5 transition-transform" />
@@ -260,8 +262,8 @@ export function Layout({ children }: LayoutProps) {
               {showProfileMenu && (
                 <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-[#f1f5f9] shadow-xl p-2 z-50 animate-fadeIn">
                   <div className="px-3 py-2 border-b border-slate-100">
-                    <p className="text-xs font-bold text-slate-900">{user?.name || 'Kim Saludes'}</p>
-                    <p className="text-[11px] text-slate-500 truncate">{user?.email || 'admin@smartstock.local'}</p>
+                    <p className="text-xs font-bold text-slate-900">{user?.name || 'Account'}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{user?.email || ''}</p>
                   </div>
                   <div className="py-1 space-y-0.5">
                     <button
@@ -328,6 +330,14 @@ export function Layout({ children }: LayoutProps) {
 
         {/* Fluid Workspace Body */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1720px] w-full mx-auto">
+          {error && (
+            <div role="alert" className="mb-5 flex flex-col gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between">
+              <span>Live data could not be loaded: {error}. Sample data is not being substituted.</span>
+              <button type="button" onClick={() => void refresh()} className="shrink-0 font-bold underline underline-offset-2">
+                Retry
+              </button>
+            </div>
+          )}
           {children}
         </main>
       </div>

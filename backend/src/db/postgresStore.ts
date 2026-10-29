@@ -8,8 +8,7 @@ import type pg from 'pg';
 import { getPool } from './client.js';
 import { hasDatabaseUrl } from './config.js';
 import { setDbSyncActive } from './syncState.js';
-import { seedProducts, seedOrders, seedDeliveries, seedMovements } from './seedData.js';
-import { hashPassword } from '../auth/hash.js';
+
 import type { Product, ProductCreateInput, ProductUpdateInput, StockMovement, StockMovementInput } from '../inventory/store.js';
 import type { Order, OrderCreateInput, OrderUpdateInput, PaymentStatus, RefundType } from '../orders/store.js';
 import type { Delivery, DeliveryCreateInput, DeliveryUpdateInput } from '../delivery/store.js';
@@ -18,131 +17,19 @@ import type { UserRecord, Role } from '../auth/users.js';
 let dbInitialized = false;
 
 export async function initDatabase(): Promise<void> {
-  if (dbInitialized || !hasDatabaseUrl) return;
+  if (dbInitialized) return;
+  if (!hasDatabaseUrl) throw new Error('DATABASE_URL is required; refusing to start without persistent storage');
   const pool = getPool();
-  if (!pool) return;
+  if (!pool) throw new Error('PostgreSQL connection pool is unavailable');
 
   try {
-    // Check if products exist
-    const { rows: prodCountRows } = await pool.query('SELECT count(*)::int as count FROM products');
-    const prodCount = prodCountRows[0]?.count ?? 0;
-
-    if (prodCount === 0) {
-      console.log('[db] Seeding initial Glassram dataset into PostgreSQL...');
-
-      // 1. Seed users
-      const adminHash = await hashPassword('admin123');
-      const staffHash = await hashPassword('staff123');
-      await pool.query(`
-        INSERT INTO users (id, username, email, full_name, password_hash, role)
-        VALUES 
-          (gen_random_uuid(), 'admin', 'admin@smartstock.local', 'Ramon Marquez (Owner)', $1, 'admin'),
-          (gen_random_uuid(), 'staff', 'staff@smartstock.local', 'Operations Staff', $2, 'staff')
-        ON CONFLICT (email) DO NOTHING
-      `, [adminHash, staffHash]);
-
-      // 2. Seed products
-      for (const p of seedProducts) {
-        await pool.query(`
-          INSERT INTO products (id, sku, name, category, unit, stock, threshold, min_stock, unit_price, status, description)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10)
-          ON CONFLICT (sku) DO NOTHING
-        `, [
-          p.id || randomUUID(),
-          p.sku,
-          p.name,
-          p.category,
-          p.unit,
-          p.stock,
-          p.threshold,
-          p.price,
-          p.status,
-          p.description || null,
-        ]);
-      }
-
-      // 3. Seed orders
-      for (const o of seedOrders) {
-        await pool.query(`
-          INSERT INTO orders (
-            id, order_no, customer_name, customer_phone, delivery_address, delivery_date,
-            items, subtotal, total_amount, paid_amount, payment_status, order_status,
-            refunded_amount, refund_reason, refund_type, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-          ON CONFLICT (order_no) DO NOTHING
-        `, [
-          o.id || randomUUID(),
-          o.referenceNumber,
-          o.customerName,
-          o.customerPhone,
-          o.deliveryAddress,
-          o.deliveryDate,
-          JSON.stringify(o.items),
-          o.subtotal,
-          o.total,
-          o.paidAmount,
-          o.paymentStatus,
-          o.orderStatus,
-          o.refundedAmount,
-          o.refundReason || null,
-          o.refundType || null,
-          o.createdAt,
-          o.updatedAt,
-        ]);
-      }
-
-      // 4. Seed deliveries
-      for (const d of seedDeliveries) {
-        await pool.query(`
-          INSERT INTO deliveries (
-            id, driver, truck_number, destination, location, current_step, current_location,
-            traffic_level, predicted_delay, route_efficiency_score, status, notes
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-          ON CONFLICT (id) DO NOTHING
-        `, [
-          d.id || randomUUID(),
-          d.driver,
-          d.truckNumber,
-          d.destination,
-          d.location || null,
-          d.currentStep,
-          JSON.stringify(d.currentLocation),
-          d.trafficLevel,
-          d.predictedDelay,
-          d.routeEfficiencyScore,
-          d.status,
-          d.notes || null,
-        ]);
-      }
-
-      // 5. Seed stock movements
-      for (const m of seedMovements) {
-        await pool.query(`
-          INSERT INTO stock_movements (
-            id, product_id, type, movement_type, quantity, reference_no, supplier, occurred_at, created_by
-          ) VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8)
-          ON CONFLICT (id) DO NOTHING
-        `, [
-          m.id || randomUUID(),
-          m.productId,
-          m.type,
-          m.quantity,
-          m.referenceNo,
-          m.supplier || null,
-          m.occurredAt,
-          m.createdBy,
-        ]);
-      }
-
-      console.log('[db] Glassram dataset seeded successfully into PostgreSQL!');
-    }
-
-    // Hydrate stores from PostgreSQL
+    await pool.query('SELECT 1');
     await hydrateStoresFromDb();
     dbInitialized = true;
     setDbSyncActive(true);
   } catch (err) {
-    console.error('[db] Error initializing PostgreSQL data:', err);
+    setDbSyncActive(false);
+    throw err;
   }
 }
 
@@ -150,53 +37,33 @@ export async function hydrateStoresFromDb(): Promise<void> {
   const pool = getPool();
   if (!pool) return;
 
-  try {
-    const { rows: prodRows } = await pool.query('SELECT * FROM products WHERE deleted_at IS NULL ORDER BY name ASC');
-    if (prodRows.length > 0) {
-      import('../inventory/store.js').then(({ _hydrateInventory }) => {
-        _hydrateInventory(prodRows.map(rowToProduct));
-      });
-    }
-
-    const { rows: orderRows } = await pool.query('SELECT * FROM orders WHERE deleted_at IS NULL ORDER BY order_no ASC');
-    if (orderRows.length > 0) {
-      import('../orders/store.js').then(({ _hydrateOrders }) => {
-        _hydrateOrders(orderRows.map(rowToOrder));
-      });
-    }
-
-    const { rows: delivRows } = await pool.query('SELECT * FROM deliveries ORDER BY id ASC');
-    if (delivRows.length > 0) {
-      import('../delivery/store.js').then(({ _hydrateDeliveries }) => {
-        _hydrateDeliveries(delivRows.map(rowToDelivery));
-      });
-    }
-
-    const { rows: movRows } = await pool.query('SELECT * FROM stock_movements ORDER BY occurred_at DESC');
-    if (movRows.length > 0) {
-      import('../inventory/store.js').then(({ _hydrateMovements }) => {
-        _hydrateMovements(movRows.map((r) => ({
-          id: String(r.id),
-          productId: String(r.product_id),
-          type: (r.type as 'inbound' | 'outbound') || 'inbound',
-          quantity: Number(r.quantity),
-          referenceNo: String(r.reference_no),
-          supplier: r.supplier ? String(r.supplier) : undefined,
-          occurredAt: new Date(r.occurred_at as string | Date).toISOString(),
-          createdBy: String(r.created_by),
-        })));
-      });
-    }
-
-    const { rows: userRows } = await pool.query('SELECT * FROM users WHERE deleted_at IS NULL');
-    if (userRows.length > 0) {
-      import('../auth/users.js').then(({ _hydrateUsers }) => {
-        _hydrateUsers(userRows.map(rowToUser));
-      });
-    }
-  } catch (err) {
-    console.error('[db] Error hydrating stores from PostgreSQL:', err);
-  }
+  const [{ rows: prodRows }, { rows: orderRows }, { rows: delivRows }, { rows: movRows }, { rows: userRows }] = await Promise.all([
+    pool.query('SELECT * FROM products WHERE deleted_at IS NULL ORDER BY name ASC'),
+    pool.query('SELECT * FROM orders WHERE deleted_at IS NULL ORDER BY order_no ASC'),
+    pool.query('SELECT * FROM deliveries ORDER BY id ASC'),
+    pool.query('SELECT * FROM stock_movements ORDER BY occurred_at DESC'),
+    pool.query('SELECT * FROM users WHERE deleted_at IS NULL'),
+  ]);
+  const [inventoryStore, orderStore, deliveryStore, usersStore] = await Promise.all([
+    import('../inventory/store.js'),
+    import('../orders/store.js'),
+    import('../delivery/store.js'),
+    import('../auth/users.js'),
+  ]);
+  inventoryStore._hydrateInventory(prodRows.map(rowToProduct));
+  orderStore._hydrateOrders(orderRows.map(rowToOrder));
+  deliveryStore._hydrateDeliveries(delivRows.map(rowToDelivery));
+  inventoryStore._hydrateMovements(movRows.map((r) => ({
+    id: String(r.id),
+    productId: String(r.product_id),
+    type: (r.type as 'inbound' | 'outbound') || 'inbound',
+    quantity: Number(r.quantity),
+    referenceNo: String(r.reference_no),
+    supplier: r.supplier ? String(r.supplier) : undefined,
+    occurredAt: new Date(r.occurred_at as string | Date).toISOString(),
+    createdBy: String(r.created_by),
+  })));
+  usersStore._hydrateUsers(userRows.map(rowToUser));
 }
 
 // ── PRODUCTS ────────────────────────────────────────────────────────
@@ -552,6 +419,98 @@ export async function createOrderDb(input: OrderCreateInput & { id?: string }): 
   ]);
 
   return rowToOrder(rows[0]);
+}
+
+export async function createOrderWithInventoryDb(
+  input: OrderCreateInput & { id?: string },
+): Promise<{ order: Order; products: Product[]; movements: StockMovement[] }> {
+  const pool = getPool();
+  if (!pool) throw new Error('Database unavailable');
+  const client = await pool.connect();
+  const id = input.id ?? `ORD-${randomUUID().slice(0, 8).toUpperCase()}`;
+
+  try {
+    await client.query('BEGIN');
+    let referenceNumber = input.referenceNumber?.trim().toUpperCase();
+    if (!referenceNumber) {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('smartstock-order-reference'))");
+      const year = new Date().getUTCFullYear();
+      const { rows } = await client.query(
+        'SELECT count(*)::int AS count FROM orders WHERE order_no LIKE $1',
+        [`SS-${year}-%`],
+      );
+      referenceNumber = `SS-${year}-${String(Number(rows[0]?.count ?? 0) + 1).padStart(5, '0')}`;
+    }
+
+    const items: Order['items'] = [];
+    const updatedProducts = new Map<string, Product>();
+    const movements: StockMovement[] = [];
+    for (const [index, item] of input.items.entries()) {
+      const { rows: productRows } = await client.query(
+        'SELECT * FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE',
+        [item.productId.trim()],
+      );
+      if (!productRows[0]) throw new Error(`Product not found: ${item.productId}`);
+      const product = rowToProduct(productRows[0]);
+      if (product.stock < item.quantity) throw new Error(`insufficient stock for ${product.name}`);
+      const { rows: updatedRows } = await client.query(
+        'UPDATE products SET stock = stock - $2, updated_at = NOW() WHERE id = $1 AND stock >= $2 RETURNING *',
+        [product.id, item.quantity],
+      );
+      if (!updatedRows[0]) throw new Error(`insufficient stock for ${product.name}`);
+      const updatedProduct = rowToProduct(updatedRows[0]);
+      updatedProducts.set(updatedProduct.id, updatedProduct);
+      items.push({
+        productId: product.id,
+        name: product.name,
+        quantity: item.quantity,
+        unitPrice: product.price,
+        lineTotal: item.quantity * product.price,
+      });
+      const movement: StockMovement = {
+        id: randomUUID(),
+        productId: product.id,
+        type: 'outbound',
+        quantity: item.quantity,
+        referenceNo: `ORDER-${referenceNumber}-${index + 1}`.toUpperCase(),
+        occurredAt: new Date().toISOString(),
+        createdBy: 'order',
+      };
+      await client.query(`
+        INSERT INTO stock_movements (id, product_id, type, movement_type, quantity, reference_no, occurred_at, created_by)
+        VALUES ($1, $2, 'outbound', 'outbound', $3, $4, $5, $6)
+      `, [movement.id, movement.productId, movement.quantity, movement.referenceNo, movement.occurredAt, movement.createdBy]);
+      movements.push(movement);
+    }
+
+    const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
+    const paidAmount = input.paidAmount ?? 0;
+    if (paidAmount > subtotal) throw new Error('paidAmount cannot exceed order total');
+    const paymentStatus: PaymentStatus = paidAmount <= 0 ? 'unpaid' : paidAmount >= subtotal ? 'paid' : 'partial';
+    const { rows: orderRows } = await client.query(`
+      INSERT INTO orders (
+        id, order_no, customer_name, customer_phone, delivery_address, delivery_date,
+        items, subtotal, total_amount, paid_amount, payment_status, order_status,
+        refunded_amount, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, 'processing', 0, NOW(), NOW())
+      RETURNING *
+    `, [
+      id, referenceNumber, input.customerName.trim(), input.customerPhone.trim(),
+      input.deliveryAddress.trim(), input.deliveryDate, JSON.stringify(items), subtotal,
+      paidAmount, paymentStatus,
+    ]);
+    await client.query('COMMIT');
+    return {
+      order: rowToOrder(orderRows[0]),
+      products: [...updatedProducts.values()],
+      movements,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function updateOrderDb(id: string, input: OrderUpdateInput): Promise<Order | null> {

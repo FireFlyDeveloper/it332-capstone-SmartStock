@@ -1,0 +1,16 @@
+.git
+**/.git
+**/node_modules
+**/dist
+**/coverage
+frontend
+desktop
+*.md
+.env
+.env.*
+**/.env
+**/.env.*
+Pass.txt
+password.txt
+**/Pass.txt
+**/password.txt

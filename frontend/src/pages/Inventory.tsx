@@ -41,6 +41,7 @@ export const Inventory: React.FC = () => {
   const [formData, setFormData] = useState<Omit<Product, 'id'>>(initialProductForm);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
+  const [savingProduct, setSavingProduct] = useState(false);
 
   // Filter products
   const filteredProducts = useMemo(() => {
@@ -71,16 +72,24 @@ export const Inventory: React.FC = () => {
     setFormData(initialProductForm);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingProduct) {
-      updateProduct(editingProduct.id, formData);
-      toast.success('Product updated successfully');
-    } else {
-      addProduct(formData);
-      toast.success('Product added successfully');
+    if (savingProduct) return;
+    setSavingProduct(true);
+    try {
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, formData);
+        toast.success('Product updated successfully');
+      } else {
+        await addProduct(formData);
+        toast.success('Product added successfully');
+      }
+      handleCloseModal();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save product.');
+    } finally {
+      setSavingProduct(false);
     }
-    handleCloseModal();
   };
 
   const handleRestock = (productId: string) => {
@@ -89,12 +98,16 @@ export const Inventory: React.FC = () => {
     setIsRestockModalOpen(true);
   };
 
-  const handleRestockSubmit = (e: React.FormEvent) => {
+  const handleRestockSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (restockProductId && restockQuantity > 0) {
-      restockProduct(restockProductId, restockQuantity);
-      toast.success(`Restocked ${restockQuantity} units successfully`);
-      setIsRestockModalOpen(false);
+      try {
+        await restockProduct(restockProductId, restockQuantity);
+        toast.success(`Restocked ${restockQuantity} units successfully`);
+        setIsRestockModalOpen(false);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Could not restock product.');
+      }
     }
   };
 
@@ -103,11 +116,14 @@ export const Inventory: React.FC = () => {
     setIsDeleteConfirmOpen(true);
   };
 
-  const confirmDelete = () => {
-    if (deleteProductId) {
-      deleteProduct(deleteProductId);
+  const confirmDelete = async () => {
+    if (!deleteProductId) return;
+    try {
+      await deleteProduct(deleteProductId);
       toast.success('Product deleted successfully');
       setIsDeleteConfirmOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not delete product.');
     }
   };
 
@@ -327,12 +343,11 @@ export const Inventory: React.FC = () => {
               </div>
               <h3 className="text-lg font-semibold text-gray-900">No products yet</h3>
               <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
-                Demo data will appear once the backend is connected. In the meantime, you can
-                add a demo product below.
+                No products are available yet. Add a product from the inventory controls to begin.
               </p>
               <button
                 type="button"
-                onClick={() => toast.info('Demo build — this would open the create form.')}
+                onClick={() => handleOpenModal()}
                 className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700"
               >
                 <Plus className="h-4 w-4" /> Add your first product
@@ -467,8 +482,8 @@ export const Inventory: React.FC = () => {
                   <button type="button" onClick={handleCloseModal} className="flex-1 btn-secondary">
                     Cancel
                   </button>
-                  <button type="submit" className="flex-1 btn-primary">
-                    {editingProduct ? 'Update' : 'Add'} Product
+                  <button type="submit" className="flex-1 btn-primary" disabled={savingProduct}>
+                    {savingProduct ? 'Saving…' : editingProduct ? 'Update' : 'Add'} Product
                   </button>
                 </div>
               </form>

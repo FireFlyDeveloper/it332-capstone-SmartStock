@@ -1,0 +1,52 @@
+services:
+  database:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${SMARTSTOCK_DB_NAME:?Set SMARTSTOCK_DB_NAME in the protected env file}
+      POSTGRES_USER: ${SMARTSTOCK_DB_USER:?Set SMARTSTOCK_DB_USER in the protected env file}
+      POSTGRES_PASSWORD: ${SMARTSTOCK_DB_PASSWORD:?Set SMARTSTOCK_DB_PASSWORD in the protected env file}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      CLIENT_URL: ${SMARTSTOCK_CLIENT_URL:?Set SMARTSTOCK_CLIENT_URL in the protected env file}
+      JWT_SECRET: ${SMARTSTOCK_JWT_SECRET:?Set SMARTSTOCK_JWT_SECRET in the protected env file}
+      DATABASE_URL: postgresql://${SMARTSTOCK_DB_USER:?Set SMARTSTOCK_DB_USER in the protected env file}:${SMARTSTOCK_DB_PASSWORD:?Set SMARTSTOCK_DB_PASSWORD in the protected env file}@database:5432/${SMARTSTOCK_DB_NAME:?Set SMARTSTOCK_DB_NAME in the protected env file}
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${SMARTSTOCK_HOST_PORT:?Set SMARTSTOCK_HOST_PORT in the protected env file}:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health/db').then(async r => { const b = await r.json(); if (!r.ok || b.mode !== 'postgres') process.exit(1) }).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  postgres-data:
+    name: ${SMARTSTOCK_VOLUME_NAME:?Set SMARTSTOCK_VOLUME_NAME in the protected env file}

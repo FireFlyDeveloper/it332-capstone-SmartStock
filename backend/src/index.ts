@@ -10,6 +10,7 @@ import { analyticsRoutes } from './analytics/routes.js'
 import { reportsRoutes } from './reports/routes.js'
 import { getDatabaseHealth } from './db/health.js'
 import { initDatabase } from './db/postgresStore.js'
+import { assertAuthConfig } from './auth/config.js'
 
 export const app = new Hono()
 
@@ -26,7 +27,10 @@ app.use('*', cors({
 }))
 
 app.get('/', (c) => c.json({ message: 'SmartStock API', status: 'ok' }))
-app.get('/health/db', async (c) => c.json(await getDatabaseHealth()))
+app.get('/health/db', async (c) => {
+  const health = await getDatabaseHealth()
+  return c.json(health, health.ok ? 200 : 503)
+})
 
 app.route('/auth', authRoutes)
 app.route('/products', inventoryRoutes)
@@ -37,10 +41,20 @@ app.route('/tracking', trackingRoutes)
 app.route('/analytics', analyticsRoutes)
 app.route('/reports', reportsRoutes)
 
-const port = Number(process.env.PORT) || 3000
+async function startServer(): Promise<void> {
+  try {
+    assertAuthConfig()
+    await initDatabase()
+  } catch (err) {
+    console.error('[db] Startup aborted: persistent database initialization failed.')
+    console.error(err instanceof Error ? err.message : 'Unknown database initialization error')
+    process.exitCode = 1
+    return
+  }
 
-if (!process.env.VITEST) {
-  void initDatabase().catch((err) => console.error('[db] Initialization error:', err))
+  const port = Number(process.env.PORT) || 3000
   console.log(`Server running on http://localhost:${port}`)
   serve({ fetch: app.fetch, port })
 }
+
+if (!process.env.VITEST) void startServer()

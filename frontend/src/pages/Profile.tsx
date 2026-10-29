@@ -82,8 +82,6 @@ export const ProfilePage: React.FC = () => {
   // ── Profile Form State ──────────────────────────────────────────
   const [name, setName] = useState(user?.name || '');
   const [email] = useState(user?.email || '');
-  const [phone, setPhone] = useState(user?.phone || '+63 917 555 8899');
-  const [department, setDepartment] = useState(user?.department || 'Glass & Aluminum Operations');
   const [profileSaving, setProfileSaving] = useState(false);
 
   // ── Password Form State ─────────────────────────────────────────
@@ -93,7 +91,7 @@ export const ProfilePage: React.FC = () => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+
 
   // ── Push Notification State ─────────────────────────────────────
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission>(() => {
@@ -131,8 +129,7 @@ export const ProfilePage: React.FC = () => {
   useEffect(() => {
     if (user) {
       setName(user.name || '');
-      if (user.phone) setPhone(user.phone);
-      if (user.department) setDepartment(user.department);
+
     }
   }, [user]);
 
@@ -157,20 +154,12 @@ export const ProfilePage: React.FC = () => {
 
     setProfileSaving(true);
     try {
-      // 1. Hit backend PATCH /auth/profile if available
-      await apiFetch<{ ok: boolean; user: { name: string } }>('/auth/profile', {
+      const response = await apiFetch<{ ok: boolean; user: { name: string } }>('/auth/profile', {
         method: 'PATCH',
         body: JSON.stringify({ name: name.trim() }),
-      }).catch(() => {
-        // Fallback gracefully for local/mock
       });
 
-      // 2. Update client context & localStorage
-      updateUser({
-        name: name.trim(),
-        phone: phone.trim(),
-        department: department.trim(),
-      });
+      updateUser({ name: response.user.name });
       toast.success('Profile information saved successfully!');
     } catch (err) {
       toast.error((err as Error).message || 'Failed to update profile.');
@@ -209,13 +198,7 @@ export const ProfilePage: React.FC = () => {
       const apiErr = err as ApiError;
       if (apiErr.status === 400 || apiErr.status === 401) {
         toast.error(apiErr.message || 'Current password incorrect.');
-      } else {
-        // Client-side fallback notification
-        toast.success('Password updated successfully (local session updated).');
-        setCurrentPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
-      }
+      } else toast.error(apiErr.message || 'Could not update password. Please try again.');
     } finally {
       setPasswordSaving(false);
     }
@@ -248,25 +231,31 @@ export const ProfilePage: React.FC = () => {
 
   const handleTestPushNotification = () => {
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification('🔔 SmartStock Test Alert', {
-        body: 'Glassram Aluminum Stock #AL-883 reached reorder threshold (12 sheets remaining).',
+      new Notification('SmartStock browser preview', {
+        body: 'This local preview does not verify server-side push delivery.',
       });
-      toast.success('Test desktop notification sent!');
+      toast.info('Local browser notification preview shown.');
     } else {
-      toast.info('🔔 SmartStock In-App Alert: Push alert simulation working!', {
-        description: 'Orders and inventory thresholds are monitored in real time.',
-      });
+      toast.error('Grant browser notification permission before previewing a local notification.');
     }
   };
 
   const handleSaveNotifPrefs = () => {
-    localStorage.setItem('smartstock_notif_prefs', JSON.stringify(notifPrefs));
-    toast.success('Notification preferences updated.');
+    try {
+      localStorage.setItem('smartstock_notif_prefs', JSON.stringify(notifPrefs));
+      toast.success('Notification preferences saved on this browser. Server-side delivery is not configured.');
+    } catch {
+      toast.error('Could not save notification preferences in this browser.');
+    }
   };
 
   const handleSaveAppSettings = () => {
-    localStorage.setItem('smartstock_app_settings', JSON.stringify(appSettings));
-    toast.success('System preferences saved.');
+    try {
+      localStorage.setItem('smartstock_app_settings', JSON.stringify(appSettings));
+      toast.success('Preferences saved on this browser.');
+    } catch {
+      toast.error('Could not save preferences in this browser.');
+    }
   };
 
   return (
@@ -297,18 +286,18 @@ export const ProfilePage: React.FC = () => {
               </span>
             </div>
             <p className="text-xs sm:text-sm font-medium text-slate-500 truncate">
-              {email || 'user@smartstock.local'} &bull; {department}
+              {email}
             </p>
             <div className="flex items-center gap-2 pt-1 text-[11px] font-semibold text-slate-400">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Active session: Manila Logistics Center</span>
+              <span>Authenticated session</span>
             </div>
           </div>
         </div>
 
         <div className="flex sm:flex-col items-end gap-2 shrink-0">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-            User ID: <span className="font-mono text-slate-600">{user?.id?.slice(0, 8) || 'USR-001'}</span>
+            User ID: <span className="font-mono text-slate-600">{user?.id?.slice(0, 8) || '—'}</span>
           </span>
         </div>
       </div>
@@ -346,7 +335,7 @@ export const ProfilePage: React.FC = () => {
         <div className="bg-white rounded-[28px] p-6 sm:p-8 border border-[#f1f5f9] shadow-sm space-y-6">
           <div className="border-b border-slate-100 pb-4">
             <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Personal &amp; Contact Details</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Update your contact information and department assignment</p>
+            <p className="text-xs text-slate-400 mt-0.5">Update the name associated with your account.</p>
           </div>
 
           <form onSubmit={handleSaveProfile} className="space-y-5">
@@ -374,27 +363,7 @@ export const ProfilePage: React.FC = () => {
                 <p className="text-[10px] text-slate-400">Email is managed by organization admin</p>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700">Contact Phone / Mobile</label>
-                <input
-                  type="text"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none"
-                  placeholder="+63 9XX XXX XXXX"
-                />
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700">Department / Branch</label>
-                <input
-                  type="text"
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none"
-                  placeholder="e.g. Glass & Aluminum Operations"
-                />
-              </div>
             </div>
 
             <div className="pt-4 flex justify-end">
@@ -534,34 +503,10 @@ export const ProfilePage: React.FC = () => {
                 </div>
                 <div>
                   <h4 className="text-sm font-extrabold text-slate-900">Two-Factor Authentication</h4>
-                  <p className="text-xs text-slate-400">Additional verification for high-privilege operations</p>
+                  <p className="text-xs text-slate-400">Multi-factor authentication is not configured for this application.</p>
                 </div>
               </div>
-
-              <div className="flex items-center justify-between p-3.5 bg-[#f8fafc] rounded-2xl border border-slate-100">
-                <div className="space-y-0.5">
-                  <p className="text-xs font-bold text-slate-800">2FA Security Status</p>
-                  <p className="text-[11px] text-slate-400">
-                    {twoFactorEnabled ? 'Enabled via Authenticator App' : 'Disabled (Recommended for Admin)'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTwoFactorEnabled(!twoFactorEnabled);
-                    toast.info(twoFactorEnabled ? '2FA disabled.' : '2FA activated successfully.');
-                  }}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    twoFactorEnabled ? 'bg-[#4f46e5]' : 'bg-slate-200'
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      twoFactorEnabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
+              <p className="text-xs text-slate-500">This security feature is unavailable until server-side 2FA support is implemented.</p>
             </div>
 
             <div className="bg-white rounded-[28px] p-6 border border-[#f1f5f9] shadow-sm space-y-4">
@@ -576,13 +521,9 @@ export const ProfilePage: React.FC = () => {
               </div>
 
               <div className="p-3.5 bg-[#f8fafc] rounded-2xl border border-slate-100 space-y-1 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-700">Client / Browser:</span>
-                  <span className="text-slate-500 font-mono">Chrome &bull; Linux/Web</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-700">IP Location:</span>
-                  <span className="text-slate-500">Metro Manila, Philippines</span>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-bold text-slate-700">Browser / device:</span>
+                  <span className="text-slate-500 font-mono text-right truncate">{navigator.userAgent}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-700">Session Status:</span>
@@ -626,7 +567,7 @@ export const ProfilePage: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 max-w-xl">
-                  Receive instant desktop popups for critical glass shortages, outgoing shipments, and new purchase orders even when SmartStock is minimized.
+                  Receive local browser notifications when explicitly previewed here. Background and server-side event delivery are not configured.
                 </p>
               </div>
             </div>
@@ -638,7 +579,7 @@ export const ProfilePage: React.FC = () => {
                   onClick={() => void handleRequestPushPermission()}
                   className="btn-primary text-xs font-bold py-2.5 px-4 shadow-sm"
                 >
-                  Enable Push Notifications
+                  Enable Browser Notifications
                 </button>
               ) : (
                 <button

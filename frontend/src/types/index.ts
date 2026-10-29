@@ -151,10 +151,10 @@ export interface DemandForecast {
   productName: string;
   currentStock: number;
   predictedDemand: number;
-  daysUntilStockout: number;
+  daysUntilStockout: number | null;
   recommendedReorderQty: number;
-  confidence: number;
-  trend: 'up' | 'down' | 'stable';
+  trend: 'up' | 'down' | 'stable' | 'insufficient_history';
+  historyMonths: number;
 }
 
 export interface DeliveryPrediction {

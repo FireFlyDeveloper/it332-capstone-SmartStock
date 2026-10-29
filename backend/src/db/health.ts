@@ -1,7 +1,7 @@
 import { getPool } from './client.js';
 
 export type DatabaseHealth = {
-  mode: 'postgres' | 'memory';
+  mode: 'postgres' | 'unavailable';
   ok: boolean;
 };
 
@@ -9,7 +9,7 @@ export async function getDatabaseHealth(): Promise<DatabaseHealth> {
   const pool = getPool();
 
   if (!pool) {
-    return { mode: 'memory', ok: true };
+    return { mode: 'unavailable', ok: false };
   }
 
   try {

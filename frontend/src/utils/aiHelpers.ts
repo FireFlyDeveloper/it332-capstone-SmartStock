@@ -1,156 +1,78 @@
+import type { Order, Product, DemandForecast } from '../types'
+
 /**
- * AI helpers — pure functions, copied verbatim from the Capstone frontend.
- * The "AI" predictions here are simple heuristics (sufficient for the UI
- * until a real /analytics/* endpoint lands). No backend dependency.
- *
- * Last touched: 2026-07-07
+ * Estimate demand from completed backend orders only. Require at least three
+ * calendar months of order history and recent product sales; otherwise return
+ * no estimate instead of displaying fabricated zero demand or confidence.
  */
-
-import type {
-  Product,
-  Order,
-  Delivery,
-  DemandForecast,
-  DeliveryPrediction,
-  AIRecommendation,
-} from '../types'
-
-// Production forecasting uses historical sales trends and safety stock parameters
 export const generateDemandForecast = (
   products: Product[],
   orders: Order[],
 ): DemandForecast[] => {
-  return products.slice(0, 8).map((product) => {
-    // Calculate average monthly demand from historical orders
-    const productOrders = orders.filter(
-      (o) => o.items.some((item) => item.productId === product.id) && o.orderStatus === 'completed',
-    )
+  const monthlyTotals = new Map<string, Map<string, number>>()
 
-    const totalQty = productOrders.reduce((sum, o) => {
-      const item = o.items.find((i) => i.productId === product.id)
-      return sum + (item?.quantity || 0)
-    }, 0)
+  for (const order of orders) {
+    if (order.orderStatus !== 'completed') continue
+    const month = order.date.slice(0, 7)
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) continue
 
-    // Simulate AI prediction with some randomness
-    const avgMonthlyDemand =
-      productOrders.length > 0 ? totalQty / 3 : Math.floor(Math.random() * 20) + 5
-    const predictedDemand = Math.floor(avgMonthlyDemand * (1 + (Math.random() * 0.4 - 0.2)))
-    const dailyDemand = predictedDemand / 30
-    const daysUntilStockout = dailyDemand > 0 ? Math.floor(product.stock / dailyDemand) : 999
+    for (const item of order.items) {
+      const productTotals = monthlyTotals.get(item.productId) ?? new Map<string, number>()
+      productTotals.set(month, (productTotals.get(month) ?? 0) + item.quantity)
+      monthlyTotals.set(item.productId, productTotals)
+    }
+  }
 
-    // Random trend simulation
-    const trends: ('up' | 'down' | 'stable')[] = ['up', 'down', 'stable']
-    const trend = trends[Math.floor(Math.random() * trends.length)]
+  const monthsWithOrders = [...new Set(
+    orders
+      .filter((order) => order.orderStatus === 'completed')
+      .map((order) => order.date.slice(0, 7))
+      .filter((month) => /^\d{4}-(0[1-9]|1[0-2])$/.test(month)),
+  )].sort()
 
-    // Confidence based on data availability
-    const confidence = Math.min(95, 60 + productOrders.length * 10)
+  if (monthsWithOrders.length === 0) return []
 
-    return {
+  const [startYear, startMonth] = monthsWithOrders[0].split('-').map(Number)
+  const [endYear, endMonth] = monthsWithOrders[monthsWithOrders.length - 1].split('-').map(Number)
+  const calendarMonths: string[] = []
+  for (let year = startYear, month = startMonth; year < endYear || (year === endYear && month <= endMonth);) {
+    calendarMonths.push(`${year}-${String(month).padStart(2, '0')}`)
+    month += 1
+    if (month === 13) {
+      year += 1
+      month = 1
+    }
+  }
+
+  if (calendarMonths.length < 3) return []
+
+  const recentMonths = calendarMonths.slice(-3)
+  const previousMonths = calendarMonths.slice(-6, -3)
+
+  return products.flatMap((product) => {
+    const productTotals = monthlyTotals.get(product.id)
+    const recentTotal = recentMonths.reduce((sum, month) => sum + (productTotals?.get(month) ?? 0), 0)
+    if (recentTotal <= 0) return []
+
+    const predictedDemand = Number((recentTotal / recentMonths.length).toFixed(1))
+    const previousTotal = previousMonths.reduce((sum, month) => sum + (productTotals?.get(month) ?? 0), 0)
+    const trend: DemandForecast['trend'] = previousMonths.length < 3 || previousTotal <= 0
+      ? 'insufficient_history'
+      : recentTotal > previousTotal * 1.1
+        ? 'up'
+        : recentTotal < previousTotal * 0.9
+          ? 'down'
+          : 'stable'
+
+    return [{
       productId: product.id,
       productName: product.name,
       currentStock: product.stock,
       predictedDemand,
-      daysUntilStockout: daysUntilStockout === 999 ? -1 : daysUntilStockout,
-      recommendedReorderQty: Math.floor(predictedDemand * 1.5),
-      confidence,
+      daysUntilStockout: predictedDemand > 0 ? Math.floor(product.stock / (predictedDemand / 30)) : null,
+      recommendedReorderQty: Math.max(0, Math.ceil(predictedDemand * 1.5) - product.stock),
       trend,
-    }
+      historyMonths: calendarMonths.length,
+    }]
   })
-}
-
-// Simulated AI Delivery ETA Prediction
-export const generateDeliveryPredictions = (deliveries: Delivery[]): DeliveryPrediction[] => {
-  return deliveries
-    .filter((d) => !['delivered', 'failed'].includes(d.status))
-    .map((delivery) => {
-      // Simulate AI prediction factors
-      const factors = [
-        'Traffic patterns',
-        'Weather conditions',
-        'Historical delivery data',
-        'Route optimization',
-      ].slice(0, Math.floor(Math.random() * 3) + 2)
-
-      // Add some random time variance from current time
-      const now = new Date()
-      const variance = Math.floor(Math.random() * 120) + 30 // 30-150 minutes
-      now.setMinutes(now.getMinutes() + variance)
-
-      return {
-        deliveryId: delivery.id,
-        predictedArrival: now.toISOString(),
-        confidence: Math.floor(Math.random() * 20) + 75,
-        factors,
-      }
-    })
-}
-
-// Generate AI Recommendations
-export const generateAIRecommendations = (forecasts: DemandForecast[]): AIRecommendation[] => {
-  const recommendations: AIRecommendation[] = []
-
-  // Low stock recommendations
-  const lowStockItems = forecasts.filter((f) => f.daysUntilStockout > 0 && f.daysUntilStockout < 14)
-  lowStockItems.slice(0, 3).forEach((item) => {
-    recommendations.push({
-      id: `rec-${item.productId}-stock`,
-      type: 'restock',
-      priority: item.daysUntilStockout < 7 ? 'high' : 'medium',
-      title: `Restock ${item.productName}`,
-      description: `AI predicts stockout in ${item.daysUntilStockout} days based on demand patterns`,
-      action: `Order ${item.recommendedReorderQty} units`,
-      estimatedImpact: `Prevent ${item.predictedDemand * 2} in lost sales`,
-      timestamp: new Date().toISOString(),
-    })
-  })
-
-  // High demand trend recommendations
-  const trendingUp = forecasts.filter((f) => f.trend === 'up' && f.confidence > 70)
-  trendingUp.slice(0, 2).forEach((item) => {
-    recommendations.push({
-      id: `rec-${item.productId}-demand`,
-      type: 'demand',
-      priority: 'medium',
-      title: `Increase ${item.productName} stock`,
-      description: `AI detects 15% demand increase for this item. Consider increasing inventory.`,
-      action: `Increase stock by ${Math.floor(item.currentStock * 0.3)} units`,
-      estimatedImpact: `Capture additional ${(item.predictedDemand * 0.15 * item.currentStock).toFixed(0)} in potential sales`,
-      timestamp: new Date().toISOString(),
-    })
-  })
-
-  // Pricing recommendations based on demand
-  const highDemand = forecasts.filter((f) => f.daysUntilStockout < 10)
-  if (highDemand.length > 0) {
-    recommendations.push({
-      id: 'rec-pricing-demand',
-      type: 'pricing',
-      priority: 'low',
-      title: 'Consider premium pricing',
-      description: 'Several items showing high demand - consider temporary price adjustment',
-      action: 'Review pricing strategy',
-      estimatedImpact: 'Potential 5-10% revenue increase',
-      timestamp: new Date().toISOString(),
-    })
-  }
-
-  // Sort by priority
-  const priorityOrder = { high: 0, medium: 1, low: 2 }
-  return recommendations.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])
-}
-
-// Get AI insight summary
-export const getAIInsights = (
-  forecasts: DemandForecast[],
-  recommendations: AIRecommendation[],
-) => {
-  const highPriorityRecs = recommendations.filter((r) => r.priority === 'high').length
-  const criticalStock = forecasts.filter((f) => f.daysUntilStockout > 0 && f.daysUntilStockout < 7)
-    .length
-  const trendingUp = forecasts.filter((f) => f.trend === 'up').length
-
-  return {
-    summary: `${highPriorityRecs} urgent actions needed. ${criticalStock} items critically low. ${trendingUp} items trending up.`,
-    alertLevel: criticalStock > 0 ? 'high' : highPriorityRecs > 0 ? 'medium' : 'low',
-  } as const
 }

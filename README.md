@@ -223,16 +223,32 @@ psql -d smartstock -f db/schema.sql
 ```
 
 ### 2. Environment Configuration
-Create a `.env` file in the project root:
+Create a `.env` file in the project root for backend runtime settings:
 
 ```ini
-DATABASE_URL=postgresql://user:password@localhost:5432/smartstock
-JWT_SECRET=your-secure-jwt-secret-key-2026
+DATABASE_URL=postgresql://user:***@localhost:5432/smartstock
+JWT_SECRET=<set-a-random-secret-at-least-32-characters-long>
 PORT=3000
 CLIENT_URL=http://localhost:5173,http://127.0.0.1:5173
 ```
 
-*(Note: If connecting via a local Unix socket, you can use `postgresql:///smartstock?host=/var/run/postgresql&port=5433`)*
+Production must provide `DATABASE_URL`, a strong private `JWT_SECRET`, and the exact frontend origin(s) in `CLIENT_URL`. Do not use the example placeholders as credentials.
+
+#### Docker backend deployment
+
+`docker-compose.backend.yml` runs the API with a dedicated PostgreSQL 16 service and named persistent data volume. The database port is not published to the host; the API is bound to loopback. Keep the Compose interpolation file outside the repository with directory permissions `0700` and file permissions `0600`. It must define `SMARTSTOCK_DB_NAME`, `SMARTSTOCK_DB_USER`, `SMARTSTOCK_DB_PASSWORD`, `SMARTSTOCK_JWT_SECRET`, `SMARTSTOCK_CLIENT_URL`, `SMARTSTOCK_HOST_PORT`, and `SMARTSTOCK_VOLUME_NAME`.
+
+For a canary, use a distinct Compose project name, a verified free loopback port, and a new volume name. Do not route production frontend traffic to the canary until its database-backed smoke tests pass. Example commands (replace the env-file path and project name with the approved target):
+
+```bash
+docker compose --env-file "$SMARTSTOCK_ENV_FILE" -p smartstock-candidate -f docker-compose.backend.yml config --quiet
+docker compose --env-file "$SMARTSTOCK_ENV_FILE" -p smartstock-candidate -f docker-compose.backend.yml build backend
+docker compose --env-file "$SMARTSTOCK_ENV_FILE" -p smartstock-candidate -f docker-compose.backend.yml up -d database
+docker compose --env-file "$SMARTSTOCK_ENV_FILE" -p smartstock-candidate -f docker-compose.backend.yml run --rm --no-deps backend node scripts/apply-schema.mjs
+docker compose --env-file "$SMARTSTOCK_ENV_FILE" -p smartstock-candidate -f docker-compose.backend.yml up -d backend
+```
+
+Apply `db/schema.sql` only to a new empty database or after a reviewed backup and migration plan; it contains a materialized-view drop/recreate. Never use `docker compose down -v` for routine deployment. Bootstrap the first administrator once through the operator-only CLI using a trusted secret manager; do not commit or echo the bootstrap password.
 
 ### 3. Backend Setup & Startup
 Install dependencies and run the API server:
@@ -243,7 +259,16 @@ npm install
 npm run dev
 ```
 
-The backend server starts on **`http://localhost:3000`**. On initial startup with an empty database, it will automatically hydrate and seed the full catalog and transaction history.
+The backend requires PostgreSQL and `DATABASE_URL` before startup; it listens on **`http://localhost:3000`** only after the database has been checked and existing records loaded. It does not create demo users, products, orders, or delivery records. Apply the database schema and load only approved, verified business data before use.
+
+To create the first administrator, provide `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_NAME`, and `BOOTSTRAP_ADMIN_PASSWORD` through a trusted environment/secret manager, then run this operator-only command once:
+
+```bash
+cd backend
+npm run bootstrap-admin
+```
+
+The command requires `DATABASE_URL` and a valid `JWT_SECRET`, hashes the password, and creates an admin only if no active admin exists. It never prints the password. Do not pass secrets as command-line arguments or commit them. After successful bootstrap, remove the temporary password from the runtime environment.
 
 Verify database health:
 ```bash
@@ -260,7 +285,9 @@ npm install
 npm run dev
 ```
 
-The web application opens at **`http://localhost:5173`**. The Vite development server automatically proxies `/api` and backend routes to `http://localhost:3000`.
+The web application opens at **`http://localhost:5173`**. The Vite development server proxies the backend routes (`/auth`, `/products`, `/inventory`, `/orders`, `/deliveries`, `/tracking`, `/analytics`, `/reports`, and `/health`) to `http://localhost:3000`. Set `VITE_API_PROXY_TARGET` when the local backend listens elsewhere.
+
+For a production build/deployment, set `VITE_API_BASE` to the absolute HTTPS origin of the deployed API (for example, `https://api.example.com`; do not include credentials). Production builds fail if this value is missing or invalid. Configure it in the frontend deployment platform's build environment; leave it unset only for local development, where the Vite proxy is used.
 
 ### 5. Desktop Application (Electron)
 To launch the desktop application:

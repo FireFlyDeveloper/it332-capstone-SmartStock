@@ -162,15 +162,8 @@ interface DataContextValue {
 
 const DataContext = createContext<DataContextValue | null>(null)
 
-// Safe fetch - returns a typed empty value on failure so the page renders.
-async function safeFetch<T>(path: string, fallback: T): Promise<T> {
-  try {
-    return await apiFetch<T>(path)
-  } catch (err) {
-    // TODO(backend): remove fallback once all endpoints are wired up.
-    console.warn(`[api] ${path} failed, using fallback:`, err)
-    return fallback
-  }
+async function safeFetch<T>(path: string): Promise<T> {
+  return apiFetch<T>(path)
 }
 
 function genRef(orders: Order[]): string {
@@ -187,18 +180,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   const refreshProducts = useCallback(async () => {
-    const list = await safeFetch<Product[]>('/products', [])
-    setProducts(list)
+    try {
+      setProducts(await safeFetch<Product[]>('/products'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load products')
+      throw err
+    }
   }, [])
 
   const refreshOrders = useCallback(async () => {
-    const list = await safeFetch<BackendOrder[]>('/orders', [])
-    setOrders(list.map(toFrontendOrder))
+    try {
+      const list = await safeFetch<BackendOrder[]>('/orders')
+      setOrders(list.map(toFrontendOrder))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load orders')
+      throw err
+    }
   }, [])
 
   const refreshDeliveries = useCallback(async () => {
-    const list = await safeFetch<Delivery[]>('/deliveries', [])
-    setDeliveries(list)
+    try {
+      setDeliveries(await safeFetch<Delivery[]>('/deliveries'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load deliveries')
+      throw err
+    }
   }, [])
 
   const refresh = useCallback(async () => {

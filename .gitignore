@@ -13,10 +13,14 @@ out/
 *.so
 *.dylib
 
-# Environment
+# Environment and local secret files
 .env
 .env.local
 .env.*.local
+Pass.txt
+password.txt
+**/Pass.txt
+**/password.txt
 
 # IDE
 .vscode/

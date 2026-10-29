@@ -16,9 +16,7 @@ import {
   RefreshCw, 
   AlertCircle
 } from 'lucide-react';
-import { useData } from '../components/DataContext';
 import { apiFetch } from '../api';
-import type { Order } from '../types';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { toast } from 'sonner';
 
@@ -49,7 +47,6 @@ export const TrackingPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryRef = searchParams.get('ref') || searchParams.get('order') || '';
   
-  const { orders } = useData();
 
   const [referenceInput, setReferenceInput] = useState(urlRef || queryRef || '');
   const [order, setOrder] = useState<PublicTrackingOrder | null>(null);
@@ -73,36 +70,22 @@ export const TrackingPage: React.FC = () => {
         `/tracking/${encodeURIComponent(cleanRef)}`,
         { auth: false }
       );
-      if (backendOrder && backendOrder.referenceNumber) {
-        setOrder({
-          ...backendOrder,
-          address: backendOrder.deliveryAddress || backendOrder.address,
-        });
-        setLastRefreshed(new Date());
-        setLoading(false);
-        return;
-      }
-    } catch {
-      // Fall through to memory demo store
-    }
-
-    // 2. Fallback to local memory orders (for demo or offline)
-    const foundOrder = orders.find(
-      (o: Order) =>
-        o.referenceNumber.toLowerCase() === cleanRef.toLowerCase() ||
-        o.id.toLowerCase() === cleanRef.toLowerCase(),
-    );
-
-    if (foundOrder) {
-      setOrder(foundOrder);
+      if (!backendOrder?.referenceNumber) throw new Error('Tracking service returned an invalid response.');
+      setOrder({
+        ...backendOrder,
+        address: backendOrder.deliveryAddress || backendOrder.address,
+      });
       setLastRefreshed(new Date());
-    } else {
+    } catch (err) {
       setOrder(null);
-      setError(`No active order found with reference "${cleanRef}". Please verify and try again.`);
-      toast.error('Order not found');
+      const message = err instanceof Error ? err.message : 'Unable to load tracking information.';
+      setError(message.includes('not found')
+        ? `No active order found with reference "${cleanRef}". Please verify and try again.`
+        : `Tracking information could not be loaded: ${message}`);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, [orders]);
+  }, []);
 
   // Initial load when referenceNumber param or query exists
   useEffect(() => {
@@ -123,11 +106,6 @@ export const TrackingPage: React.FC = () => {
     void executeSearch(referenceInput);
   };
 
-  const handleQuickPreset = (presetRef: string) => {
-    setReferenceInput(presetRef);
-    setSearchParams({ ref: presetRef });
-    void executeSearch(presetRef);
-  };
 
   const handleCopyLink = () => {
     if (!order) return;
@@ -290,24 +268,7 @@ export const TrackingPage: React.FC = () => {
             </div>
           )}
 
-          {/* Quick Demo Reference Suggestions */}
-          {!order && orders.length > 0 && (
-            <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap items-center gap-2 text-xs">
-              <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">
-                Quick Examples:
-              </span>
-              {orders.slice(0, 4).map((o) => (
-                <button
-                  key={o.id}
-                  type="button"
-                  onClick={() => handleQuickPreset(o.referenceNumber)}
-                  className="px-2.5 py-1 rounded-xl bg-slate-50 hover:bg-indigo-50 hover:text-[#4f46e5] text-slate-600 font-mono font-bold border border-slate-200/70 transition-colors"
-                >
-                  {o.referenceNumber}
-                </button>
-              ))}
-            </div>
-          )}
+
         </div>
 
         {/* ── Order Found View ────────────────────────────────────────── */}

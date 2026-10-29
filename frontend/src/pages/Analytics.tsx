@@ -8,11 +8,8 @@ import {
   AlertTriangle,
   ArrowUpRight,
   PieChart,
-  Sparkles,
-  Brain,
   TrendingDown,
   Minus,
-  Zap,
   Calendar,
   X,
   Banknote
@@ -99,10 +96,10 @@ export const Analytics: React.FC = () => {
     });
   }, [orders, fromDate, toDate]);
 
-  // AI Demand Forecasting
-  const aiForecasts = useMemo(
-    () => generateDemandForecast(products, filteredOrders.length > 0 ? filteredOrders : orders),
-    [products, filteredOrders, orders]
+  // Order-history demand estimates; no AI service is claimed here.
+  const demandEstimates = useMemo(
+    () => generateDemandForecast(products, filteredOrders),
+    [products, filteredOrders]
   );
 
   // Calculate inventory stats
@@ -122,7 +119,7 @@ export const Analytics: React.FC = () => {
     return products.filter(p => checkStockStatus(p.stock, p.threshold) !== 'healthy').length;
   }, [products]);
 
-  // Top Selling Items for bar chart - derived from filtered orders with fallback to topItemsData
+  // Top-selling items derived only from orders in the selected date range.
   const topSellingItems = useMemo(() => {
     const productCounts: Record<string, { name: string; quantity: number; category: string }> = {};
     filteredOrders.forEach(o => {
@@ -196,8 +193,8 @@ export const Analytics: React.FC = () => {
     return { fastMovingItems: fast, slowMovingItems: slow };
   }, [products, orders]);
 
-  // Dynamic AI Recommendations based on real product stock and demand
-  const aiRecommendations = useMemo(() => {
+  // Rule-based stock alerts derived from current product levels and thresholds.
+  const stockAlerts = useMemo(() => {
     const recs: Array<{ id: string; priority: 'high' | 'medium' | 'low'; type: string; title: string; description: string }> = [];
     const criticalProds = products.filter((p) => checkStockStatus(p.stock, p.threshold) === 'critical');
     const lowProds = products.filter((p) => checkStockStatus(p.stock, p.threshold) === 'low');
@@ -208,7 +205,7 @@ export const Analytics: React.FC = () => {
         priority: 'high',
         type: 'Reorder Alert',
         title: `Immediate restock needed for ${criticalProds[0].name}`,
-        description: `Current stock (${criticalProds[0].stock} ${criticalProds[0].unit}) is critically below safety threshold (${criticalProds[0].threshold}). Risk of stockout within 48 hours.`,
+        description: `Current stock (${criticalProds[0].stock} ${criticalProds[0].unit}) is critically below the configured threshold (${criticalProds[0].threshold}).`,
       });
     }
     if (lowProds.length > 0) {
@@ -217,42 +214,26 @@ export const Analytics: React.FC = () => {
         priority: 'medium',
         type: 'Inventory Buffer',
         title: `Plan procurement for ${lowProds[0].name}`,
-        description: `Stock level has reached reorder point (${lowProds[0].stock} / ${lowProds[0].threshold} ${lowProds[0].unit}). Order replenishment before lead time expiry.`,
+        description: `Stock level has reached the configured reorder threshold (${lowProds[0].stock} / ${lowProds[0].threshold} ${lowProds[0].unit}).`,
       });
     }
-    recs.push({
-      id: 'rec-ses',
-      priority: 'medium',
-      type: 'Demand Forecast',
-      title: 'Simple Exponential Smoothing (SES) Signal',
-      description: 'Historical monthly outbound movements indicate steady baseline consumption for clear float glass and hollow tubular frames.',
-    });
-    recs.push({
-      id: 'rec-bulk',
-      priority: 'low',
-      type: 'Procurement Efficiency',
-      title: 'Consolidate Batangas Extrusion Orders',
-      description: 'Group upcoming purchase orders across active aluminum profiles to unlock commercial wholesale pricing.',
-    });
     return recs;
   }, [products]);
 
-  // Calculate inventory movements from real products and orders
+  // Current stock and order quantities from the selected date range.
   const inventoryMovements = useMemo(() => {
     return products.slice(0, 8).map(product => {
       const orderedQty = filteredOrders
         .filter(o => o.orderStatus !== 'cancelled')
-        .reduce((sum, o) => {
-          const item = o.items.find(i => i.productId === product.id);
-          return sum + (item?.quantity || 0);
-        }, 0);
+        .reduce((sum, o) => sum + o.items
+          .filter(item => item.productId === product.id)
+          .reduce((qty, item) => qty + item.quantity, 0), 0);
       return {
         productId: product.id,
         productName: product.name,
         category: product.category,
-        inward: product.stock,
-        outward: orderedQty,
-        balance: product.stock
+        stock: product.stock,
+        orderedQty,
       };
     });
   }, [products, filteredOrders]);
@@ -328,10 +309,10 @@ export const Analytics: React.FC = () => {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
-              AI Analytics &amp; Forecasting
+              Operations Analytics &amp; Demand Estimates
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              DeepSeek AI analytics and demand forecasting for glass, aluminum profiles, and order flow.
+              Sales, stock, and order-history estimates from backend records. Demand estimates are rule-based, not AI-generated.
             </p>
           </div>
           <button
@@ -435,10 +416,6 @@ export const Analytics: React.FC = () => {
               <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#10b981] flex items-center justify-center shrink-0 shadow-2xs">
                 <TrendingUp className="w-5 h-5" />
               </div>
-              <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold shrink-0 border border-emerald-100/60">
-                <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
-                <span>+8.2% this month</span>
-              </div>
             </div>
             <div className="space-y-1 min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 truncate">
@@ -457,13 +434,9 @@ export const Analytics: React.FC = () => {
 
           {/* 2. Order Volume */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover flex flex-col justify-between min-w-0">
-            <div className="flex items-center justify-between gap-2 mb-4 min-w-0">
+            <div className="flex items-center gap-2 mb-4 min-w-0">
               <div className="w-11 h-11 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0 shadow-2xs">
                 <Package className="w-5 h-5" />
-              </div>
-              <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-50 text-[#4f46e5] text-xs font-bold shrink-0 border border-indigo-100/60">
-                <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
-                <span>{fromDate || toDate ? `${filteredOrders.length} in range` : '+15% this quarter'}</span>
               </div>
             </div>
             <div className="space-y-1 min-w-0">
@@ -483,13 +456,9 @@ export const Analytics: React.FC = () => {
 
           {/* 3. Average Order Value */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover flex flex-col justify-between min-w-0">
-            <div className="flex items-center justify-between gap-2 mb-4 min-w-0">
+            <div className="flex items-center gap-2 mb-4 min-w-0">
               <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 shadow-2xs">
                 <PieChart className="w-5 h-5" />
-              </div>
-              <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold shrink-0 border border-emerald-100/60">
-                <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
-                <span>+5% vs last month</span>
               </div>
             </div>
             <div className="space-y-1 min-w-0">
@@ -815,12 +784,12 @@ export const Analytics: React.FC = () => {
           </div>
         </div>
 
-        {/* Inventory Movement Table */}
+        {/* Inventory and order snapshot */}
         <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Inventory Movement Summary</h3>
-              <p className="text-xs text-slate-500">Recent stock activity</p>
+              <h3 className="text-lg font-bold text-slate-900">Inventory and Order Snapshot</h3>
+              <p className="text-xs text-slate-500">Current backend stock compared with non-cancelled orders in the selected period</p>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -829,9 +798,8 @@ export const Analytics: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Product</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Category</th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Inward</th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Outward</th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Balance</th>
+                  <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Current Stock</th>
+                  <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Units Ordered</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f1f5f9]">
@@ -843,9 +811,8 @@ export const Analytics: React.FC = () => {
                         {item.category}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right text-sm text-emerald-600 font-bold">{item.inward}</td>
-                    <td className="px-4 py-3 text-right text-sm text-rose-600 font-bold">{item.outward}</td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-slate-900">{item.balance}</td>
+                    <td className="px-4 py-3 text-right text-sm text-emerald-600 font-bold">{item.stock}</td>
+                    <td className="px-4 py-3 text-right text-sm text-rose-600 font-bold">{item.orderedQty}</td>
                   </tr>
                 ))}
               </tbody>
@@ -853,27 +820,25 @@ export const Analytics: React.FC = () => {
           </div>
         </div>
 
-        {/* AI-Powered Demand Forecasting */}
+        {/* Order-history demand estimates */}
         <div className="bg-gradient-to-r from-violet-50/70 to-indigo-50/70 rounded-[28px] border border-violet-100/80 p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-violet-100 rounded-xl flex items-center justify-center shadow-2xs">
-                <Brain className="w-5 h-5 text-violet-600" />
+                <Package className="w-5 h-5 text-violet-600" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900">
-                  AI Demand Forecasting
-                </h3>
-                <p className="text-xs text-slate-600">Predicted demand based on historical patterns</p>
+                <h3 className="text-lg font-bold text-slate-900">Demand Estimates from Order History</h3>
+                <p className="text-xs text-slate-600">Average completed-order demand across the latest 3 calendar months</p>
               </div>
             </div>
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-              <Sparkles className="w-3.5 h-3.5 text-violet-500" />
-              <span>Updated just now</span>
+              <Clock className="w-3.5 h-3.5 text-violet-500" />
+              <span>Completed orders only</span>
             </div>
           </div>
           
-          {/* Demand Forecast Table */}
+          {/* Demand Estimate Table */}
           <div className="bg-white rounded-2xl border border-violet-100/80 overflow-hidden mb-6 shadow-2xs">
             <table className="w-full">
               <thead className="bg-violet-50/70 border-b border-violet-100/80">
@@ -881,61 +846,62 @@ export const Analytics: React.FC = () => {
                   <th className="px-4 py-3 text-left text-xs font-bold text-violet-700 uppercase tracking-wider">Product</th>
                   <th className="px-4 py-3 text-right text-xs font-bold text-violet-700 uppercase tracking-wider">Current Stock</th>
                   <th className="px-4 py-3 text-right text-xs font-bold text-violet-700 uppercase tracking-wider">Predicted Demand</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-violet-700 uppercase tracking-wider">Days Until Stockout</th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-violet-700 uppercase tracking-wider">Recommended Reorder</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-violet-700 uppercase tracking-wider">Estimated Days of Stock</th>
+                  <th className="px-4 py-3 text-right text-xs font-bold text-violet-700 uppercase tracking-wider">Suggested Reorder (1.5-month target)</th>
                   <th className="px-4 py-3 text-center text-xs font-bold text-violet-700 uppercase tracking-wider">Trend</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-violet-700 uppercase tracking-wider">Confidence</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-violet-700 uppercase tracking-wider">History</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f1f5f9]">
-                {aiForecasts.slice(0, 6).map((forecast) => (
-                  <tr key={forecast.productId} className="hover:bg-violet-50/30 transition-colors">
-                    <td className="px-4 py-3 text-sm text-slate-900 font-medium">{forecast.productName}</td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{forecast.currentStock}</td>
-                    <td className="px-4 py-3 text-right text-sm text-slate-600">{forecast.predictedDemand}/mo</td>
+                {demandEstimates.slice(0, 6).map((estimate) => (
+                  <tr key={estimate.productId} className="hover:bg-violet-50/30 transition-colors">
+                    <td className="px-4 py-3 text-sm text-slate-900 font-medium">{estimate.productName}</td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{estimate.currentStock}</td>
+                    <td className="px-4 py-3 text-right text-sm text-slate-600">{estimate.predictedDemand}/mo</td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                        forecast.daysUntilStockout < 7 ? 'bg-rose-100 text-rose-700' :
-                        forecast.daysUntilStockout < 14 ? 'bg-amber-100 text-amber-700' :
+                        estimate.daysUntilStockout === null ? 'bg-slate-100 text-slate-600' :
+                        estimate.daysUntilStockout < 7 ? 'bg-rose-100 text-rose-700' :
+                        estimate.daysUntilStockout < 14 ? 'bg-amber-100 text-amber-700' :
                         'bg-emerald-100 text-emerald-700'
                       }`}>
-                        {forecast.daysUntilStockout > 0 ? `${forecast.daysUntilStockout} days` : 'OK'}
+                        {estimate.daysUntilStockout === null ? 'Unavailable' : `${estimate.daysUntilStockout} days`}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-violet-700">{forecast.recommendedReorderQty} units</td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-violet-700">{estimate.recommendedReorderQty} units</td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        {forecast.trend === 'up' && <TrendingUp className="w-4 h-4 text-emerald-500" />}
-                        {forecast.trend === 'down' && <TrendingDown className="w-4 h-4 text-rose-500" />}
-                        {forecast.trend === 'stable' && <Minus className="w-4 h-4 text-slate-400" />}
-                        <span className="text-xs font-semibold capitalize text-slate-600">{forecast.trend}</span>
+                        {estimate.trend === 'up' && <TrendingUp className="w-4 h-4 text-emerald-500" />}
+                        {estimate.trend === 'down' && <TrendingDown className="w-4 h-4 text-rose-500" />}
+                        {estimate.trend === 'stable' && <Minus className="w-4 h-4 text-slate-400" />}
+                        <span className="text-xs font-semibold capitalize text-slate-600">
+                          {estimate.trend === 'insufficient_history' ? 'Limited history' : estimate.trend}
+                        </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center">
-                        <div className="w-16 bg-slate-100 rounded-full h-2 mr-2 overflow-hidden">
-                          <div 
-                            className="bg-violet-500 h-2 rounded-full transition-all duration-500" 
-                            style={{ width: `${forecast.confidence}%` }} 
-                          />
-                        </div>
-                        <span className="text-xs font-bold text-slate-600">{forecast.confidence}%</span>
-                      </div>
-                    </td>
+                    <td className="px-4 py-3 text-center text-xs font-semibold text-slate-600">{estimate.historyMonths} months</td>
                   </tr>
                 ))}
+                {demandEstimates.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
+                      No estimate available. At least three calendar months of completed orders and recent product sales are required.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
           
-          {/* AI Recommendations */}
+          {/* Rule-based stock alerts */}
           <div>
             <h4 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
-              <Zap className="w-4 h-4 text-amber-500" />
-              AI Recommendations
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+              Stock Alerts
             </h4>
+            <p className="text-xs text-slate-500 mb-3">Based on current backend stock levels and configured reorder thresholds; not AI-generated.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {aiRecommendations.slice(0, 4).map((rec) => (
+              {stockAlerts.slice(0, 4).map((rec) => (
                 <div key={rec.id} className="bg-white rounded-2xl p-4 border border-violet-100 shadow-2xs">
                   <div className="flex items-start justify-between mb-1.5">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
@@ -951,6 +917,9 @@ export const Analytics: React.FC = () => {
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">{rec.description}</p>
                 </div>
               ))}
+              {stockAlerts.length === 0 && (
+                <p className="text-sm text-slate-500 md:col-span-2">No products currently meet the configured low-stock alert threshold.</p>
+              )}
             </div>
           </div>
         </div>

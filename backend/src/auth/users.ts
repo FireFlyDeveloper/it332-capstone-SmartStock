@@ -8,7 +8,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { isDbSyncActive } from '../db/syncState.js';
-import { createUserDb, updateUserDb } from '../db/postgresStore.js';
+import { createUserDb, findUserByEmailDb, updateUserDb } from '../db/postgresStore.js';
 
 export type Role = 'admin' | 'staff';
 
@@ -27,6 +27,23 @@ const byEmail = new Map<string, string>();       // email -> id
 export function findByEmail(email: string): UserRecord | null {
   const id = byEmail.get(email.toLowerCase());
   return id ? users.get(id) ?? null : null;
+}
+
+export async function findUserByEmailRecord(email: string): Promise<UserRecord | null> {
+  const normalizedEmail = email.toLowerCase();
+  if (!isDbSyncActive()) return findByEmail(normalizedEmail);
+
+  const record = await findUserByEmailDb(normalizedEmail);
+  const cachedId = byEmail.get(normalizedEmail);
+  if (cachedId && cachedId !== record?.id) users.delete(cachedId);
+  if (!record) {
+    byEmail.delete(normalizedEmail);
+    return null;
+  }
+
+  users.set(record.id, record);
+  byEmail.set(normalizedEmail, record.id);
+  return record;
 }
 
 export function findById(id: string): UserRecord | null {
@@ -53,11 +70,6 @@ export function createUser(input: {
   };
   users.set(record.id, record);
   byEmail.set(record.email, record.id);
-  if (isDbSyncActive()) {
-    createUserDb(input).catch((err) => {
-      console.error('[auth/users] DB write error on createUser:', err);
-    });
-  }
   return record;
 }
 
@@ -66,12 +78,32 @@ export function updateUser(id: string, updates: { name?: string; passwordHash?: 
   if (!user) return null;
   if (updates.name !== undefined) user.name = updates.name.trim();
   if (updates.passwordHash !== undefined) user.passwordHash = updates.passwordHash;
-  if (isDbSyncActive()) {
-    updateUserDb(id, updates).catch((err) => {
-      console.error('[auth/users] DB write error on updateUser:', err);
-    });
-  }
   return user;
+}
+
+export async function createUserRecord(input: {
+  email: string;
+  name: string;
+  passwordHash: string;
+  role: Role;
+}): Promise<UserRecord> {
+  if (!isDbSyncActive()) return createUser(input);
+  const record = await createUserDb(input);
+  users.set(record.id, record);
+  byEmail.set(record.email.toLowerCase(), record.id);
+  return record;
+}
+
+export async function updateUserRecord(
+  id: string,
+  updates: { name?: string; passwordHash?: string },
+): Promise<UserRecord | null> {
+  if (!isDbSyncActive()) return updateUser(id, updates);
+  const record = await updateUserDb(id, updates);
+  if (!record) return null;
+  users.set(record.id, record);
+  byEmail.set(record.email.toLowerCase(), record.id);
+  return record;
 }
 
 /**

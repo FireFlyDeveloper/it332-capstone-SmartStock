@@ -5,8 +5,13 @@
  * Last touched: 2026-07-17
  */
 
+import { isDbSyncActive } from '../db/syncState.js';
+import { createOrderWithInventoryDb } from '../db/postgresStore.js';
+import { applyPaymentDb, applyRefundDb, cancelOrderDb, updateOrderDb } from '../db/postgresStore.js';
+import { _applyPersistedOrderStock, findProductById, listProducts, recordOutboundStock } from '../inventory/store.js';
 import { sendNotificationEvent } from '../notifications/webhook.js';
 import {
+  _upsertOrder,
   applyPayment,
   applyRefund,
   cancelOrder,
@@ -23,7 +28,7 @@ import {
   type RefundType,
 } from './store.js';
 
-type ServiceResult<T> = { ok: true; data: T } | { ok: false; status: 400 | 404 | 409; error: string };
+type ServiceResult<T> = { ok: true; data: T } | { ok: false; status: 400 | 404 | 409 | 503; error: string };
 
 const ORDER_STATUSES: OrderStatus[] = ['processing', 'in_transit', 'delivered', 'cancelled'];
 
@@ -165,22 +170,72 @@ export function getOrderByReferenceRecord(referenceNumber: string): ServiceResul
   return { ok: true, data: order };
 }
 
-export function addOrderRecord(body: unknown): ServiceResult<Order> {
+export async function addOrderRecord(body: unknown): Promise<ServiceResult<Order>> {
   const parsed = parseCreate(body);
   if (!parsed.ok) return parsed;
+
+  const requiredByProduct = new Map<string, number>();
+  for (const item of parsed.data.items) {
+    requiredByProduct.set(item.productId, (requiredByProduct.get(item.productId) ?? 0) + item.quantity);
+  }
+  const products = new Map(listProducts().map((product) => [product.id, product]));
+  for (const [productId, quantity] of requiredByProduct) {
+    const product = products.get(productId);
+    if (!product) return { ok: false, status: 409, error: `product not found: ${productId}` };
+    if (product.stock < quantity) return { ok: false, status: 409, error: `insufficient stock for ${product.name}` };
+  }
+
+  const authoritativeItems = parsed.data.items.map((item) => {
+    const product = products.get(item.productId)!;
+    return { ...item, name: product.name, unitPrice: product.price };
+  });
+  const total = authoritativeItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  if ((parsed.data.paidAmount ?? 0) > total) {
+    return { ok: false, status: 400, error: 'paidAmount cannot exceed order total' };
+  }
+
   try {
-    return { ok: true, data: createOrder(parsed.data) };
+    if (isDbSyncActive()) {
+      const result = await createOrderWithInventoryDb({ ...parsed.data, items: authoritativeItems });
+      const persistedProducts = new Map(result.products.map((product) => [product.id, product]));
+      for (const movement of result.movements) {
+        const product = persistedProducts.get(movement.productId);
+        if (product) _applyPersistedOrderStock(product, movement);
+      }
+      _upsertOrder(result.order);
+      return { ok: true, data: result.order };
+    }
+
+    const order = createOrder({ ...parsed.data, items: authoritativeItems });
+    for (const [index, item] of authoritativeItems.entries()) {
+      const result = recordOutboundStock(item.productId, {
+        quantity: item.quantity,
+        referenceNo: `ORDER-${order.referenceNumber}-${index + 1}`,
+        createdBy: 'order',
+      });
+      if (!result) throw new Error(`product not found: ${item.productId}`);
+    }
+    return { ok: true, data: order };
   } catch (error) {
     return { ok: false, status: 409, error: error instanceof Error ? error.message : 'could not create order' };
   }
 }
 
-export function editOrderRecord(id: string, body: unknown): ServiceResult<Order> {
+export async function editOrderRecord(id: string, body: unknown): Promise<ServiceResult<Order>> {
   const parsed = parseUpdate(body);
   if (!parsed.ok) return parsed;
   const current = findOrderById(id);
   if (!current) return { ok: false, status: 404, error: 'order not found' };
-  const order = updateOrder(id, parsed.data);
+  let order: Order | null;
+  try {
+    order = isDbSyncActive()
+      ? await updateOrderDb(id, parsed.data)
+      : updateOrder(id, parsed.data);
+    if (order && isDbSyncActive()) _upsertOrder(order);
+  } catch (error) {
+    console.error('[orders/service] database update failed:', error);
+    return { ok: false, status: 503, error: 'order update could not be saved' };
+  }
   if (!order) return { ok: false, status: 404, error: 'order not found' };
   if (parsed.data.orderStatus !== undefined && current.orderStatus !== order.orderStatus) {
     void sendNotificationEvent({
@@ -200,13 +255,20 @@ export function editOrderRecord(id: string, body: unknown): ServiceResult<Order>
   return { ok: true, data: order };
 }
 
-export function cancelOrderRecord(id: string): ServiceResult<{ ok: true; order: Order }> {
-  const order = cancelOrder(id);
+export async function cancelOrderRecord(id: string): Promise<ServiceResult<{ ok: true; order: Order }>> {
+  let order: Order | null;
+  try {
+    order = isDbSyncActive() ? await cancelOrderDb(id) : cancelOrder(id);
+    if (order && isDbSyncActive()) _upsertOrder(order);
+  } catch (error) {
+    console.error('[orders/service] database cancel failed:', error);
+    return { ok: false, status: 503, error: 'order cancellation could not be saved' };
+  }
   if (!order) return { ok: false, status: 404, error: 'order not found' };
   return { ok: true, data: { ok: true, order } };
 }
 
-export function processPayment(orderId: string, body: unknown): ServiceResult<Order> {
+export async function processPayment(orderId: string, body: unknown): Promise<ServiceResult<Order>> {
   if (typeof body !== 'object' || body === null) return { ok: false, status: 400, error: 'invalid body' };
   const amount = readNumber((body as Record<string, unknown>).amount, 'amount');
   if (!amount.ok || amount.data === undefined) return amount as ServiceResult<Order>;
@@ -214,12 +276,21 @@ export function processPayment(orderId: string, body: unknown): ServiceResult<Or
   const current = findOrderById(orderId);
   if (!current) return { ok: false, status: 404, error: 'order not found' };
   if (current.paidAmount + amount.data > current.total) return { ok: false, status: 400, error: 'payment exceeds order total' };
-  const order = applyPayment(orderId, amount.data);
+  let order: Order | null;
+  try {
+    order = isDbSyncActive()
+      ? await applyPaymentDb(orderId, amount.data)
+      : applyPayment(orderId, amount.data);
+    if (order && isDbSyncActive()) _upsertOrder(order);
+  } catch (error) {
+    console.error('[orders/service] database payment failed:', error);
+    return { ok: false, status: 503, error: 'payment could not be saved' };
+  }
   if (!order) return { ok: false, status: 404, error: 'order not found' };
   return { ok: true, data: order };
 }
 
-export function processRefund(orderId: string, body: unknown): ServiceResult<Order> {
+export async function processRefund(orderId: string, body: unknown): Promise<ServiceResult<Order>> {
   if (typeof body !== 'object' || body === null) return { ok: false, status: 400, error: 'invalid body' };
   const input = body as Record<string, unknown>;
   const amount = readNumber(input.amount, 'amount');
@@ -233,7 +304,16 @@ export function processRefund(orderId: string, body: unknown): ServiceResult<Ord
   const current = findOrderById(orderId);
   if (!current) return { ok: false, status: 404, error: 'order not found' };
   if (amount.data > current.paidAmount) return { ok: false, status: 400, error: 'refund exceeds paid amount' };
-  const order = applyRefund(orderId, amount.data, reason.data, type.data as RefundType);
+  let order: Order | null;
+  try {
+    order = isDbSyncActive()
+      ? await applyRefundDb(orderId, amount.data, reason.data, type.data as RefundType)
+      : applyRefund(orderId, amount.data, reason.data, type.data as RefundType);
+    if (order && isDbSyncActive()) _upsertOrder(order);
+  } catch (error) {
+    console.error('[orders/service] database refund failed:', error);
+    return { ok: false, status: 503, error: 'refund could not be saved' };
+  }
   if (!order) return { ok: false, status: 404, error: 'order not found' };
   return { ok: true, data: order };
 }

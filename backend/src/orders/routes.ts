@@ -24,7 +24,7 @@ orderRoutes.use('*', requireAuth);
 orderRoutes.get('/', listOrdersController);
 orderRoutes.get('/reference/:referenceNumber', getOrderByReferenceController);
 orderRoutes.get('/:id', getOrderController);
-orderRoutes.post('/', requireRole('admin'), createOrderController);
+orderRoutes.post('/', requireStaffOrAdmin, createOrderController);
 orderRoutes.put('/:id', requireStaffOrAdmin, updateOrderController);
 orderRoutes.patch('/:id', requireStaffOrAdmin, updateOrderController);
 orderRoutes.delete('/:id', requireRole('admin'), deleteOrderController);

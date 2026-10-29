@@ -67,15 +67,19 @@ export const DeliveryPage: React.FC = () => {
     return statusMap[status] ?? 0;
   };
 
-  const handleUpdateStatus = (deliveryId: string) => {
+  const handleUpdateStatus = async (deliveryId: string) => {
     const delivery = deliveries.find(d => d.id === deliveryId);
     if (!delivery) return;
 
     const nextStatus = getNextStatus(delivery.status);
-    if (nextStatus) {
-      const nextStep = getStepIndex(nextStatus);
-      updateDeliveryStatus(deliveryId, nextStatus, nextStep);
+    if (!nextStatus) return;
+
+    const nextStep = getStepIndex(nextStatus);
+    try {
+      await updateDeliveryStatus(deliveryId, nextStatus, nextStep);
       toast.success(`Delivery status updated to ${nextStatus.replace('_', ' ')}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update delivery status.');
     }
   };
 

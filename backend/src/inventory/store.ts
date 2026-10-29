@@ -252,6 +252,16 @@ export function _hydrateMovements(loaded: StockMovement[]): void {
   }
 }
 
+export function _applyPersistedOrderStock(product: Product, movement: StockMovement): void {
+  const previous = products.get(product.id);
+  if (previous && previous.sku !== product.sku) bySku.delete(previous.sku);
+  products.set(product.id, product);
+  bySku.set(product.sku, product.id);
+  movements.set(movement.id, movement);
+  movementRefs.set(movement.referenceNo, movement.id);
+  movementIdsByProduct.set(product.id, [...(movementIdsByProduct.get(product.id) ?? []), movement.id]);
+}
+
 export function _resetInventoryStore(seed = true): void {
   products.clear();
   bySku.clear();
@@ -259,13 +269,14 @@ export function _resetInventoryStore(seed = true): void {
   movementIdsByProduct.clear();
   movementRefs.clear();
   if (!seed) return;
-  for (const item of [
-    { sku: 'GLS-CLR-6MM', name: 'Clear Glass 6mm', category: 'glass' as const, unit: 'sheet', stock: 24, price: 1200, threshold: 8, description: 'Standard clear glass sheet' },
-    { sku: 'ALU-FRM-BLK', name: 'Black Aluminum Frame', category: 'aluminum' as const, unit: 'length', stock: 7, price: 850, threshold: 10, description: 'Powder-coated aluminum frame' },
-    { sku: 'GLS-TMP-10MM', name: 'Tempered Glass 10mm', category: 'glass' as const, unit: 'sheet', stock: 0, price: 2200, threshold: 6, description: 'Heavy-duty tempered glass panel' },
-  ]) {
-    createProduct(item);
+  const seedProducts: Array<[string, ProductCreateInput]> = [
+    ['PRD-001', { sku: 'GLS-CLR-6MM', name: 'Clear Glass 6mm', category: 'glass', unit: 'sheet', stock: 24, price: 1250, threshold: 8, description: 'Standard clear glass sheet' }],
+    ['PRD-002', { sku: 'ALU-FRM-BLK', name: 'Black Aluminum Frame', category: 'aluminum', unit: 'length', stock: 7, price: 900, threshold: 10, description: 'Powder-coated aluminum frame' }],
+    ['PRD-003', { sku: 'GLS-TMP-10MM', name: 'Tempered Glass 10mm', category: 'glass', unit: 'sheet', stock: 0, price: 2200, threshold: 6, description: 'Heavy-duty tempered glass panel' }],
+  ];
+  for (const [id, input] of seedProducts) {
+    const product = { ...toRecord(input), id };
+    products.set(id, product);
+    bySku.set(product.sku, id);
   }
 }
-
-_resetInventoryStore();

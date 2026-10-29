@@ -1,8 +1,4 @@
-try {
-  process.loadEnvFile?.();
-} catch {
-  // Ignore if .env does not exist
-}
+import '../config/env.js';
 
 export const databaseUrl = process.env.DATABASE_URL?.trim() || '';
 
