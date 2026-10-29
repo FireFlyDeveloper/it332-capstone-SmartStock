@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus,
   Search,
@@ -74,6 +74,10 @@ function toProductPayload(form: ProductFormData): Omit<Product, 'id'> {
   };
 }
 
+type ProductListMode = 'pages' | 'infinite';
+
+const PRODUCT_PAGE_SIZES = [10, 25, 50, 100] as const;
+
 export const Inventory: React.FC = () => {
   const { products, addProduct, updateProduct, deleteProduct, restockProduct, loading } = useData();
   const { isAdmin } = useAuth();
@@ -81,6 +85,11 @@ export const Inventory: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'glass' | 'aluminum'>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'healthy'>('all');
+  const [listMode, setListMode] = useState<ProductListMode>('pages');
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [visibleCount, setVisibleCount] = useState(25);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -92,17 +101,59 @@ export const Inventory: React.FC = () => {
   const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
   const [savingProduct, setSavingProduct] = useState(false);
 
-  // Filter products
-  const filteredProducts = useMemo(() => {
-    return products.filter(product => {
-      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           product.sku.toLowerCase().includes(searchTerm.toLowerCase());
+  const resetListPosition = () => {
+    setCurrentPage(1);
+    setVisibleCount(pageSize);
+  };
+
+  const searchTokens = useMemo(
+    () => searchTerm.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean),
+    [searchTerm],
+  );
+  const searchableProducts = useMemo(() => products.map((product) => ({
+    product,
+    searchableText: [product.id, product.sku, product.name, product.category, product.unit, product.description]
+      .filter(Boolean)
+      .join(' ')
+      .toLocaleLowerCase(),
+  })), [products]);
+  const filteredProducts = useMemo(() => searchableProducts
+    .filter(({ product, searchableText }) => {
+      const matchesSearch = searchTokens.every((token) => searchableText.includes(token));
       const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
       const stockStatus = checkStockStatus(product.stock, product.threshold);
-      const matchesStock = stockFilter === 'all' || stockFilter === stockStatus;
+      const matchesStock = stockFilter === 'all' || (stockFilter === 'low' ? stockStatus !== 'healthy' : stockStatus === 'healthy');
       return matchesSearch && matchesCategory && matchesStock;
-    });
-  }, [products, searchTerm, categoryFilter, stockFilter]);
+    })
+    .map(({ product }) => product), [searchableProducts, searchTokens, categoryFilter, stockFilter]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
+  const effectivePage = Math.min(currentPage, pageCount);
+  const pageProducts = useMemo(() => {
+    const start = (effectivePage - 1) * pageSize;
+    return filteredProducts.slice(start, start + pageSize);
+  }, [filteredProducts, effectivePage, pageSize]);
+  const infiniteProducts = useMemo(
+    () => filteredProducts.slice(0, visibleCount),
+    [filteredProducts, visibleCount],
+  );
+  const displayedProducts = listMode === 'pages' ? pageProducts : infiniteProducts;
+  const displayedStart = filteredProducts.length === 0 ? 0 : listMode === 'pages' ? (effectivePage - 1) * pageSize + 1 : 1;
+  const displayedEnd = listMode === 'pages' ? Math.min(filteredProducts.length, effectivePage * pageSize) : Math.min(filteredProducts.length, visibleCount);
+
+  useEffect(() => {
+    if (listMode !== 'infinite' || visibleCount >= filteredProducts.length) return;
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setVisibleCount((count) => Math.min(filteredProducts.length, count + pageSize));
+      }
+    }, { rootMargin: '240px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [listMode, visibleCount, filteredProducts.length, pageSize]);
 
   const handleOpenModal = (product?: Product) => {
     if (product) {
@@ -187,7 +238,9 @@ export const Inventory: React.FC = () => {
   };
 
   const handleExportCSV = () => {
-    const csv = toCSV(filteredProducts, [
+    // Export the complete filtered set, not only the current page or loaded scroll batch.
+    const exportRows = filteredProducts;
+    const csv = toCSV(exportRows, [
       { key: 'sku', header: 'SKU' },
       { key: 'name', header: 'Product' },
       { key: 'category', header: 'Category' },
@@ -198,7 +251,7 @@ export const Inventory: React.FC = () => {
       { key: 'status', header: 'Status' },
     ]);
     downloadCSV(`inventory-${new Date().toISOString().split('T')[0]}.csv`, csv);
-    toast.success(`Exported ${filteredProducts.length} products to CSV`);
+    toast.success(`Exported all ${exportRows.length} filtered products to CSV`);
   };
 
   const statusPills: { key: typeof stockFilter; label: string }[] = [
@@ -218,18 +271,26 @@ export const Inventory: React.FC = () => {
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <input
-                type="text"
+                type="search"
+                aria-label="Search by product name, SKU, category, unit, or description"
                 placeholder="Search products..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  resetListPosition();
+                }}
                 className="input !pl-10 w-full sm:w-64"
               />
             </div>
             
             {/* Category Filter */}
             <select
+              aria-label="Filter by category"
               value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value as typeof categoryFilter)}
+              onChange={(e) => {
+                setCategoryFilter(e.target.value as typeof categoryFilter);
+                resetListPosition();
+              }}
               className="input w-full sm:w-40"
             >
               <option value="all">All Categories</option>
@@ -239,8 +300,12 @@ export const Inventory: React.FC = () => {
             
             {/* Stock Filter */}
             <select
+              aria-label="Filter by stock status"
               value={stockFilter}
-              onChange={(e) => setStockFilter(e.target.value as typeof stockFilter)}
+              onChange={(e) => {
+                setStockFilter(e.target.value as typeof stockFilter);
+                resetListPosition();
+              }}
               className="input w-full sm:w-40"
             >
               <option value="all">All Stock</option>
@@ -254,6 +319,8 @@ export const Inventory: React.FC = () => {
               type="button"
               onClick={handleExportCSV}
               disabled={filteredProducts.length === 0}
+              title="Exports all products matching the current filters, across every page"
+              aria-label="Export all filtered products to CSV"
               className="inline-flex items-center gap-2 self-start rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
             >
               <Download className="h-4 w-4" /> Export CSV
@@ -277,7 +344,10 @@ export const Inventory: React.FC = () => {
             <button
               key={pill.key}
               type="button"
-              onClick={() => setStockFilter(pill.key)}
+              onClick={() => {
+                setStockFilter(pill.key);
+                resetListPosition();
+              }}
               className={`rounded-2xl px-4 py-1.5 text-xs font-bold transition-all ${
                 stockFilter === pill.key
                   ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/20'
@@ -287,6 +357,56 @@ export const Inventory: React.FC = () => {
               {pill.label}
             </button>
           ))}
+        </div>
+
+        {/* Result count and view controls */}
+        <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-slate-600" aria-live="polite">
+            {filteredProducts.length} product{filteredProducts.length === 1 ? '' : 's'} match the current filters
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+              Rows per page / batch
+              <select
+                aria-label="Rows per page or infinite-scroll batch"
+                value={pageSize}
+                onChange={(e) => {
+                  const nextSize = Number(e.target.value);
+                  setPageSize(nextSize);
+                  setCurrentPage(1);
+                  setVisibleCount(nextSize);
+                }}
+                className="input !w-auto !py-1.5"
+              >
+                {PRODUCT_PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+              </select>
+            </label>
+            <div className="inline-flex rounded-xl border border-slate-200 p-1" role="group" aria-label="Product list mode">
+              <button
+                type="button"
+                aria-pressed={listMode === 'pages'}
+                onClick={() => {
+                  setListMode('pages');
+                  setCurrentPage(1);
+                }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold ${listMode === 'pages' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+              >
+                Pagination
+              </button>
+              <button
+                type="button"
+                aria-pressed={listMode === 'infinite'}
+                onClick={() => {
+                  setListMode('infinite');
+                  setCurrentPage(1);
+                  setVisibleCount(pageSize);
+                }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold ${listMode === 'infinite' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+              >
+                Infinite scroll
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Stats */}
@@ -325,7 +445,7 @@ export const Inventory: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredProducts.map((product) => {
+                {displayedProducts.map((product) => {
                   const stockStatus = checkStockStatus(product.stock, product.threshold);
                   return (
                     <tr key={product.id} className="hover:bg-gray-50 transition-colors">
@@ -397,7 +517,11 @@ export const Inventory: React.FC = () => {
             </table>
           </div>
           
-          {filteredProducts.length === 0 && !isEmpty && (
+          {loading && products.length === 0 && (
+            <div className="p-12 text-center text-sm text-slate-500" role="status">Loading inventory…</div>
+          )}
+
+          {!loading && filteredProducts.length === 0 && !isEmpty && (
             <div className="p-12 text-center">
               <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500">No products match the current filters.</p>
@@ -426,6 +550,55 @@ export const Inventory: React.FC = () => {
               )}
             </div>
           )}
+
+          <div className="flex flex-col gap-3 border-t border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-slate-500" aria-live="polite">
+              Showing {displayedStart}–{displayedEnd} of {filteredProducts.length} matching products
+            </p>
+            {listMode === 'pages' ? (
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(Math.max(1, effectivePage - 1))}
+                  disabled={effectivePage <= 1}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span className="min-w-20 text-center text-sm font-semibold text-slate-600">
+                  Page {effectivePage} of {pageCount}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(Math.min(pageCount, effectivePage + 1))}
+                  disabled={effectivePage >= pageCount}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3">
+                {filteredProducts.length > 0 && displayedEnd < filteredProducts.length ? (
+                  <>
+                    <span className="text-xs text-slate-500">Scroll down to load more, or use the button.</span>
+                    <button
+                      type="button"
+                      onClick={() => setVisibleCount((count) => Math.min(filteredProducts.length, count + pageSize))}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Load more
+                    </button>
+                    <div ref={loadMoreRef} className="h-1 w-full" aria-hidden="true" />
+                  </>
+                ) : (
+                  <span className="text-xs text-slate-500">
+                    {filteredProducts.length === 0 ? 'No matching products to load.' : 'All matching products are loaded.'}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Add/Edit Modal */}
