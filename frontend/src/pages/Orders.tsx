@@ -22,7 +22,8 @@ import {
   Compass,
   Calendar,
 } from 'lucide-react';
-import { useData, toFrontendOrder } from '../components/DataContext';
+import { useData } from '../components/DataContext';
+import { toFrontendOrder } from '../components/orderMapper';
 import { getOrdersPage } from '../api';
 import type { Order, OrderItem } from '../types';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';

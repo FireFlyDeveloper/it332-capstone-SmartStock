@@ -10,7 +10,7 @@
  * Last touched: 2026-07-17
  */
 
-import type { BackendOrder } from './components/DataContext'
+import type { BackendOrder } from './components/orderMapper'
 
 const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined)?.trim().replace(/\/+$/, '')) ?? ''
 
