@@ -300,6 +300,27 @@ describe('reports routes', () => {
     });
   });
 
+  it('paginates observed policy performance with a stable name/id cursor', async () => {
+    const first = await authedRequest(app, '/reports/policy-performance/page?limit=1');
+    expect(first.status).toBe(200);
+    const firstPage = await first.json() as { rows: Array<{ productId: string; name: string }>; page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null } };
+    expect(firstPage.page).toMatchObject({ limit: 1, totalCount: 2, hasMore: true });
+    expect(firstPage.page.nextCursor).toEqual(expect.any(String));
+
+    const second = await authedRequest(app, `/reports/policy-performance/page?limit=1&cursor=${encodeURIComponent(firstPage.page.nextCursor!)}`);
+    expect(second.status).toBe(200);
+    const secondPage = await second.json() as typeof firstPage;
+    expect(secondPage.page).toMatchObject({ limit: 1, totalCount: 2, hasMore: false, nextCursor: null });
+    expect(secondPage.rows[0].name).toBe('Report Glass');
+    expect(secondPage.rows[0].name).not.toBe(firstPage.rows[0].name);
+    expect(secondPage.rows[0].productId).not.toBe(firstPage.rows[0].productId);
+  });
+
+  it('validates observed policy-performance page parameters', async () => {
+    expect((await authedRequest(app, '/reports/policy-performance/page?limit=101')).status).toBe(400);
+    expect((await authedRequest(app, '/reports/policy-performance/page?cursor=bad!')).status).toBe(400);
+  });
+
   it('exports observed policy performance as PDF/XLSX only for admins', async () => {
     const staff = await authedRequest(app, '/reports/export?type=policy-performance&format=pdf', STAFF);
     expect(staff.status).toBe(403);

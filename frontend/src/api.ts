@@ -286,6 +286,18 @@ export function getDemandForecastPage(options: { historyMonths?: number; limit?:
   return apiFetch<DemandForecastPageResponse>(`/analytics/demand-forecast/page?${params.toString()}`)
 }
 
+export interface PolicyPerformancePageResponse extends PolicyPerformanceResponse {
+  page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null }
+}
+
+export function getPolicyPerformancePage(options: { limit?: number; cursor?: string | null } = {}): Promise<PolicyPerformancePageResponse> {
+  const params = new URLSearchParams()
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.cursor) params.set('cursor', options.cursor)
+  const query = params.toString()
+  return apiFetch<PolicyPerformancePageResponse>(`/reports/policy-performance/page${query ? `?${query}` : ''}`)
+}
+
 export function getPolicyPerformance(): Promise<PolicyPerformanceResponse> {
   return apiFetch<PolicyPerformanceResponse>('/reports/policy-performance')
 }

@@ -23,7 +23,7 @@ import type { Order } from '../types';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
-import { apiFetchBlob, getAnalyticsPurchases, getDemandForecastPage, getPolicyPerformance, getOrdersPage, type ApiError, type PurchaseAnalyticsResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformanceResponse } from '../api';
+import { apiFetchBlob, getAnalyticsPurchases, getDemandForecastPage, getPolicyPerformancePage, getOrdersPage, type ApiError, type PurchaseAnalyticsResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
 import { toFrontendOrder } from '../components/orderMapper';
 import { useAuth } from '../components/AuthContext';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
@@ -119,9 +119,14 @@ export const Reports: React.FC = () => {
   const policySentinelRef = useRef<HTMLDivElement | null>(null);
   const policyRequestRef = useRef(0);
   const policyLoadingMoreRef = useRef(false);
-  const [observedPolicy, setObservedPolicy] = useState<PolicyPerformanceResponse | null>(null);
+  const [observedPolicy, setObservedPolicy] = useState<PolicyPerformancePageResponse | null>(null);
   const [observedPolicyLoading, setObservedPolicyLoading] = useState(true);
   const [observedPolicyError, setObservedPolicyError] = useState('');
+  const [observedPolicyLoadingMore, setObservedPolicyLoadingMore] = useState(false);
+  const [observedPolicyLoadMoreError, setObservedPolicyLoadMoreError] = useState('');
+  const observedPolicySentinelRef = useRef<HTMLDivElement | null>(null);
+  const observedPolicyRequestRef = useRef(0);
+  const observedPolicyLoadingMoreRef = useRef(false);
   const [historyOrders, setHistoryOrders] = useState<Order[]>([]);
   const [historyTotalCount, setHistoryTotalCount] = useState(0);
   const [historyHasMore, setHistoryHasMore] = useState(false);
@@ -268,12 +273,54 @@ export const Reports: React.FC = () => {
     return () => observer.disconnect();
   }, [policyPage?.hasMore, policyLoading, policyLoadingMore, policyLoadMoreError, loadMorePolicyRows]);
   useEffect(() => {
-    let active = true; setObservedPolicyLoading(true); setObservedPolicyError('');
-    getPolicyPerformance().then(data => { if (active) setObservedPolicy(data) })
-      .catch(error => { if (active) setObservedPolicyError(error instanceof Error ? error.message : 'Could not load observed stock-policy performance.') })
-      .finally(() => { if (active) setObservedPolicyLoading(false) });
-    return () => { active = false };
+    const requestId = ++observedPolicyRequestRef.current;
+    setObservedPolicy(null);
+    setObservedPolicyLoading(true);
+    setObservedPolicyError('');
+    setObservedPolicyLoadMoreError('');
+    observedPolicyLoadingMoreRef.current = false;
+    setObservedPolicyLoadingMore(false);
+    getPolicyPerformancePage({ limit: 25 }).then(data => {
+      if (requestId === observedPolicyRequestRef.current) setObservedPolicy(data);
+    }).catch(error => {
+      if (requestId === observedPolicyRequestRef.current) setObservedPolicyError(error instanceof Error ? error.message : 'Could not load observed stock-policy performance.');
+    }).finally(() => {
+      if (requestId === observedPolicyRequestRef.current) setObservedPolicyLoading(false);
+    });
+    return () => {
+      if (requestId === observedPolicyRequestRef.current) observedPolicyRequestRef.current += 1;
+    };
   }, []);
+
+  const loadMoreObservedPolicy = useCallback(async () => {
+    if (!observedPolicy?.page.hasMore || !observedPolicy.page.nextCursor || observedPolicyLoading || observedPolicyLoadingMoreRef.current) return;
+    const requestId = observedPolicyRequestRef.current;
+    observedPolicyLoadingMoreRef.current = true;
+    setObservedPolicyLoadingMore(true);
+    setObservedPolicyLoadMoreError('');
+    try {
+      const response = await getPolicyPerformancePage({ limit: 25, cursor: observedPolicy.page.nextCursor });
+      if (requestId !== observedPolicyRequestRef.current) return;
+      setObservedPolicy(current => current ? { ...current, rows: [...current.rows, ...response.rows], page: response.page } : response);
+    } catch (error) {
+      if (requestId === observedPolicyRequestRef.current) setObservedPolicyLoadMoreError(error instanceof Error ? error.message : 'Could not load more observed policy rows.');
+    } finally {
+      if (requestId === observedPolicyRequestRef.current) {
+        observedPolicyLoadingMoreRef.current = false;
+        setObservedPolicyLoadingMore(false);
+      }
+    }
+  }, [observedPolicy, observedPolicyLoading]);
+
+  useEffect(() => {
+    const sentinel = observedPolicySentinelRef.current;
+    if (!sentinel || !observedPolicy?.page.hasMore || observedPolicyLoading || observedPolicyLoadingMore || observedPolicyLoadMoreError || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) void loadMoreObservedPolicy();
+    }, { rootMargin: '320px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [observedPolicy?.page.hasMore, observedPolicyLoading, observedPolicyLoadingMore, observedPolicyLoadMoreError, loadMoreObservedPolicy]);
 
   const latestOrderDate = useMemo(() => {
     if (!orders || orders.length === 0) return new Date();
@@ -338,7 +385,6 @@ export const Reports: React.FC = () => {
   const filteredTransactions = transactionHistory;
   const availablePolicyRows = policyRows;
   const { visibleItems: visiblePurchaseGroups, sentinelRef: purchaseSentinelRef, hasMore: hasMorePurchaseGroups } = useInfiniteScroll(purchaseData?.groups ?? []);
-  const { visibleItems: visibleObservedRows, sentinelRef: observedSentinelRef, hasMore: hasMoreObservedRows } = useInfiniteScroll(observedPolicy?.rows ?? []);
 
   // Calculate summary stats dynamically based on filtered orders
   const totalSales = filteredOrders.filter(o => o.orderStatus === 'completed').reduce((sum, o) => sum + o.total, 0);
@@ -804,13 +850,14 @@ export const Reports: React.FC = () => {
                     <p className="mt-1">{observedPolicy.assumption}</p>
                     <p className="mt-2">This report describes measured stock exposure only. It does not estimate missed demand, lead-time effects, holding costs, or causal effects of reorder policies.</p>
                   </div>
+                  <p className="text-xs text-slate-500">Showing {observedPolicy.rows.length} of {observedPolicy.page.totalCount} products.</p>
                   <div className="overflow-x-auto"><table className="w-full text-left">
                     <thead className="bg-white text-xs uppercase text-slate-500"><tr>
                       <th className="px-4 py-3">Product</th><th className="px-4 py-3 text-right">Stock / threshold</th><th className="px-4 py-3 text-right">Avg. on hand</th>
                       <th className="px-4 py-3 text-right">Days ≤ threshold</th><th className="px-4 py-3 text-right">Time ≤ threshold</th><th className="px-4 py-3 text-right">Out-of-stock days</th>
                       <th className="px-4 py-3 text-right">Threshold changes</th><th className="px-4 py-3">Tracking</th>
                     </tr></thead>
-                    <tbody className="divide-y divide-emerald-100">{visibleObservedRows.map(row => <tr key={row.productId}>
+                    <tbody className="divide-y divide-emerald-100">{observedPolicy.rows.map(row => <tr key={row.productId}>
                       <td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">{row.sku}</span></td>
                       <td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.currentReorderPoint} {row.unit}</td>
                       <td className="px-4 py-3 text-right text-sm">{row.timeWeightedAverageOnHand === null ? '—' : `${row.timeWeightedAverageOnHand.toFixed(2)} ${row.unit}`}</td>
@@ -821,7 +868,10 @@ export const Reports: React.FC = () => {
                       <td className="px-4 py-3 text-sm">{row.trackingStartedAt ? `${row.trackingDays.toFixed(2)} days` : 'awaiting baseline'}</td>
                     </tr>)}</tbody>
                   </table></div>
-                  {hasMoreObservedRows && <div ref={observedSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more observed policy rows…</div>}
+                  {observedPolicy.page.hasMore && <div ref={observedPolicySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more observed policy rows…</div>}
+                  {observedPolicyLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more observed policy rows…</p>}
+                  {observedPolicyLoadMoreError && <div role="alert" className="text-center text-sm text-rose-700"><p>{observedPolicyLoadMoreError}</p><button type="button" onClick={() => void loadMoreObservedPolicy()} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
+                  {observedPolicy.page.hasMore && typeof IntersectionObserver === 'undefined' && <div className="py-3 text-center"><button type="button" onClick={() => void loadMoreObservedPolicy()} disabled={observedPolicyLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">{observedPolicyLoadingMore ? 'Loading…' : 'Load more policy rows'}</button></div>}
                 </>}
         </section>
 

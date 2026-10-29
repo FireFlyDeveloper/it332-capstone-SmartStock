@@ -14,6 +14,8 @@ import {
   buildSpendingReport,
   buildDemandForecastReport,
   buildPolicyPerformanceReport,
+  paginatePolicyPerformanceReport,
+  type PolicyPerformanceCursor,
   type ReportDto,
 } from './service.js';
 import { exportReportPdf } from './exporters/pdf.js';
@@ -81,6 +83,32 @@ reportsRoutes.get('/purchases/annual', (c) => {
 });
 
 reportsRoutes.get('/inventory/evaluation', (c) => c.json(buildInventoryEvaluationReport()));
+
+reportsRoutes.get('/policy-performance/page', async (c) => {
+  const rawLimit = c.req.query('limit');
+  const limit = rawLimit === undefined ? 25 : Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    return c.json({ error: 'limit must be an integer between 1 and 100' }, 400);
+  }
+
+  let cursor: PolicyPerformanceCursor | null = null;
+  const rawCursor = c.req.query('cursor');
+  if (rawCursor !== undefined) {
+    try {
+      if (!/^[A-Za-z0-9_-]+$/.test(rawCursor)) throw new Error('invalid');
+      const decoded = Buffer.from(rawCursor, 'base64url').toString('utf8');
+      if (Buffer.from(decoded, 'utf8').toString('base64url') !== rawCursor) throw new Error('invalid');
+      const parsed = JSON.parse(decoded) as Record<string, unknown>;
+      if (typeof parsed.name !== 'string' || parsed.name.length > 200 || typeof parsed.productId !== 'string' || parsed.productId.length < 1 || parsed.productId.length > 64) throw new Error('invalid');
+      cursor = { name: parsed.name, productId: parsed.productId };
+    } catch {
+      return c.json({ error: 'cursor is invalid' }, 400);
+    }
+  }
+
+  const report = await buildPolicyPerformanceReport();
+  return c.json(paginatePolicyPerformanceReport(report, limit, cursor));
+});
 
 reportsRoutes.get('/policy-performance', async (c) => c.json(await buildPolicyPerformanceReport()));
 

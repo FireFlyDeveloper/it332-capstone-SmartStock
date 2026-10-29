@@ -187,6 +187,35 @@ export async function buildPolicyPerformanceReport(now = new Date()) {
   };
 }
 
+export interface PolicyPerformanceCursor {
+  name: string;
+  productId: string;
+}
+
+export function paginatePolicyPerformanceReport(
+  report: Awaited<ReturnType<typeof buildPolicyPerformanceReport>>,
+  limit: number,
+  cursor: PolicyPerformanceCursor | null,
+) {
+  const compare = (left: string, right: string) => left < right ? -1 : left > right ? 1 : 0;
+  const rows = [...report.rows].sort((a, b) => compare(a.name, b.name) || compare(a.productId, b.productId));
+  const filtered = cursor
+    ? rows.filter((row) => compare(row.name, cursor.name) > 0 || (row.name === cursor.name && compare(row.productId, cursor.productId) > 0))
+    : rows;
+  const selected = filtered.slice(0, limit + 1);
+  const hasMore = selected.length > limit;
+  const pageRows = selected.slice(0, limit);
+  const last = pageRows.at(-1);
+  const nextCursor = hasMore && last
+    ? Buffer.from(JSON.stringify({ name: last.name, productId: last.productId })).toString('base64url')
+    : null;
+  return {
+    ...report,
+    rows: pageRows,
+    page: { limit, totalCount: rows.length, hasMore, nextCursor },
+  };
+}
+
 export type ReportDto =
   | ReturnType<typeof buildMonthlySalesReport>
   | ReturnType<typeof buildAnnualPurchasesReport>
