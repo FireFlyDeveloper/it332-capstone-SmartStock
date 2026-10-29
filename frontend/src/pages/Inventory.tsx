@@ -85,7 +85,7 @@ export const Inventory: React.FC = () => {
   const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [restockProductId, setRestockProductId] = useState<string | null>(null);
-  const [restockQuantity, setRestockQuantity] = useState(0);
+  const [restockQuantity, setRestockQuantity] = useState('');
   const [purchaseUnitCost, setPurchaseUnitCost] = useState('');
   const [formData, setFormData] = useState<ProductFormData>(emptyProductForm);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -144,21 +144,29 @@ export const Inventory: React.FC = () => {
 
   const handleRestock = (productId: string) => {
     setRestockProductId(productId);
-    setRestockQuantity(0);
+    setRestockQuantity('');
     setPurchaseUnitCost('');
     setIsRestockModalOpen(true);
   };
 
+  const handleCloseRestockModal = () => {
+    setIsRestockModalOpen(false);
+    setRestockProductId(null);
+    setRestockQuantity('');
+    setPurchaseUnitCost('');
+  };
+
   const handleRestockSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (restockProductId && restockQuantity > 0) {
-      try {
-        await restockProduct(restockProductId, restockQuantity, purchaseUnitCost === '' ? undefined : Number(purchaseUnitCost));
-        toast.success(`Restocked ${restockQuantity} units successfully`);
-        setIsRestockModalOpen(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Could not restock product.');
-      }
+    const quantity = Number(restockQuantity);
+    if (!restockProductId || restockQuantity.trim() === '' || !Number.isFinite(quantity) || quantity <= 0) return;
+
+    try {
+      await restockProduct(restockProductId, quantity, purchaseUnitCost === '' ? undefined : Number(purchaseUnitCost));
+      toast.success(`Restocked ${quantity} units successfully`);
+      handleCloseRestockModal();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not restock product.');
     }
   };
 
@@ -584,7 +592,7 @@ export const Inventory: React.FC = () => {
             <div className="bg-white rounded-2xl w-full max-w-md animate-slideIn">
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <h3 className="text-xl font-semibold text-gray-900">Restock Product</h3>
-                <button onClick={() => setIsRestockModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <button type="button" onClick={handleCloseRestockModal} className="p-2 hover:bg-gray-100 rounded-lg">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -594,8 +602,9 @@ export const Inventory: React.FC = () => {
                   <label className="label">Quantity to Add</label>
                   <input
                     type="number"
+                    name="restockQuantity"
                     value={restockQuantity}
-                    onChange={(e) => setRestockQuantity(Number(e.target.value))}
+                    onChange={(e) => setRestockQuantity(e.target.value)}
                     className="input"
                     min="1"
                     required
@@ -603,12 +612,12 @@ export const Inventory: React.FC = () => {
                 </div>
                 <div>
                   <label className="label">Purchase cost per unit (₱, optional)</label>
-                  <input type="number" value={purchaseUnitCost} onChange={(e) => setPurchaseUnitCost(e.target.value)} className="input" min="0" step="0.01" placeholder="Leave blank if unknown" />
+                  <input type="number" name="purchaseUnitCost" value={purchaseUnitCost} onChange={(e) => setPurchaseUnitCost(e.target.value)} className="input" min="0" step="0.01" placeholder="Leave blank if unknown" />
                   <p className="mt-1 text-xs text-slate-500">Recorded acquisition cost for this receipt; this is not the product selling price.</p>
                 </div>
                 
                 <div className="flex gap-3 pt-4">
-                  <button type="button" onClick={() => setIsRestockModalOpen(false)} className="flex-1 btn-secondary">
+                  <button type="button" onClick={handleCloseRestockModal} className="flex-1 btn-secondary">
                     Cancel
                   </button>
                   <button type="submit" className="flex-1 btn-primary">
