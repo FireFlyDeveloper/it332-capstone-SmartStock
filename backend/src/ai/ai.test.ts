@@ -39,8 +39,8 @@ async function login(app: Hono, email: string) {
   return json.token;
 }
 
-function seedAiAnalyticsData() {
-  const glass = createProduct({ sku: 'AI-GLASS', name: 'AI Glass', category: 'glass', unit: 'sheet', stock: 3, price: 100, threshold: 5 });
+async function seedAiAnalyticsData() {
+  const glass = await createProduct({ sku: 'AI-GLASS', name: 'AI Glass', category: 'glass', unit: 'sheet', stock: 3, price: 100, threshold: 5 });
   recordInboundStock(glass.id, { quantity: 20, referenceNo: 'AI-PO-001', supplier: 'Supplier A', occurredAt: '2026-01-10T00:00:00.000Z' });
   recordOutboundStock(glass.id, { quantity: 8, referenceNo: 'AI-SO-001', occurredAt: '2026-02-10T00:00:00.000Z' });
   const order = createOrder({
@@ -60,7 +60,7 @@ const AT = String.fromCharCode(64);
 const STAFF = 'ai-staff' + AT + 'smartstock.local';
 
 describe('AI insight fallback layer', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.restoreAllMocks();
     process.env = { ...ORIGINAL_ENV };
     delete process.env.DEEPSEEK_API_KEY;
@@ -69,7 +69,7 @@ describe('AI insight fallback layer', () => {
     _resetUserStore();
     _resetOrderStore(false);
     _resetInventoryStore(false);
-    seedAiAnalyticsData();
+    await seedAiAnalyticsData();
   });
 
   afterEach(() => {

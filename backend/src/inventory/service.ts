@@ -25,7 +25,7 @@ import {
   type StockMovementInput,
 } from './store.js';
 
-type ServiceResult<T> = { ok: true; data: T } | { ok: false; status: 400 | 404 | 409; error: string };
+type ServiceResult<T> = { ok: true; data: T } | { ok: false; status: 400 | 404 | 409 | 503; error: string };
 
 interface ProductFilters {
   q?: string;
@@ -225,13 +225,20 @@ export function getProductRecord(id: string): ServiceResult<Product> {
   return item ? { ok: true, data: item } : { ok: false, status: 404, error: 'product not found' };
 }
 
-export function addProductRecord(body: unknown): ServiceResult<Product> {
+export async function addProductRecord(body: unknown): Promise<ServiceResult<Product>> {
   const parsed = parseCreate(body);
   if (!parsed.ok) return parsed;
   try {
-    return { ok: true, data: createProduct(parsed.data) };
+    return { ok: true, data: await createProduct(parsed.data) };
   } catch (error) {
-    return { ok: false, status: 409, error: error instanceof Error ? error.message : 'product conflict' };
+    const code = typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code: unknown }).code)
+      : undefined;
+    if ((error instanceof Error && error.message === 'sku already exists') || code === '23505') {
+      return { ok: false, status: 409, error: 'sku already exists' };
+    }
+    console.error('[inventory/service] product create failed:', error);
+    return { ok: false, status: 503, error: 'product could not be saved; please try again' };
   }
 }
 

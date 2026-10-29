@@ -162,18 +162,21 @@ export function findProductById(id: string): Product | null {
   return products.get(id) ?? null;
 }
 
-export function createProduct(input: ProductCreateInput): Product {
+export async function createProduct(input: ProductCreateInput): Promise<Product> {
   const sku = normalizeSku(input.sku);
   if (bySku.has(sku)) throw new Error('sku already exists');
   const record = toRecord({ ...input, sku });
+
+  if (isDbSyncActive()) {
+    const persisted = await createProductDb({ ...record, id: record.id });
+    products.set(persisted.id, persisted);
+    bySku.set(persisted.sku, persisted.id);
+    return persisted;
+  }
+
   products.set(record.id, record);
   bySku.set(record.sku, record.id);
-  if (!isDbSyncActive()) recordInventoryPolicyEvent(record.id, null, record);
-  if (isDbSyncActive()) {
-    createProductDb({ ...record, id: record.id }).catch((err) => {
-      console.error('[inventory/store] DB write error on createProduct:', err);
-    });
-  }
+  recordInventoryPolicyEvent(record.id, null, record);
   return record;
 }
 

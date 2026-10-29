@@ -49,7 +49,7 @@ export function getProductController(c: Context) {
 
 export async function createProductController(c: Context) {
   const body = await c.req.json().catch(() => null);
-  const result = addProductRecord(body);
+  const result = await addProductRecord(body);
   if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json(result.data, 201);
 }

@@ -10,25 +10,73 @@ import {
   PackagePlus,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
+import { useAuth } from '../components/AuthContext';
 import type { Product } from '../types';
 import { formatCurrency, getStatusColor, checkStockStatus } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
 
-const initialProductForm: Omit<Product, 'id'> = {
-  name: '',
-  category: 'glass',
-  unit: 'sqm',
-  stock: 0,
-  price: 0,
-  threshold: 10,
-  status: 'active',
-  sku: '',
-  description: ''
+type ProductFormData = {
+  name: string;
+  sku: string;
+  category: Product['category'] | '';
+  unit: string;
+  stock: string;
+  price: string;
+  threshold: string;
+  status: Product['status'] | '';
+  description: string;
 };
+
+const emptyProductForm: ProductFormData = {
+  name: '',
+  sku: '',
+  category: '',
+  unit: '',
+  stock: '',
+  price: '',
+  threshold: '',
+  status: '',
+  description: '',
+};
+
+function toProductFormData(product: Product): ProductFormData {
+  return {
+    name: product.name,
+    sku: product.sku,
+    category: product.category,
+    unit: product.unit,
+    stock: String(product.stock),
+    price: String(product.price),
+    threshold: String(product.threshold),
+    status: product.status,
+    description: product.description ?? '',
+  };
+}
+
+function toProductPayload(form: ProductFormData): Omit<Product, 'id'> {
+  const numericValues = [form.stock, form.price, form.threshold];
+  if (!form.name.trim() || !form.sku.trim() || !form.category || !form.unit.trim() || !form.status ||
+      numericValues.some((value) => value.trim() === '' || !Number.isFinite(Number(value)) || Number(value) < 0)) {
+    throw new Error('Complete all required product fields with valid values.');
+  }
+
+  return {
+    name: form.name.trim(),
+    sku: form.sku.trim(),
+    category: form.category,
+    unit: form.unit.trim(),
+    stock: Number(form.stock),
+    price: Number(form.price),
+    threshold: Number(form.threshold),
+    status: form.status,
+    description: form.description.trim(),
+  };
+}
 
 export const Inventory: React.FC = () => {
   const { products, addProduct, updateProduct, deleteProduct, restockProduct, loading } = useData();
+  const { isAdmin } = useAuth();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'glass' | 'aluminum'>('all');
@@ -39,7 +87,7 @@ export const Inventory: React.FC = () => {
   const [restockProductId, setRestockProductId] = useState<string | null>(null);
   const [restockQuantity, setRestockQuantity] = useState(0);
   const [purchaseUnitCost, setPurchaseUnitCost] = useState('');
-  const [formData, setFormData] = useState<Omit<Product, 'id'>>(initialProductForm);
+  const [formData, setFormData] = useState<ProductFormData>(emptyProductForm);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
   const [savingProduct, setSavingProduct] = useState(false);
@@ -59,10 +107,10 @@ export const Inventory: React.FC = () => {
   const handleOpenModal = (product?: Product) => {
     if (product) {
       setEditingProduct(product);
-      setFormData(product);
+      setFormData(toProductFormData(product));
     } else {
       setEditingProduct(null);
-      setFormData({ ...initialProductForm, sku: `SKU-${Date.now().toString(36).toUpperCase()}` });
+      setFormData({ ...emptyProductForm });
     }
     setIsModalOpen(true);
   };
@@ -70,7 +118,7 @@ export const Inventory: React.FC = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingProduct(null);
-    setFormData(initialProductForm);
+    setFormData({ ...emptyProductForm });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -78,11 +126,12 @@ export const Inventory: React.FC = () => {
     if (savingProduct) return;
     setSavingProduct(true);
     try {
+      const payload = toProductPayload(formData);
       if (editingProduct) {
-        await updateProduct(editingProduct.id, formData);
+        await updateProduct(editingProduct.id, payload);
         toast.success('Product updated successfully');
       } else {
-        await addProduct(formData);
+        await addProduct(payload);
         toast.success('Product added successfully');
       }
       handleCloseModal();
@@ -201,13 +250,16 @@ export const Inventory: React.FC = () => {
             >
               <Download className="h-4 w-4" /> Export CSV
             </button>
-            <button
-              onClick={() => handleOpenModal()}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              Add Product
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => handleOpenModal()}
+                className="btn-primary flex items-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Add Product
+              </button>
+            )}
           </div>
         </div>
 
@@ -308,20 +360,26 @@ export const Inventory: React.FC = () => {
                           >
                             <RefreshCw className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => handleOpenModal(product)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(product.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenModal(product)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Edit"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          )}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(product.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -347,13 +405,17 @@ export const Inventory: React.FC = () => {
               <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
                 No products are available yet. Add a product from the inventory controls to begin.
               </p>
-              <button
-                type="button"
-                onClick={() => handleOpenModal()}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700"
-              >
-                <Plus className="h-4 w-4" /> Add your first product
-              </button>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => handleOpenModal()}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700"
+                >
+                  <Plus className="h-4 w-4" /> Add your first product
+                </button>
+              ) : (
+                <p className="mt-4 text-sm text-slate-600">Ask an admin to add the first product.</p>
+              )}
             </div>
           )}
         </div>
@@ -377,8 +439,9 @@ export const Inventory: React.FC = () => {
                     <label className="label">Product Name</label>
                     <input
                       type="text"
+                      name="name"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) => setFormData((current) => ({ ...current, name: e.target.value }))}
                       className="input"
                       required
                     />
@@ -388,8 +451,9 @@ export const Inventory: React.FC = () => {
                     <label className="label">SKU</label>
                     <input
                       type="text"
+                      name="sku"
                       value={formData.sku}
-                      onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                      onChange={(e) => setFormData((current) => ({ ...current, sku: e.target.value }))}
                       className="input"
                       required
                     />
@@ -398,10 +462,13 @@ export const Inventory: React.FC = () => {
                   <div>
                     <label className="label">Category</label>
                     <select
+                      name="category"
                       value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value as 'glass' | 'aluminum' })}
+                      onChange={(e) => setFormData((current) => ({ ...current, category: e.target.value as ProductFormData['category'] }))}
                       className="input"
+                      required
                     >
+                      <option value="">Select category</option>
                       <option value="glass">Glass</option>
                       <option value="aluminum">Aluminum</option>
                     </select>
@@ -410,14 +477,22 @@ export const Inventory: React.FC = () => {
                   <div>
                     <label className="label">Unit</label>
                     <select
+                      name="unit"
                       value={formData.unit}
-                      onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                      onChange={(e) => setFormData((current) => ({ ...current, unit: e.target.value }))}
                       className="input"
+                      required
                     >
+                      <option value="">Select unit</option>
+                      {formData.unit && !['sqm', 'pcs', 'meter', 'unit', 'sheet', 'length'].includes(formData.unit) && (
+                        <option value={formData.unit}>{formData.unit}</option>
+                      )}
                       <option value="sqm">sqm</option>
                       <option value="pcs">pcs</option>
                       <option value="meter">meter</option>
                       <option value="unit">unit</option>
+                      <option value="sheet">sheet</option>
+                      <option value="length">length</option>
                     </select>
                   </div>
                   
@@ -425,10 +500,12 @@ export const Inventory: React.FC = () => {
                     <label className="label">Price (₱)</label>
                     <input
                       type="number"
+                      name="price"
                       value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                      onChange={(e) => setFormData((current) => ({ ...current, price: e.target.value }))}
                       className="input"
                       min="0"
+                      step="0.01"
                       required
                     />
                   </div>
@@ -437,10 +514,12 @@ export const Inventory: React.FC = () => {
                     <label className="label">Initial Stock</label>
                     <input
                       type="number"
+                      name="stock"
                       value={formData.stock}
-                      onChange={(e) => setFormData({ ...formData, stock: Number(e.target.value) })}
+                      onChange={(e) => setFormData((current) => ({ ...current, stock: e.target.value }))}
                       className="input"
                       min="0"
+                      step="any"
                       required
                     />
                   </div>
@@ -449,10 +528,12 @@ export const Inventory: React.FC = () => {
                     <label className="label">Low Stock Threshold</label>
                     <input
                       type="number"
+                      name="threshold"
                       value={formData.threshold}
-                      onChange={(e) => setFormData({ ...formData, threshold: Number(e.target.value) })}
+                      onChange={(e) => setFormData((current) => ({ ...current, threshold: e.target.value }))}
                       className="input"
                       min="0"
+                      step="any"
                       required
                     />
                   </div>
@@ -460,10 +541,13 @@ export const Inventory: React.FC = () => {
                   <div className="col-span-2">
                     <label className="label">Status</label>
                     <select
+                      name="status"
                       value={formData.status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'discontinued' })}
+                      onChange={(e) => setFormData((current) => ({ ...current, status: e.target.value as ProductFormData['status'] }))}
                       className="input"
+                      required
                     >
+                      <option value="">Select status</option>
                       <option value="active">Active</option>
                       <option value="discontinued">Discontinued</option>
                     </select>
@@ -472,8 +556,9 @@ export const Inventory: React.FC = () => {
                   <div className="col-span-2">
                     <label className="label">Description (Optional)</label>
                     <textarea
-                      value={formData.description || ''}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      name="description"
+                      value={formData.description}
+                      onChange={(e) => setFormData((current) => ({ ...current, description: e.target.value }))}
                       className="input"
                       rows={2}
                     />

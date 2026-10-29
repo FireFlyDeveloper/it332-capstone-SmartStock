@@ -83,9 +83,9 @@ function seedDeterministicOrders() {
   febCancelled.orderStatus = 'cancelled';
 }
 
-function seedDeterministicInventory() {
-  const glass = createProduct({ sku: 'GLS-AN-01', name: 'Analytics Glass', category: 'glass', unit: 'sheet', stock: 0, price: 100, threshold: 5 });
-  const aluminum = createProduct({ sku: 'ALU-AN-01', name: 'Analytics Aluminum', category: 'aluminum', unit: 'length', stock: 0, price: 50, threshold: 5 });
+async function seedDeterministicInventory() {
+  const glass = await createProduct({ sku: 'GLS-AN-01', name: 'Analytics Glass', category: 'glass', unit: 'sheet', stock: 0, price: 100, threshold: 5 });
+  const aluminum = await createProduct({ sku: 'ALU-AN-01', name: 'Analytics Aluminum', category: 'aluminum', unit: 'length', stock: 0, price: 50, threshold: 5 });
 
   recordInboundStock(glass.id, { quantity: 10, unitCost: 100, referenceNo: 'PO-AN-001', supplier: 'Supplier A', occurredAt: '2026-01-10T00:00:00.000Z' });
   recordInboundStock(glass.id, { quantity: 4, unitCost: 100, referenceNo: 'PO-AN-002', supplier: 'Supplier B', occurredAt: '2026-03-10T00:00:00.000Z' });
@@ -185,7 +185,7 @@ describe('analytics routes', () => {
     _resetOrderStore(false);
     _resetInventoryStore(false);
     seedDeterministicOrders();
-    seedDeterministicInventory();
+    await seedDeterministicInventory();
     app = buildApp();
     await seedUser(ADMIN, 'admin');
     await seedUser(STAFF, 'staff');

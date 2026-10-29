@@ -79,9 +79,9 @@ function seedReportOrders() {
   cancelled.orderStatus = 'cancelled';
 }
 
-function seedReportInventory() {
-  const aluminum = createProduct({ sku: 'ALU-RP-01', name: 'Report Aluminum', category: 'aluminum', unit: 'length', stock: 1, price: 50, threshold: 5 });
-  const glass = createProduct({ sku: 'GLS-RP-01', name: 'Report Glass', category: 'glass', unit: 'sheet', stock: 0, price: 100, threshold: 5 });
+async function seedReportInventory() {
+  const aluminum = await createProduct({ sku: 'ALU-RP-01', name: 'Report Aluminum', category: 'aluminum', unit: 'length', stock: 1, price: 50, threshold: 5 });
+  const glass = await createProduct({ sku: 'GLS-RP-01', name: 'Report Glass', category: 'glass', unit: 'sheet', stock: 0, price: 100, threshold: 5 });
 
   recordInboundStock(glass.id, { quantity: 10, unitCost: 100, referenceNo: 'PO-RP-001', supplier: 'Supplier A', occurredAt: '2026-01-10T00:00:00.000Z' });
   recordInboundStock(glass.id, { quantity: 4, unitCost: 100, referenceNo: 'PO-RP-002', supplier: 'Supplier B', occurredAt: '2026-03-10T00:00:00.000Z' });
@@ -103,7 +103,7 @@ describe('reports routes', () => {
     _resetOrderStore(false);
     _resetInventoryStore(false);
     seedReportOrders();
-    seedReportInventory();
+    await seedReportInventory();
     app = buildApp();
     await seedUser(ADMIN, 'admin');
     await seedUser(STAFF, 'staff');
@@ -220,8 +220,8 @@ describe('reports routes', () => {
     expect(Buffer.from(bytes.subarray(0, 2)).toString('utf8')).toBe('PK');
   });
 
-  it('records baseline and observed stock/reorder-point transitions in memory mode', () => {
-    const product = createProduct({ sku: 'POLICY-EVENT', name: 'Policy Event', category: 'glass', unit: 'sheet', stock: 4, price: 10, threshold: 2 });
+  it('records baseline and observed stock/reorder-point transitions in memory mode', async () => {
+    const product = await createProduct({ sku: 'POLICY-EVENT', name: 'Policy Event', category: 'glass', unit: 'sheet', stock: 4, price: 10, threshold: 2 });
     const baseline = listInventoryPolicyHistory().find((event) => event.productId === product.id);
     expect(baseline?.eventType).toBe('baseline');
     recordInboundStock(product.id, { quantity: 1, referenceNo: 'POLICY-IN' });
@@ -235,7 +235,7 @@ describe('reports routes', () => {
   });
 
   it('reports time-weighted stock, threshold changes and stockout intervals from snapshots', async () => {
-    const product = createProduct({ sku: 'POLICY-REPORT', name: 'Policy Report', category: 'glass', unit: 'sheet', stock: 4, price: 10, threshold: 2 });
+    const product = await createProduct({ sku: 'POLICY-REPORT', name: 'Policy Report', category: 'glass', unit: 'sheet', stock: 4, price: 10, threshold: 2 });
     const start = Date.parse('2026-01-01T00:00:00.000Z');
     hydrateInventoryPolicyHistory([
       { id: 1, productId: product.id, recordedAt: new Date(start).toISOString(), eventType: 'baseline', stockBefore: null, stockAfter: 2, thresholdBefore: null, thresholdAfter: 2 },
@@ -266,7 +266,7 @@ describe('reports routes', () => {
 
   it('returns no fabricated duration for empty history and requires authentication', async () => {
     resetInventoryPolicyHistory();
-    const product = createProduct({ sku: 'POLICY-EMPTY', name: 'Policy Empty', category: 'glass', unit: 'sheet', stock: 0, price: 10, threshold: 3 });
+    const product = await createProduct({ sku: 'POLICY-EMPTY', name: 'Policy Empty', category: 'glass', unit: 'sheet', stock: 0, price: 10, threshold: 3 });
     resetInventoryPolicyHistory();
     const anon = await app.request('/reports/policy-performance');
     expect(anon.status).toBe(401);
