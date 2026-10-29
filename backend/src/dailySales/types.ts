@@ -20,4 +20,10 @@ export interface DailySalesSummary {
   refundsAmount: number;
   netCollectedAmount: number;
   orders: DailySalesOrder[];
+  page: {
+    limit: number;
+    totalCount: number;
+    hasMore: boolean;
+    nextCursor: string | null;
+  };
 }

@@ -121,6 +121,12 @@ export interface DailySalesSummary {
   refundsAmount: number
   netCollectedAmount: number
   orders: DailySalesOrder[]
+  page: {
+    limit: number
+    totalCount: number
+    hasMore: boolean
+    nextCursor: string | null
+  }
 }
 
 export interface DemandForecastProduct {
@@ -281,8 +287,20 @@ export function deleteStaff(id: string): Promise<{ ok: boolean }> {
   return apiFetch<{ ok: boolean }>(`/auth/staff/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
-export function getDailySales(date: string): Promise<DailySalesSummary> {
-  return apiFetch<DailySalesSummary>(`/daily-sales?date=${encodeURIComponent(date)}`)
+export interface DailySalesPageOptions {
+  limit?: number
+  cursor?: string | null
+  status?: 'all' | DailySalesOrder['orderStatus']
+  search?: string
+}
+
+export function getDailySales(date: string, options: DailySalesPageOptions = {}): Promise<DailySalesSummary> {
+  const params = new URLSearchParams({ date });
+  if (options.limit !== undefined) params.set('limit', String(options.limit));
+  if (options.cursor) params.set('cursor', options.cursor);
+  if (options.status) params.set('status', options.status);
+  if (options.search?.trim()) params.set('q', options.search.trim());
+  return apiFetch<DailySalesSummary>(`/daily-sales?${params.toString()}`)
 }
 
 export function getAnalyticsMovement(threshold: number): Promise<AnalyticsMovementMetric[]> {

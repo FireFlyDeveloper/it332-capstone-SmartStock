@@ -55,6 +55,57 @@ describe('Daily Sales API', () => {
         total: 100, paidAmount: 80, refundedAmount: 10, paymentStatus: 'partial', orderStatus: 'delivered',
         createdAt: '2026-10-30T09:00:00.000Z',
       }],
+      page: { limit: 25, totalCount: 1, hasMore: false, nextCursor: null },
     });
+  });
+
+  it('returns stable cursor pages and applies search/status filters on the backend', async () => {
+    const second = {
+      ...sampleOrder,
+      id: 'order-2',
+      referenceNumber: 'SS-2',
+      customerName: 'Frame Buyer',
+      items: [{ productId: 'p2', name: 'Aluminum Frame', quantity: 1, unitPrice: 200, lineTotal: 200 }],
+      total: 200,
+      paidAmount: 0,
+      paymentStatus: 'unpaid' as const,
+      orderStatus: 'cancelled' as const,
+      refundedAmount: 0,
+    };
+    const third = { ...sampleOrder, id: 'order-3', referenceNumber: 'SS-3', customerName: 'Glass Buyer' };
+    records.list.mockReturnValue([third, second, sampleOrder]);
+    const app = buildApp();
+    const headers = staffHeaders();
+
+    const firstResponse = await app.request('/daily-sales?date=2026-10-30&limit=1', { headers });
+    expect(firstResponse.status).toBe(200);
+    const first = await firstResponse.json() as { orders: Array<{ id: string }>; page: { hasMore: boolean; nextCursor: string | null; totalCount: number } };
+    expect(first.orders.map((order) => order.id)).toEqual(['order-1']);
+    expect(first.page).toMatchObject({ hasMore: true, totalCount: 3 });
+    expect(first.page.nextCursor).toBeTruthy();
+
+    const secondResponse = await app.request(`/daily-sales?date=2026-10-30&limit=1&cursor=${encodeURIComponent(first.page.nextCursor!)}`, { headers });
+    const secondPage = await secondResponse.json() as { orders: Array<{ id: string }>; page: { hasMore: boolean; nextCursor: string | null } };
+    expect(secondPage.orders.map((order) => order.id)).toEqual(['order-2']);
+    expect(secondPage.page).toMatchObject({ hasMore: true });
+    expect(secondPage.page.nextCursor).toBeTruthy();
+
+    const thirdResponse = await app.request(`/daily-sales?date=2026-10-30&limit=1&cursor=${encodeURIComponent(secondPage.page.nextCursor!)}`, { headers });
+    const thirdPage = await thirdResponse.json() as { orders: Array<{ id: string }>; page: { hasMore: boolean; nextCursor: string | null } };
+    expect(thirdPage.orders.map((order) => order.id)).toEqual(['order-3']);
+    expect(thirdPage.page).toMatchObject({ hasMore: false, nextCursor: null });
+
+    const filteredResponse = await app.request('/daily-sales?date=2026-10-30&status=cancelled&q=frame', { headers });
+    const filtered = await filteredResponse.json() as { orders: Array<{ id: string }>; page: { totalCount: number }; orderCount: number; cancelledOrderCount: number; grossSales: number };
+    expect(filtered.orders.map((order) => order.id)).toEqual(['order-2']);
+    expect(filtered.page.totalCount).toBe(1);
+    expect(filtered).toMatchObject({ orderCount: 2, cancelledOrderCount: 1, grossSales: 200 });
+  });
+
+  it('rejects invalid pagination parameters', async () => {
+    const headers = staffHeaders();
+    expect((await buildApp().request('/daily-sales?date=2026-10-30&limit=101', { headers })).status).toBe(400);
+    expect((await buildApp().request('/daily-sales?date=2026-10-30&cursor=not-a-cursor', { headers })).status).toBe(400);
+    expect((await buildApp().request('/daily-sales?date=2026-10-30&status=unknown', { headers })).status).toBe(400);
   });
 });

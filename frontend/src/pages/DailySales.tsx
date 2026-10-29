@@ -1,79 +1,159 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Banknote, Calendar, Download, Search, ShoppingBag } from 'lucide-react';
 import { getDailySales, type DailySalesOrder, type DailySalesSummary } from '../api';
-import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { formatCurrency, formatDateInput, getStatusColor } from '../utils/helpers';
 import { downloadCSV, toCSV } from '../utils/csv';
 import { toast } from 'sonner';
 
+const DAILY_SALES_PAGE_SIZE = 25;
+
+type StatusFilter = 'all' | DailySalesOrder['orderStatus'];
+
 export const DailySales: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(() => formatDateInput(new Date()));
   const [summary, setSummary] = useState<DailySalesSummary | null>(null);
+  const [orders, setOrders] = useState<DailySalesOrder[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState('');
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | DailySalesOrder['orderStatus']>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [retryVersion, setRetryVersion] = useState(0);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadingMoreRef = useRef(false);
+  const requestVersionRef = useRef(0);
 
   useEffect(() => {
+    const requestVersion = ++requestVersionRef.current;
     let active = true;
     setLoading(true);
     setError(null);
-    getDailySales(selectedDate).then((result) => {
-      if (active) setSummary(result);
-    }).catch((reason: unknown) => {
-      if (active) setError(reason instanceof Error ? reason.message : 'Could not load Daily Sales from the backend.');
-    }).finally(() => {
-      if (active) setLoading(false);
-    });
-    return () => { active = false; };
-  }, [selectedDate]);
+    setOrders([]);
+    setSummary(null);
+    setNextCursor(null);
+    setTotalCount(0);
+    setHasMore(false);
+    setLoadingMore(false);
+    setLoadMoreError('');
+    loadingMoreRef.current = false;
 
-  const filteredOrders = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return (summary?.orders ?? []).filter((order) => {
-      const matchesQuery = !query || order.referenceNumber.toLowerCase().includes(query)
-        || order.customerName.toLowerCase().includes(query)
-        || order.items.some((item) => item.name.toLowerCase().includes(query));
-      return matchesQuery && (statusFilter === 'all' || order.orderStatus === statusFilter);
-    });
-  }, [search, statusFilter, summary]);
-  const { visibleItems, sentinelRef, hasMore } = useInfiniteScroll(filteredOrders);
+    const timer = window.setTimeout(() => {
+      getDailySales(selectedDate, {
+        limit: DAILY_SALES_PAGE_SIZE,
+        search,
+        status: statusFilter,
+      }).then((result) => {
+        if (!active || requestVersion !== requestVersionRef.current) return;
+        setSummary(result);
+        setOrders(result.orders);
+        setNextCursor(result.page.nextCursor);
+        setTotalCount(result.page.totalCount);
+        setHasMore(result.page.hasMore);
+      }).catch((reason: unknown) => {
+        if (active && requestVersion === requestVersionRef.current) {
+          setError(reason instanceof Error ? reason.message : 'Could not load Daily Sales from the backend.');
+        }
+      }).finally(() => {
+        if (active && requestVersion === requestVersionRef.current) setLoading(false);
+      });
+    }, search.trim() ? 250 : 0);
 
-  const retry = () => {
-    setLoading(true);
-    setError(null);
-    getDailySales(selectedDate).then(setSummary).catch((reason: unknown) => {
-      setError(reason instanceof Error ? reason.message : 'Could not load Daily Sales from the backend.');
-    }).finally(() => setLoading(false));
-  };
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+      if (requestVersionRef.current === requestVersion) requestVersionRef.current += 1;
+    };
+  }, [selectedDate, search, statusFilter, retryVersion]);
 
-  const exportCsv = () => {
-    if (!summary?.orders.length) {
-      toast.info('No backend sales records are available for this date.');
-      return;
+  const loadMore = useCallback(async () => {
+    if (!hasMore || !nextCursor || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    const requestVersion = requestVersionRef.current;
+    setLoadingMore(true);
+    setLoadMoreError('');
+    try {
+      const result = await getDailySales(selectedDate, {
+        limit: DAILY_SALES_PAGE_SIZE,
+        cursor: nextCursor,
+        search,
+        status: statusFilter,
+      });
+      if (requestVersion !== requestVersionRef.current) return;
+      setOrders((current) => [...current, ...result.orders]);
+      setNextCursor(result.page.nextCursor);
+      setTotalCount(result.page.totalCount);
+      setHasMore(result.page.hasMore);
+    } catch (reason) {
+      if (requestVersion === requestVersionRef.current) {
+        setLoadMoreError(reason instanceof Error ? reason.message : 'Could not load more sales.');
+      }
+    } finally {
+      loadingMoreRef.current = false;
+      if (requestVersion === requestVersionRef.current) setLoadingMore(false);
     }
-    const rows = summary.orders.map((order) => ({
-      reference: order.referenceNumber,
-      customer: order.customerName,
-      items: order.items.map((item) => `${item.name} × ${item.quantity}`).join('; '),
-      gross: order.total,
-      collected: order.paidAmount,
-      refunded: order.refundedAmount,
-      status: order.orderStatus,
-      createdAt: order.createdAt,
-    }));
-    const csv = toCSV(rows, [
-      { key: 'reference', header: 'Reference' },
-      { key: 'customer', header: 'Customer' },
-      { key: 'items', header: 'Items' },
-      { key: 'gross', header: 'Gross Sales' },
-      { key: 'collected', header: 'Collected' },
-      { key: 'refunded', header: 'Refunded' },
-      { key: 'status', header: 'Order Status' },
-      { key: 'createdAt', header: 'Created At' },
-    ]);
-    downloadCSV(`smartstock-daily-sales-${selectedDate}.csv`, csv);
-    toast.success(`Exported ${rows.length} backend sales records.`);
+  }, [hasMore, nextCursor, selectedDate, search, statusFilter]);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !hasMore || loading || loadingMore || loadMoreError || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+    }, { rootMargin: '320px 0px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, loadMoreError, loadMore]);
+
+  const retry = () => setRetryVersion((current) => current + 1);
+
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const allOrders: DailySalesOrder[] = [];
+      let cursor: string | null = null;
+      let more = true;
+      while (more) {
+        const result = await getDailySales(selectedDate, { limit: 100, cursor });
+        allOrders.push(...result.orders);
+        cursor = result.page.nextCursor;
+        if (result.page.hasMore && !cursor) throw new Error('Daily Sales returned an incomplete pagination cursor.');
+        more = result.page.hasMore;
+      }
+      if (!allOrders.length) {
+        toast.info('No backend sales records are available for this date.');
+        return;
+      }
+      const rows = allOrders.map((order) => ({
+        reference: order.referenceNumber,
+        customer: order.customerName,
+        items: order.items.map((item) => `${item.name} × ${item.quantity}`).join('; '),
+        gross: order.total,
+        collected: order.paidAmount,
+        refunded: order.refundedAmount,
+        status: order.orderStatus,
+        createdAt: order.createdAt,
+      }));
+      const csv = toCSV(rows, [
+        { key: 'reference', header: 'Reference' },
+        { key: 'customer', header: 'Customer' },
+        { key: 'items', header: 'Items' },
+        { key: 'gross', header: 'Gross Sales' },
+        { key: 'collected', header: 'Collected' },
+        { key: 'refunded', header: 'Refunded' },
+        { key: 'status', header: 'Order Status' },
+        { key: 'createdAt', header: 'Created At' },
+      ]);
+      downloadCSV(`smartstock-daily-sales-${selectedDate}.csv`, csv);
+      toast.success(`Exported ${rows.length} backend sales records.`);
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : 'Could not export Daily Sales.');
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -86,8 +166,8 @@ export const DailySales: React.FC = () => {
             <p className="text-sm text-slate-500">Sales totals and order records loaded from the backend.</p>
           </div>
         </div>
-        <button type="button" onClick={exportCsv} className="btn-secondary inline-flex items-center gap-2 self-start text-sm sm:self-auto">
-          <Download className="h-4 w-4" /> Export CSV
+        <button type="button" onClick={() => void exportCsv()} disabled={exporting} className="btn-secondary inline-flex items-center gap-2 self-start text-sm disabled:opacity-60 sm:self-auto">
+          <Download className="h-4 w-4" /> {exporting ? 'Preparing CSV…' : 'Export CSV'}
         </button>
       </header>
 
@@ -116,7 +196,7 @@ export const DailySales: React.FC = () => {
           <section className="space-y-4 rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Sales orders <span className="text-sm font-medium text-slate-500">({filteredOrders.length})</span></h2>
+                <h2 className="text-lg font-bold text-slate-900">Sales orders <span className="text-sm font-medium text-slate-500">({totalCount})</span></h2>
                 <p className="text-xs text-slate-500">Order records and totals are supplied by the backend.</p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -127,7 +207,7 @@ export const DailySales: React.FC = () => {
                 </label>
                 <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
                   <span className="sr-only">Filter by order status</span>
-                  <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="input">
+                  <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)} className="input">
                     <option value="all">All statuses</option>
                     <option value="processing">Processing</option>
                     <option value="in_transit">In transit</option>
@@ -138,7 +218,7 @@ export const DailySales: React.FC = () => {
               </div>
             </div>
 
-            {filteredOrders.length === 0 ? (
+            {orders.length === 0 ? (
               <div className="rounded-2xl bg-slate-50 p-10 text-center text-sm text-slate-500">
                 <ShoppingBag className="mx-auto mb-2 h-8 w-8 text-slate-300" />
                 No backend sales records match this date and filter.
@@ -150,7 +230,7 @@ export const DailySales: React.FC = () => {
                     <th className="px-4 py-3">Reference / customer</th><th className="px-4 py-3">Items</th><th className="px-4 py-3 text-right">Gross</th><th className="px-4 py-3 text-right">Collected</th><th className="px-4 py-3 text-right">Refunded</th><th className="px-4 py-3">Status</th>
                   </tr></thead>
                   <tbody className="divide-y divide-slate-100">
-                    {visibleItems.map((order) => <tr key={order.id} className="text-sm">
+                    {orders.map((order) => <tr key={order.id} className="text-sm">
                       <td className="px-4 py-3"><span className="block font-mono font-bold text-slate-900">{order.referenceNumber}</span><span className="text-xs text-slate-500">{order.customerName}</span></td>
                       <td className="max-w-sm px-4 py-3 text-slate-600">{order.items.map((item) => `${item.name} × ${item.quantity}`).join(', ')}</td>
                       <td className="px-4 py-3 text-right font-semibold">{formatCurrency(order.total)}</td>
@@ -162,7 +242,9 @@ export const DailySales: React.FC = () => {
                 </table>
               </div>
             )}
-            {hasMore && <div ref={sentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more sales…</div>}
+            {hasMore && <div ref={sentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">{loadingMore ? 'Loading more sales…' : 'Scroll to load more sales…'}</div>}
+            {loadMoreError && <div role="alert" className="text-center text-sm text-rose-700">Could not load more sales: {loadMoreError}<button type="button" onClick={() => { setLoadMoreError(''); void loadMore(); }} className="ml-2 underline">Retry</button></div>}
+            {hasMore && typeof IntersectionObserver === 'undefined' && <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="btn-secondary mx-auto block">{loadingMore ? 'Loading…' : 'Load more sales'}</button>}
           </section>
         </>
       )}
