@@ -202,6 +202,7 @@ export const Orders: React.FC = () => {
     setForm(emptyForm);
     setSelectedProduct('');
     setQuantity(0);
+    setProductSearch('');
     setModalOpen(true);
   };
 
@@ -227,6 +228,8 @@ export const Orders: React.FC = () => {
   const closeModal = () => {
     setModalOpen(false);
     setForm(emptyForm);
+    setSelectedProduct('');
+    setQuantity(0);
     setProductSearch('');
   };
 
@@ -840,7 +843,7 @@ export const Orders: React.FC = () => {
                     onChange={e => setForm({ ...form, paidAmount: Number(e.target.value) })}
                     className="input"
                   />
-                  <p className="mt-1 text-xs text-gray-500">Enter the amount actually received. Leave 0 if no payment was collected; the server calculates payment status.</p>
+                  <p className="mt-1 text-xs text-gray-500">Enter the amount actually received. Leave this empty if no payment was collected; the server calculates payment status.</p>
                 </div>
               )}
 
