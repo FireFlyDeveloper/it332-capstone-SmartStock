@@ -11,17 +11,23 @@ import {
   buildAnnualPurchaseSummary,
   buildMonthlyOutboundQuantities,
   buildMonthlySalesTrend,
+  buildRecentActivity,
   classifyMovement,
   simpleExponentialSmoothingForecast,
   buildDemandForecast,
+  type DashboardSalesRange,
 } from './analytics.js';
 
 function listAllMovements() {
   return listProducts().flatMap((product) => listProductMovements(product.id) ?? []);
 }
 
-export function getSalesTrends() {
-  return buildMonthlySalesTrend(listOrders());
+export function getSalesTrends(range?: DashboardSalesRange) {
+  return buildMonthlySalesTrend(listOrders(), range);
+}
+
+export function getRecentActivity(limit = 6) {
+  return buildRecentActivity(listOrders(), listProducts(), listAllMovements(), limit);
 }
 
 export function getAnnualPurchases(year = new Date().getUTCFullYear()) {

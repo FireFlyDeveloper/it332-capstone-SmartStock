@@ -105,6 +105,26 @@ describe('analytics pure functions', () => {
     ]);
   });
 
+  it('zero-fills a selected calendar range and includes the current month', () => {
+    _resetOrderStore(false);
+    seedDeterministicOrders();
+    const now = new Date('2026-03-15T12:00:00.000Z');
+
+    expect(buildMonthlySalesTrend(listOrders(), '6M', now)).toEqual([
+      { month: '2025-10', transactionCount: 0, grossSales: 0 },
+      { month: '2025-11', transactionCount: 0, grossSales: 0 },
+      { month: '2025-12', transactionCount: 0, grossSales: 0 },
+      { month: '2026-01', transactionCount: 1, grossSales: 200 },
+      { month: '2026-02', transactionCount: 1, grossSales: 300 },
+      { month: '2026-03', transactionCount: 0, grossSales: 0 },
+    ]);
+    expect(buildMonthlySalesTrend(listOrders(), 'ALL', now)).toEqual([
+      { month: '2026-01', transactionCount: 1, grossSales: 200 },
+      { month: '2026-02', transactionCount: 1, grossSales: 300 },
+      { month: '2026-03', transactionCount: 0, grossSales: 0 },
+    ]);
+  });
+
   it('groups annual purchases by material type and supplier with stable totals', () => {
     const products = [
       { id: 'glass-1', name: 'Glass', category: 'glass' as const, unit: 'sheet', stock: 0, price: 100, threshold: 5, status: 'active' as const, sku: 'G-1' },
@@ -212,6 +232,39 @@ describe('analytics routes', () => {
       { month: '2026-01', transactionCount: 1, grossSales: 200 },
       { month: '2026-02', transactionCount: 1, grossSales: 300 },
     ]);
+  });
+
+  it('serves recent activity from real order and stock-movement records', async () => {
+    const token = await login(app, STAFF);
+    const res = await app.request('/analytics/recent-activity?limit=20', {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(res.status).toBe(200);
+    const records = await res.json() as Array<{
+      kind: string; occurredAt: string; referenceNumber: string; customerName?: string;
+    }>;
+    expect(records).toHaveLength(8);
+    expect(records[0].referenceNumber).toBe('PO-AN-002');
+    expect(records.some((record) => record.kind === 'order_recorded' && record.referenceNumber === 'SS-2026-01001')).toBe(true);
+    expect(records.some((record) => record.kind === 'stock_movement' && record.referenceNumber === 'PO-AN-001')).toBe(true);
+    expect(records.every((record) => Number.isFinite(Date.parse(record.occurredAt)))).toBe(true);
+    expect(records.some((record) => record.customerName === 'John Construction')).toBe(false);
+    expect((await app.request('/analytics/recent-activity?limit=0', {
+      headers: { authorization: 'Bearer ' + token },
+    })).status).toBe(400);
+  });
+
+  it('validates sales-trend range filters', async () => {
+    const token = await login(app, STAFF);
+    const invalid = await app.request('/analytics/sales-trends?range=5Y', {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(invalid.status).toBe(400);
+    const valid = await app.request('/analytics/sales-trends?range=6M', {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(valid.status).toBe(200);
+    expect(await valid.json()).toHaveLength(6);
   });
 
   it('returns annual purchase totals grouped by material and supplier', async () => {

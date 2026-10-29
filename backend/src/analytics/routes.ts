@@ -12,9 +12,11 @@ import {
   getAnnualPurchases,
   getForecast,
   getMovementClassification,
+  getRecentActivity,
   getSalesTrends,
   getDemandForecast,
 } from './service.js';
+import type { DashboardSalesRange } from './analytics.js';
 
 export const analyticsRoutes = new Hono();
 
@@ -29,7 +31,23 @@ analyticsRoutes.get('/demand-forecast', (c) => {
   return c.json(getDemandForecast(historyMonths));
 });
 
-analyticsRoutes.get('/sales-trends', (c) => c.json(getSalesTrends()));
+analyticsRoutes.get('/sales-trends', (c) => {
+  const rawRange = c.req.query('range');
+  const validRanges: DashboardSalesRange[] = ['6M', '1Y', 'ALL'];
+  if (rawRange !== undefined && !validRanges.includes(rawRange as DashboardSalesRange)) {
+    return c.json({ error: 'range must be 6M, 1Y, or ALL' }, 400);
+  }
+  return c.json(getSalesTrends(rawRange as DashboardSalesRange | undefined));
+});
+
+analyticsRoutes.get('/recent-activity', (c) => {
+  const rawLimit = c.req.query('limit');
+  const limit = rawLimit === undefined ? 6 : Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+    return c.json({ error: 'limit must be an integer between 1 and 20' }, 400);
+  }
+  return c.json(getRecentActivity(limit));
+});
 
 analyticsRoutes.get('/purchases', (c) => {
   const rawYear = c.req.query('year');

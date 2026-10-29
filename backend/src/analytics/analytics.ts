@@ -14,6 +14,23 @@ export interface MonthlySalesTrendRow {
   grossSales: number;
 }
 
+export type DashboardSalesRange = '6M' | '1Y' | 'ALL';
+
+export interface RecentActivityRecord {
+  id: string;
+  kind: 'order_recorded' | 'stock_movement';
+  occurredAt: string;
+  referenceNumber: string;
+  orderStatus?: Order['orderStatus'];
+  customerName?: string;
+  orderTotal?: number;
+  movementType?: StockMovement['type'];
+  productId?: string;
+  productName?: string;
+  unit?: string;
+  quantity?: number;
+}
+
 export interface AnnualPurchaseSummaryRow {
   materialType: Product['category'] | 'unknown';
   supplier: string;
@@ -56,7 +73,11 @@ function roundTwo(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-export function buildMonthlySalesTrend(orders: Order[]): MonthlySalesTrendRow[] {
+export function buildMonthlySalesTrend(
+  orders: Order[],
+  range?: DashboardSalesRange,
+  now = new Date(),
+): MonthlySalesTrendRow[] {
   const byMonth = new Map<string, MonthlySalesTrendRow>();
   for (const order of orders) {
     if (order.orderStatus === 'cancelled') continue;
@@ -66,7 +87,72 @@ export function buildMonthlySalesTrend(orders: Order[]): MonthlySalesTrendRow[] 
     current.grossSales = roundTwo(current.grossSales + order.total);
     byMonth.set(month, current);
   }
-  return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
+
+  if (!range) return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
+
+  const currentMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const observedMonths = [...byMonth.keys()].filter((month) => month <= currentMonth.toISOString().slice(0, 7));
+  if (range === 'ALL' && observedMonths.length === 0) return [];
+
+  const monthCount = range === '6M' ? 6 : range === '1Y' ? 12 : undefined;
+  const firstMonth = monthCount
+    ? new Date(Date.UTC(currentMonth.getUTCFullYear(), currentMonth.getUTCMonth() - monthCount + 1, 1))
+    : new Date(`${observedMonths.sort()[0]}-01T00:00:00.000Z`);
+  const rows: MonthlySalesTrendRow[] = [];
+  const cursor = new Date(firstMonth);
+  while (cursor <= currentMonth) {
+    const month = cursor.toISOString().slice(0, 7);
+    rows.push(byMonth.get(month) ?? { month, transactionCount: 0, grossSales: 0 });
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return rows;
+}
+
+export function buildRecentActivity(
+  orders: Order[],
+  products: Product[],
+  movements: StockMovement[],
+  limit = 6,
+): RecentActivityRecord[] {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+    throw new Error('limit must be an integer between 1 and 20');
+  }
+
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const activities: RecentActivityRecord[] = [];
+
+  for (const order of orders) {
+    if (!Number.isFinite(Date.parse(order.createdAt))) continue;
+    activities.push({
+      id: `order:${order.id}`,
+      kind: 'order_recorded',
+      occurredAt: order.createdAt,
+      referenceNumber: order.referenceNumber,
+      orderStatus: order.orderStatus,
+      customerName: order.customerName,
+      orderTotal: order.total,
+    });
+  }
+
+  for (const movement of movements) {
+    if (!Number.isFinite(Date.parse(movement.occurredAt))) continue;
+    const product = productById.get(movement.productId);
+    activities.push({
+      id: `movement:${movement.id}`,
+      kind: 'stock_movement',
+      occurredAt: movement.occurredAt,
+      referenceNumber: movement.referenceNo,
+      movementType: movement.type,
+      productId: movement.productId,
+      productName: product?.name,
+      unit: product?.unit,
+      quantity: movement.quantity,
+    });
+  }
+
+  return activities
+    .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt) || a.id.localeCompare(b.id))
+    .slice(0, limit);
 }
 
 export function buildAnnualPurchaseSummary(

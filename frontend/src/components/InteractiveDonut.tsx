@@ -13,6 +13,7 @@ interface InteractiveDonutProps {
   totalLabel?: string;
   customTotal?: string | number;
   size?: number;
+  valueUnit?: string;
 }
 
 /**
@@ -30,6 +31,7 @@ export const InteractiveDonut: React.FC<InteractiveDonutProps> = ({
   totalLabel = 'TOTAL',
   customTotal,
   size = 180,
+  valueUnit = 'items',
 }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
@@ -129,7 +131,7 @@ export const InteractiveDonut: React.FC<InteractiveDonutProps> = ({
             </span>
             {currentHovered && (
               <span className="text-[10px] font-semibold text-slate-400 leading-tight mt-1 truncate max-w-full">
-                {currentHovered.value.toLocaleString()} items
+                {currentHovered.value.toLocaleString()} {valueUnit}
               </span>
             )}
           </div>

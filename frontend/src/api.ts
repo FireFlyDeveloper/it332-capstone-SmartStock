@@ -178,6 +178,22 @@ export interface AnalyticsSalesTrend {
   grossSales: number
 }
 
+export type DashboardSalesRange = '6M' | '1Y' | 'ALL'
+export interface DashboardActivityRecord {
+  id: string
+  kind: 'order_recorded' | 'stock_movement'
+  occurredAt: string
+  referenceNumber: string
+  orderStatus?: string
+  customerName?: string
+  orderTotal?: number
+  movementType?: 'inbound' | 'outbound'
+  productId?: string
+  productName?: string
+  unit?: string
+  quantity?: number
+}
+
 export interface AnalyticsPurchaseMetric {
   materialType: string
   supplier: string
@@ -205,8 +221,13 @@ export interface AnalyticsInsightsResponse {
   source: 'deepseek' | 'fallback'
 }
 
-export function getAnalyticsSalesTrends(): Promise<AnalyticsSalesTrend[]> {
-  return apiFetch<AnalyticsSalesTrend[]>('/analytics/sales-trends')
+export function getAnalyticsSalesTrends(range?: DashboardSalesRange): Promise<AnalyticsSalesTrend[]> {
+  const query = range ? `?range=${encodeURIComponent(range)}` : ''
+  return apiFetch<AnalyticsSalesTrend[]>(`/analytics/sales-trends${query}`)
+}
+
+export function getDashboardRecentActivity(limit = 6): Promise<DashboardActivityRecord[]> {
+  return apiFetch<DashboardActivityRecord[]>(`/analytics/recent-activity?limit=${encodeURIComponent(String(limit))}`)
 }
 
 export async function getAnalyticsPurchases(year: number): Promise<PurchaseAnalyticsResponse> {
