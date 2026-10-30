@@ -9,6 +9,7 @@ import { getPool } from './client.js';
 import { hasDatabaseUrl } from './config.js';
 import { setDbSyncActive } from './syncState.js';
 
+import type { RecentActivityRecord } from '../analytics/analytics.js';
 import type { InventoryPolicyEvent, Product, ProductCreateInput, ProductUpdateInput, StockMovement, StockMovementInput } from '../inventory/store.js';
 import type { Order, OrderCreateInput, OrderUpdateInput, PaymentStatus, RefundType } from '../orders/store.js';
 import type { Delivery, DeliveryCreateInput, DeliveryUpdateInput } from '../delivery/store.js';
@@ -935,6 +936,65 @@ export async function listDemandForecastPageDb(input: {
       nextCursor: hasMore && last ? { name: last.name, productId: last.productId } : null,
     },
   };
+}
+
+export async function listRecentActivityDb(limit: number): Promise<RecentActivityRecord[] | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH order_activity AS MATERIALIZED (
+      SELECT 'order:' || o.id AS id, 'order_recorded'::text AS kind,
+        o.created_at AS occurred_at, o.order_no AS reference_number,
+        o.order_status, o.customer_name, o.total_amount AS order_total,
+        NULL::text AS movement_type, NULL::text AS product_id,
+        NULL::text AS product_name, NULL::text AS unit, NULL::int AS quantity
+      FROM orders o
+      WHERE o.deleted_at IS NULL
+      ORDER BY date_trunc('milliseconds', o.created_at) DESC, ('order:' || o.id) COLLATE "C" ASC
+      LIMIT $1
+    ), movement_activity AS MATERIALIZED (
+      SELECT 'movement:' || m.id AS id, 'stock_movement'::text AS kind,
+        m.occurred_at, m.reference_no AS reference_number,
+        NULL::text AS order_status, NULL::text AS customer_name, NULL::numeric AS order_total,
+        m.type AS movement_type, m.product_id, p.name AS product_name, p.unit,
+        m.quantity::int AS quantity
+      FROM stock_movements m
+      LEFT JOIN products p ON p.id = m.product_id AND p.deleted_at IS NULL
+      ORDER BY date_trunc('milliseconds', m.occurred_at) DESC, ('movement:' || m.id) COLLATE "C" ASC
+      LIMIT $1
+    ), combined AS (
+      SELECT * FROM order_activity
+      UNION ALL
+      SELECT * FROM movement_activity
+    )
+    SELECT * FROM combined
+    ORDER BY date_trunc('milliseconds', occurred_at) DESC, id COLLATE "C" ASC
+    LIMIT $1
+  `, [limit]);
+  return rows.map((row) => {
+    const base = {
+      id: String(row.id),
+      kind: String(row.kind) as RecentActivityRecord['kind'],
+      occurredAt: new Date(row.occurred_at as string | Date).toISOString(),
+      referenceNumber: String(row.reference_number),
+    };
+    if (row.kind === 'order_recorded') {
+      return {
+        ...base,
+        orderStatus: String(row.order_status) as RecentActivityRecord['orderStatus'],
+        ...(row.customer_name == null ? {} : { customerName: String(row.customer_name) }),
+        orderTotal: Number(row.order_total ?? 0),
+      };
+    }
+    return {
+      ...base,
+      movementType: (String(row.movement_type) || 'inbound') as RecentActivityRecord['movementType'],
+      productId: String(row.product_id),
+      ...(row.product_name == null ? {} : { productName: String(row.product_name) }),
+      ...(row.unit == null ? {} : { unit: String(row.unit) }),
+      quantity: Number(row.quantity ?? 0),
+    };
+  });
 }
 
 export interface MonthlySalesTrendDbRow {

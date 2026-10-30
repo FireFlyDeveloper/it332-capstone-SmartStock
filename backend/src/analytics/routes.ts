@@ -97,13 +97,13 @@ analyticsRoutes.get('/sales-trends', async (c) => {
   return c.json(await getSalesTrends(rawRange as DashboardSalesRange | undefined));
 });
 
-analyticsRoutes.get('/recent-activity', (c) => {
+analyticsRoutes.get('/recent-activity', async (c) => {
   const rawLimit = c.req.query('limit');
   const limit = rawLimit === undefined ? 6 : Number(rawLimit);
   if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
     return c.json({ error: 'limit must be an integer between 1 and 20' }, 400);
   }
-  return c.json(getRecentActivity(limit));
+  return c.json(await getRecentActivity(limit));
 });
 
 analyticsRoutes.get('/purchases/page', async (c) => {

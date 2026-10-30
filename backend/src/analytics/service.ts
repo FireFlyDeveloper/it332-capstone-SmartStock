@@ -6,7 +6,7 @@
  */
 
 import { isDbSyncActive } from '../db/syncState.js';
-import { getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlySalesTrendDb } from '../db/postgresStore.js';
+import { getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlySalesTrendDb, listRecentActivityDb } from '../db/postgresStore.js';
 import { listProducts, listProductMovements } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import {
@@ -53,7 +53,12 @@ export function getAnalyticsOrderSummary(fromDate?: string, toDate?: string) {
   return buildAnalyticsOrderSummary(listOrders(), listProducts(), fromDate, toDate);
 }
 
-export function getRecentActivity(limit = 6) {
+export async function getRecentActivity(limit = 6) {
+  if (isDbSyncActive()) {
+    const activity = await listRecentActivityDb(limit);
+    if (!activity) throw new Error('PostgreSQL is unavailable for recent activity');
+    return activity;
+  }
   return buildRecentActivity(listOrders(), listProducts(), listAllMovements(), limit);
 }
 
