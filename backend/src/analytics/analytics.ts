@@ -433,6 +433,8 @@ function completeMonthKeys(now: Date, count: number): string[] {
   });
 }
 
+export const DEMAND_FORECAST_ASSUMPTION = 'Current-policy assessment only; suggested order quantity targets one forecast month plus the current reorder point. No historical stockout, lead-time, or holding-cost effects are inferred.';
+
 export function buildDemandForecast(orders: Order[], products: Product[], historyMonths = 12, now = new Date()): DemandForecastReport {
   if (!Number.isInteger(historyMonths) || historyMonths < 1 || historyMonths > 60) throw new Error('historyMonths must be an integer between 1 and 60');
   const months = completeMonthKeys(now, historyMonths);
@@ -464,7 +466,7 @@ export function buildDemandForecast(orders: Order[], products: Product[], histor
   });
   return {
     method: 'simple_exponential_smoothing', alpha: 0.3, horizonMonths: 1, minimumPositiveMonths: 3,
-    generatedAt: now.toISOString(), historyMonths, assumption: 'Current-policy assessment only; suggested order quantity targets one forecast month plus the current reorder point. No historical stockout, lead-time, or holding-cost effects are inferred.',
+    generatedAt: now.toISOString(), historyMonths, assumption: DEMAND_FORECAST_ASSUMPTION,
     products: reportProducts,
     summary: { productCount: products.length, availableForecasts: reportProducts.filter((p) => p.status === 'available').length,
       insufficientHistory: reportProducts.filter((p) => p.status === 'insufficient_history').length,

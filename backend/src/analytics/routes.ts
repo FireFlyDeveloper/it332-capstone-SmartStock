@@ -26,7 +26,7 @@ export const analyticsRoutes = new Hono();
 
 analyticsRoutes.use('*', requireAuth);
 
-analyticsRoutes.get('/demand-forecast/page', (c) => {
+analyticsRoutes.get('/demand-forecast/page', async (c) => {
   const rawHistoryMonths = c.req.query('historyMonths');
   const historyMonths = rawHistoryMonths === undefined ? 12 : Number(rawHistoryMonths);
   if (!Number.isInteger(historyMonths) || historyMonths < 1 || historyMonths > 60) {
@@ -54,7 +54,7 @@ analyticsRoutes.get('/demand-forecast/page', (c) => {
       return c.json({ error: 'cursor is invalid' }, 400);
     }
   }
-  const result = getDemandForecastPage(historyMonths, limit, cursor);
+  const result = await getDemandForecastPage(historyMonths, limit, cursor);
   const nextCursor = result.page.nextCursor
     ? Buffer.from(JSON.stringify(result.page.nextCursor)).toString('base64url')
     : null;

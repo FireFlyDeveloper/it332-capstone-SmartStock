@@ -782,6 +782,161 @@ export async function listPolicyPerformancePageDb(input: {
   };
 }
 
+export interface DemandForecastDbPage {
+  products: Array<{
+    productId: string;
+    sku: string;
+    name: string;
+    category: string;
+    unit: string;
+    currentStock: number;
+    reorderPoint: number;
+    history: Array<{ month: string; quantity: number }>;
+    positiveMonths: number;
+    forecastQuantity: number | null;
+    status: 'available' | 'insufficient_history';
+    stockCoverageDays: number | null;
+    recommendedOrderQuantity: number | null;
+    policyAssessment: 'below_reorder_point' | 'below_forecast' | 'adequate' | 'insufficient_history';
+  }>;
+  summary: {
+    productCount: number;
+    availableForecasts: number;
+    insufficientHistory: number;
+    belowReorderPoint: number;
+    recommendedOrderQuantity: number;
+  };
+  page: {
+    limit: number;
+    totalCount: number;
+    hasMore: boolean;
+    nextCursor: { name: string; productId: string } | null;
+  };
+}
+
+export async function listDemandForecastPageDb(input: {
+  now: Date;
+  historyMonths: number;
+  limit: number;
+  cursor: { name: string; productId: string } | null;
+}): Promise<DemandForecastDbPage | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH RECURSIVE bounds AS (
+      SELECT date_trunc('month', ($1::timestamptz AT TIME ZONE 'UTC')) AS current_month,
+        date_trunc('month', ($1::timestamptz AT TIME ZONE 'UTC')) - ($2::int * INTERVAL '1 month') AS start_month
+    ), months AS (
+      SELECT generate_series(bounds.start_month, bounds.current_month - INTERVAL '1 month', INTERVAL '1 month')::date AS month
+      FROM bounds
+    ), order_lines AS (
+      SELECT item.value->>'productId' AS product_id,
+        date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))::date AS month,
+        SUM((item.value->>'quantity')::int)::int AS quantity
+      FROM orders o
+      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS item(value)
+      CROSS JOIN bounds
+      WHERE o.deleted_at IS NULL AND o.order_status = 'delivered'
+        AND o.created_at >= (bounds.start_month AT TIME ZONE 'UTC')
+        AND o.created_at < (bounds.current_month AT TIME ZONE 'UTC')
+      GROUP BY item.value->>'productId', date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))::date
+    ), product_months AS (
+      SELECT p.id::text AS product_id, p.sku, p.name, COALESCE(NULLIF(p.category, ''), 'glass') AS category, p.unit, p.stock, p.threshold,
+        m.month, COALESCE(ol.quantity, 0)::int AS quantity
+      FROM products p CROSS JOIN months m
+      LEFT JOIN order_lines ol ON ol.product_id = p.id::text AND ol.month = m.month
+      WHERE p.deleted_at IS NULL
+    ), numbered AS (
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY month)::int AS month_number
+      FROM product_months
+    ), forecast_steps AS (
+      SELECT product_id, month_number, quantity::double precision AS forecast
+      FROM numbered WHERE month_number = 1
+      UNION ALL
+      SELECT n.product_id, n.month_number,
+        0.3::double precision * n.quantity + 0.7::double precision * f.forecast
+      FROM forecast_steps f JOIN numbered n
+        ON n.product_id = f.product_id AND n.month_number = f.month_number + 1
+    ), forecast_values AS (
+      SELECT DISTINCT ON (product_id) product_id,
+        ROUND(forecast::numeric, 2)::double precision AS forecast_quantity
+      FROM forecast_steps ORDER BY product_id, month_number DESC
+    ), product_metrics AS (
+      SELECT n.product_id, n.sku, n.name, n.category, n.unit, n.stock, n.threshold,
+        jsonb_agg(jsonb_build_object('month', to_char(n.month, 'YYYY-MM'), 'quantity', n.quantity) ORDER BY n.month) AS history,
+        COUNT(*) FILTER (WHERE n.quantity > 0)::int AS positive_months,
+        f.forecast_quantity
+      FROM numbered n JOIN forecast_values f ON f.product_id = n.product_id
+      GROUP BY n.product_id, n.sku, n.name, n.category, n.unit, n.stock, n.threshold, f.forecast_quantity
+    ), report_rows AS (
+      SELECT product_id, sku, name, category, unit, stock, threshold, history, positive_months,
+        CASE WHEN positive_months >= 3 THEN forecast_quantity END AS forecast_quantity,
+        CASE WHEN positive_months >= 3 THEN 'available' ELSE 'insufficient_history' END AS status,
+        CASE WHEN positive_months >= 3 AND forecast_quantity > 0 THEN ROUND(stock::numeric / forecast_quantity * 30)::int END AS stock_coverage_days,
+        CASE WHEN positive_months >= 3 THEN GREATEST(0, CEIL(forecast_quantity + threshold - stock))::int END AS recommended_order_quantity,
+        CASE WHEN positive_months < 3 THEN 'insufficient_history'
+          WHEN stock <= threshold THEN 'below_reorder_point'
+          WHEN stock < forecast_quantity THEN 'below_forecast' ELSE 'adequate' END AS policy_assessment
+      FROM product_metrics
+    ), totals AS (
+      SELECT COUNT(*)::int AS product_count,
+        COUNT(*) FILTER (WHERE forecast_quantity IS NOT NULL)::int AS available_forecasts,
+        COUNT(*) FILTER (WHERE forecast_quantity IS NULL)::int AS insufficient_history,
+        COUNT(*) FILTER (WHERE policy_assessment = 'below_reorder_point')::int AS below_reorder_point,
+        COALESCE(SUM(recommended_order_quantity), 0)::int AS recommended_order_quantity
+      FROM report_rows
+    ), page_rows AS (
+      SELECT * FROM report_rows
+      WHERE forecast_quantity IS NOT NULL
+        AND ($3::text IS NULL OR name COLLATE "C" > $3::text COLLATE "C"
+          OR (name COLLATE "C" = $3::text COLLATE "C" AND product_id COLLATE "C" > $4::text COLLATE "C"))
+      ORDER BY name COLLATE "C" ASC, product_id COLLATE "C" ASC
+      LIMIT $5
+    )
+    SELECT totals.product_count, totals.available_forecasts, totals.insufficient_history,
+      totals.below_reorder_point, totals.recommended_order_quantity,
+      (SELECT COUNT(*)::int FROM report_rows WHERE forecast_quantity IS NOT NULL) AS total_count,
+      COALESCE((SELECT jsonb_agg(to_jsonb(page_rows) ORDER BY page_rows.name COLLATE "C", page_rows.product_id COLLATE "C") FROM page_rows), '[]'::jsonb) AS page_items
+    FROM totals
+  `, [input.now, input.historyMonths, input.cursor?.name ?? null, input.cursor?.productId ?? null, input.limit + 1]);
+  const result = rows[0];
+  if (!result) return null;
+  const rawItems = (typeof result.page_items === 'string' ? JSON.parse(result.page_items) : result.page_items ?? []) as Record<string, unknown>[];
+  const products = rawItems.slice(0, input.limit).map((row) => {
+    const rawHistory = typeof row.history === 'string' ? JSON.parse(row.history) : row.history;
+    const history = (Array.isArray(rawHistory) ? rawHistory : []) as Array<Record<string, unknown>>;
+    return {
+      productId: String(row.product_id), sku: String(row.sku), name: String(row.name), category: String(row.category), unit: String(row.unit),
+      currentStock: Number(row.stock ?? 0), reorderPoint: Number(row.threshold ?? 0),
+      history: history.map((entry) => ({ month: String(entry.month), quantity: Number(entry.quantity ?? 0) })),
+      positiveMonths: Number(row.positive_months ?? 0),
+      forecastQuantity: row.forecast_quantity == null ? null : Number(row.forecast_quantity),
+      status: String(row.status) as 'available' | 'insufficient_history',
+      stockCoverageDays: row.stock_coverage_days == null ? null : Number(row.stock_coverage_days),
+      recommendedOrderQuantity: row.recommended_order_quantity == null ? null : Number(row.recommended_order_quantity),
+      policyAssessment: String(row.policy_assessment) as 'below_reorder_point' | 'below_forecast' | 'adequate' | 'insufficient_history',
+    };
+  });
+  const hasMore = rawItems.length > input.limit;
+  const last = products.at(-1);
+  return {
+    products,
+    summary: {
+      productCount: Number(result.product_count ?? 0),
+      availableForecasts: Number(result.available_forecasts ?? 0),
+      insufficientHistory: Number(result.insufficient_history ?? 0),
+      belowReorderPoint: Number(result.below_reorder_point ?? 0),
+      recommendedOrderQuantity: Number(result.recommended_order_quantity ?? 0),
+    },
+    page: {
+      limit: input.limit,
+      totalCount: Number(result.total_count ?? 0),
+      hasMore,
+      nextCursor: hasMore && last ? { name: last.name, productId: last.productId } : null,
+    },
+  };
+}
+
 export async function listOrdersPageDb(input: {
   limit: number;
   status: string;

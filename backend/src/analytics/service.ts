@@ -6,7 +6,7 @@
  */
 
 import { isDbSyncActive } from '../db/syncState.js';
-import { listAnnualPurchasesPageDb } from '../db/postgresStore.js';
+import { listAnnualPurchasesPageDb, listDemandForecastPageDb } from '../db/postgresStore.js';
 import { listProducts, listProductMovements } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import {
@@ -19,6 +19,7 @@ import {
   classifyMovement,
   simpleExponentialSmoothingForecast,
   buildDemandForecast,
+  DEMAND_FORECAST_ASSUMPTION,
   paginateDemandForecast,
   paginateAnnualPurchaseSummary,
   type AnnualPurchaseCursor,
@@ -78,8 +79,24 @@ export function getDemandForecast(historyMonths = 12, now = new Date()) {
   return buildDemandForecast(listOrders(), listProducts(), historyMonths, now);
 }
 
-export function getDemandForecastPage(historyMonths: number, limit: number, cursor: DemandForecastCursor | null) {
-  return paginateDemandForecast(getDemandForecast(historyMonths), limit, cursor);
+export async function getDemandForecastPage(historyMonths: number, limit: number, cursor: DemandForecastCursor | null, now = new Date()) {
+  if (isDbSyncActive()) {
+    const page = await listDemandForecastPageDb({ now, historyMonths, limit, cursor });
+    if (!page) throw new Error('PostgreSQL is unavailable for demand-forecast pagination');
+    return {
+      method: 'simple_exponential_smoothing' as const,
+      alpha: 0.3 as const,
+      horizonMonths: 1 as const,
+      minimumPositiveMonths: 3 as const,
+      generatedAt: now.toISOString(),
+      historyMonths,
+      assumption: DEMAND_FORECAST_ASSUMPTION,
+      products: page.products,
+      summary: page.summary,
+      page: page.page,
+    };
+  }
+  return paginateDemandForecast(getDemandForecast(historyMonths, now), limit, cursor);
 }
 
 export function getForecast(quantities: number[], alpha = 0.3) {
