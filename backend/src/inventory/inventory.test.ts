@@ -93,10 +93,10 @@ describe('product inventory routes', () => {
     const firstBody = await first.json() as {
       items: Array<{ id: string; name: string }>;
       page: { totalCount: number; hasMore: boolean; nextCursor: string | null };
-      summary: { totalProducts: number; glassCount: number; aluminumCount: number; lowStockCount: number; outOfStockCount: number };
+      summary: { totalProducts: number; glassCount: number; aluminumCount: number; lowStockCount: number; outOfStockCount: number; totalInventoryValue: number; glassInventoryValue: number; aluminumInventoryValue: number; activeProductCount: number; activeGlassCount: number; activeAluminumCount: number; activeLowStockCount: number };
     };
     expect(firstBody.page).toMatchObject({ totalCount: 3, hasMore: true });
-    expect(firstBody.summary).toEqual({ totalProducts: 3, glassCount: 2, aluminumCount: 1, lowStockCount: 2, outOfStockCount: 1 });
+    expect(firstBody.summary).toEqual({ totalProducts: 3, glassCount: 2, aluminumCount: 1, lowStockCount: 2, outOfStockCount: 1, totalInventoryValue: 36300, glassInventoryValue: 30000, aluminumInventoryValue: 6300, activeProductCount: 3, activeGlassCount: 2, activeAluminumCount: 1, activeLowStockCount: 2 });
     expect(firstBody.items).toHaveLength(1);
 
     const second = await app.request(`/products?mode=page&limit=1&cursor=${encodeURIComponent(firstBody.page.nextCursor!)}`, { headers });

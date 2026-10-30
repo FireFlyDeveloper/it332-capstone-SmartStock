@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Package,
   TrendingUp,
@@ -14,6 +14,8 @@ import {
   getAnalyticsSalesTrends,
   getDashboardOrderSummary,
   getDashboardRecentActivity,
+  getProductsPage,
+  type ProductsPageResponse,
   type AnalyticsSalesTrend,
   type DashboardActivityRecord,
   type DashboardOrderSummary,
@@ -110,10 +112,15 @@ function formatMonthLabel(month: string): string {
 }
 
 export const Dashboard: React.FC = () => {
-  const { products, deliverySummary, loading, error, refresh } = useData();
+  const { deliverySummary, deliveriesLoading, deliveriesError, refreshDeliveries } = useData();
   const { user } = useAuth();
   const [timeRange, setTimeRange] = useState<DashboardSalesRange>('6M');
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
+  const [inventorySummary, setInventorySummary] = useState<ProductsPageResponse['summary'] | null>(null);
+  const [inventorySummaryLoading, setInventorySummaryLoading] = useState(true);
+  const [inventorySummaryError, setInventorySummaryError] = useState('');
+  const [inventorySummaryRetry, setInventorySummaryRetry] = useState(0);
+  const inventorySummaryRequestRef = useRef(0);
   const [salesTrend, setSalesTrend] = useState<AnalyticsSalesTrend[]>([]);
   const [salesTrendLoading, setSalesTrendLoading] = useState(true);
   const [salesTrendError, setSalesTrendError] = useState<string | null>(null);
@@ -123,6 +130,25 @@ export const Dashboard: React.FC = () => {
   const [recentActivity, setRecentActivity] = useState<DashboardActivityRecord[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
   const [activityError, setActivityError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const requestId = ++inventorySummaryRequestRef.current;
+    setInventorySummaryLoading(true);
+    setInventorySummaryError('');
+    getProductsPage({ limit: 1 })
+      .then((result) => {
+        if (requestId === inventorySummaryRequestRef.current) setInventorySummary(result.summary);
+      })
+      .catch((cause: unknown) => {
+        if (requestId === inventorySummaryRequestRef.current) setInventorySummaryError(cause instanceof Error ? cause.message : 'Could not load inventory summary.');
+      })
+      .finally(() => {
+        if (requestId === inventorySummaryRequestRef.current) setInventorySummaryLoading(false);
+      });
+    return () => {
+      if (requestId === inventorySummaryRequestRef.current) inventorySummaryRequestRef.current += 1;
+    };
+  }, [inventorySummaryRetry]);
 
   useEffect(() => {
     let active = true;
@@ -163,14 +189,8 @@ export const Dashboard: React.FC = () => {
     return () => { active = false; };
   }, [dashboardRefreshKey]);
 
-  const totalStockAtListPrice = useMemo(
-    () => products.reduce((sum, product) => sum + product.stock * product.price, 0),
-    [products],
-  );
-  const lowStockItems = useMemo(
-    () => products.filter((product) => product.status === 'active' && product.stock <= product.threshold).length,
-    [products],
-  );
+  const totalStockAtListPrice = inventorySummary?.totalInventoryValue ?? 0;
+  const lowStockItems = inventorySummary?.activeLowStockCount ?? 0;
   const activeOrders = orderSummary?.activeOrderCount ?? 0;
   const inTransitDeliveries = deliverySummary.inTransitCount;
 
@@ -186,9 +206,8 @@ export const Dashboard: React.FC = () => {
 
   const topItems = orderSummary?.topItems ?? [];
 
-  const activeProducts = useMemo(() => products.filter((product) => product.status === 'active'), [products]);
-  const glassSkuCount = activeProducts.filter((product) => product.category === 'glass').length;
-  const aluminumSkuCount = activeProducts.filter((product) => product.category === 'aluminum').length;
+  const glassSkuCount = inventorySummary?.activeGlassCount ?? 0;
+  const aluminumSkuCount = inventorySummary?.activeAluminumCount ?? 0;
   const distributionData: DonutSegment[] = [
     { label: 'Glass products', shortLabel: 'Glass', value: glassSkuCount, color: '#10b981' },
     { label: 'Aluminum products', shortLabel: 'Aluminum', value: aluminumSkuCount, color: '#4f46e5' },
@@ -205,17 +224,19 @@ export const Dashboard: React.FC = () => {
 
   const retryDashboard = () => {
     setDashboardRefreshKey((current) => current + 1);
-    void refresh();
+    setInventorySummaryRetry((current) => current + 1);
+    void refreshDeliveries().catch(() => undefined);
   };
 
-  if (loading) {
+  if (deliveriesLoading || inventorySummaryLoading) {
     return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading dashboard data from backend…</div>;
   }
-  if (error) {
+  const sourceError = [deliveriesError && `Deliveries: ${deliveriesError}`, inventorySummaryError && `Inventory: ${inventorySummaryError}`].filter(Boolean).join('; ');
+  if (sourceError) {
     return (
       <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
-        <p className="font-semibold text-rose-700">Could not load dashboard data: {error}</p>
-        <button type="button" onClick={() => void refresh()} className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Retry</button>
+        <p className="font-semibold text-rose-700">Could not load dashboard data: {sourceError}</p>
+        <button type="button" onClick={retryDashboard} className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Retry</button>
       </div>
     );
   }

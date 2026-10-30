@@ -117,6 +117,13 @@ export interface ProductsDbPage {
   aluminumCount: number;
   lowStockCount: number;
   outOfStockCount: number;
+  totalInventoryValue: number;
+  glassInventoryValue: number;
+  aluminumInventoryValue: number;
+  activeProductCount: number;
+  activeGlassCount: number;
+  activeAluminumCount: number;
+  activeLowStockCount: number;
   hasMore: boolean;
   nextCursor: { name: string; id: string } | null;
 }
@@ -146,7 +153,14 @@ export async function listProductsPageDb(input: {
         COUNT(*) FILTER (WHERE category = 'glass')::int AS glass_count,
         COUNT(*) FILTER (WHERE category = 'aluminum')::int AS aluminum_count,
         COUNT(*) FILTER (WHERE stock <= threshold)::int AS low_stock_count,
-        COUNT(*) FILTER (WHERE stock <= 0)::int AS out_of_stock_count
+        COUNT(*) FILTER (WHERE stock <= 0)::int AS out_of_stock_count,
+        COALESCE(SUM(stock * unit_price), 0)::numeric AS total_inventory_value,
+        COALESCE(SUM(stock * unit_price) FILTER (WHERE category = 'glass'), 0)::numeric AS glass_inventory_value,
+        COALESCE(SUM(stock * unit_price) FILTER (WHERE category = 'aluminum'), 0)::numeric AS aluminum_inventory_value,
+        COUNT(*) FILTER (WHERE status = 'active')::int AS active_product_count,
+        COUNT(*) FILTER (WHERE status = 'active' AND category = 'glass')::int AS active_glass_count,
+        COUNT(*) FILTER (WHERE status = 'active' AND category = 'aluminum')::int AS active_aluminum_count,
+        COUNT(*) FILTER (WHERE status = 'active' AND stock <= threshold)::int AS active_low_stock_count
       FROM products WHERE deleted_at IS NULL
     ), page_rows AS (
       SELECT * FROM filtered
@@ -158,6 +172,8 @@ export async function listProductsPageDb(input: {
     )
     SELECT (SELECT COUNT(*)::int FROM filtered) AS filtered_count,
       summary.total_products, summary.glass_count, summary.aluminum_count, summary.low_stock_count, summary.out_of_stock_count,
+      summary.total_inventory_value, summary.glass_inventory_value, summary.aluminum_inventory_value,
+      summary.active_product_count, summary.active_glass_count, summary.active_aluminum_count, summary.active_low_stock_count,
       COALESCE((SELECT jsonb_agg(to_jsonb(page_rows) ORDER BY page_rows.name COLLATE "C" ASC, page_rows.id::text COLLATE "C" ASC) FROM page_rows), '[]'::jsonb) AS page_items
     FROM summary
   `, [input.category, input.stock, input.searchTokens, input.cursorName, input.cursorId, input.limit + 1]);
@@ -175,6 +191,13 @@ export async function listProductsPageDb(input: {
     aluminumCount: Number(row.aluminum_count ?? 0),
     lowStockCount: Number(row.low_stock_count ?? 0),
     outOfStockCount: Number(row.out_of_stock_count ?? 0),
+    totalInventoryValue: Number(row.total_inventory_value ?? 0),
+    glassInventoryValue: Number(row.glass_inventory_value ?? 0),
+    aluminumInventoryValue: Number(row.aluminum_inventory_value ?? 0),
+    activeProductCount: Number(row.active_product_count ?? 0),
+    activeGlassCount: Number(row.active_glass_count ?? 0),
+    activeAluminumCount: Number(row.active_aluminum_count ?? 0),
+    activeLowStockCount: Number(row.active_low_stock_count ?? 0),
     hasMore,
     nextCursor: hasMore && lastVisible ? { name: String(lastVisible.name), id: String(lastVisible.id) } : null,
   };

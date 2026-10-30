@@ -274,6 +274,13 @@ export async function listProductPageRecords(input: ProductPageInput) {
     aluminumCount: products.filter((product) => product.category === 'aluminum').length,
     lowStockCount: products.filter((product) => product.stock <= product.threshold).length,
     outOfStockCount: products.filter((product) => product.stock <= 0).length,
+    totalInventoryValue: products.reduce((total, product) => total + product.stock * product.price, 0),
+    glassInventoryValue: products.filter((product) => product.category === 'glass').reduce((total, product) => total + product.stock * product.price, 0),
+    aluminumInventoryValue: products.filter((product) => product.category === 'aluminum').reduce((total, product) => total + product.stock * product.price, 0),
+    activeProductCount: products.filter((product) => product.status === 'active').length,
+    activeGlassCount: products.filter((product) => product.status === 'active' && product.category === 'glass').length,
+    activeAluminumCount: products.filter((product) => product.status === 'active' && product.category === 'aluminum').length,
+    activeLowStockCount: products.filter((product) => product.status === 'active' && product.stock <= product.threshold).length,
     hasMore,
     nextCursor: hasMore && lastVisible ? { name: lastVisible.name, id: lastVisible.id } : null,
   };

@@ -76,6 +76,13 @@ export async function listProductPageController(c: Context) {
         aluminumCount: result.aluminumCount,
         lowStockCount: result.lowStockCount,
         outOfStockCount: result.outOfStockCount,
+        totalInventoryValue: Number(result.totalInventoryValue),
+        glassInventoryValue: Number(result.glassInventoryValue),
+        aluminumInventoryValue: Number(result.aluminumInventoryValue),
+        activeProductCount: result.activeProductCount,
+        activeGlassCount: result.activeGlassCount,
+        activeAluminumCount: result.activeAluminumCount,
+        activeLowStockCount: result.activeLowStockCount,
       },
     });
   } catch (error) {

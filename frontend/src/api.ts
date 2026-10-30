@@ -492,7 +492,20 @@ export function getDeliveriesPage(options: {
 export interface ProductsPageResponse {
   items: Product[]
   page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null }
-  summary: { totalProducts: number; glassCount: number; aluminumCount: number; lowStockCount: number; outOfStockCount: number }
+  summary: {
+    totalProducts: number
+    glassCount: number
+    aluminumCount: number
+    lowStockCount: number
+    outOfStockCount: number
+    totalInventoryValue: number
+    glassInventoryValue: number
+    aluminumInventoryValue: number
+    activeProductCount: number
+    activeGlassCount: number
+    activeAluminumCount: number
+    activeLowStockCount: number
+  }
 }
 
 export function getProductsPage(options: {

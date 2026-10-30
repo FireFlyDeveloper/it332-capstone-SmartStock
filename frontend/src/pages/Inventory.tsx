@@ -77,6 +77,8 @@ function toProductPayload(form: ProductFormData): Omit<Product, 'id'> {
 
 const PRODUCT_BATCH_SIZES = [10, 25, 50, 100] as const;
 
+const EMPTY_PRODUCT_SUMMARY = { totalProducts: 0, glassCount: 0, aluminumCount: 0, lowStockCount: 0, outOfStockCount: 0, totalInventoryValue: 0, glassInventoryValue: 0, aluminumInventoryValue: 0, activeProductCount: 0, activeGlassCount: 0, activeAluminumCount: 0, activeLowStockCount: 0 };
+
 export const Inventory: React.FC = () => {
   const { addProduct, updateProduct, deleteProduct, restockProduct } = useData();
   const { isAdmin } = useAuth();
@@ -85,7 +87,7 @@ export const Inventory: React.FC = () => {
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'healthy'>('all');
   const [batchSize, setBatchSize] = useState<number>(25);
   const [pagedProducts, setPagedProducts] = useState<Product[]>([]);
-  const [pageSummary, setPageSummary] = useState<ProductsPageResponse['summary']>({ totalProducts: 0, glassCount: 0, aluminumCount: 0, lowStockCount: 0, outOfStockCount: 0 });
+  const [pageSummary, setPageSummary] = useState<ProductsPageResponse['summary']>(EMPTY_PRODUCT_SUMMARY);
   const [pageTotalCount, setPageTotalCount] = useState(0);
   const [pageNextCursor, setPageNextCursor] = useState<string | null>(null);
   const [pageHasMore, setPageHasMore] = useState(false);
@@ -122,7 +124,7 @@ export const Inventory: React.FC = () => {
     setPageNextCursor(null);
     setPageHasMore(false);
     setPageTotalCount(0);
-    setPageSummary({ totalProducts: 0, glassCount: 0, aluminumCount: 0, lowStockCount: 0, outOfStockCount: 0 });
+    setPageSummary(EMPTY_PRODUCT_SUMMARY);
     try {
       const result = await getProductsPage({
         limit: batchSize,
