@@ -949,16 +949,29 @@ export const Reports: React.FC = () => {
                       <th className="px-4 py-3 text-right">Days ≤ threshold</th><th className="px-4 py-3 text-right">Time ≤ threshold</th><th className="px-4 py-3 text-right">Out-of-stock days</th>
                       <th className="px-4 py-3 text-right">Threshold changes</th><th className="px-4 py-3">Tracking</th>
                     </tr></thead>
-                    <tbody className="divide-y divide-emerald-100">{observedPolicy.rows.map(row => <tr key={row.productId}>
-                      <td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">{row.sku}</span></td>
-                      <td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.currentReorderPoint} {row.unit}</td>
-                      <td className="px-4 py-3 text-right text-sm">{row.timeWeightedAverageOnHand === null ? '—' : `${row.timeWeightedAverageOnHand.toFixed(2)} ${row.unit}`}</td>
-                      <td className="px-4 py-3 text-right text-sm">{row.trackingStartedAt === null ? '—' : row.daysAtOrBelowReorderPoint.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right text-sm">{row.percentTimeAtOrBelowReorderPoint === null ? '—' : `${row.percentTimeAtOrBelowReorderPoint.toFixed(1)}%`}</td>
-                      <td className="px-4 py-3 text-right text-sm">{row.trackingStartedAt === null ? '—' : row.outOfStockDays.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right text-sm">{row.reorderPointChanges}</td>
-                      <td className="px-4 py-3 text-sm">{row.trackingStartedAt ? `${row.trackingDays.toFixed(2)} days` : 'awaiting baseline'}</td>
-                    </tr>)}</tbody>
+                    <tbody className="divide-y divide-emerald-100">{observedPolicy.rows.map(row => {
+                      const periods = row.policyPeriods ?? []
+                      return <React.Fragment key={row.productId}>
+                        <tr>
+                          <td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">{row.sku}</span></td>
+                          <td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.currentReorderPoint} {row.unit}</td>
+                          <td className="px-4 py-3 text-right text-sm">{row.timeWeightedAverageOnHand === null ? '—' : `${row.timeWeightedAverageOnHand.toFixed(2)} ${row.unit}`}</td>
+                          <td className="px-4 py-3 text-right text-sm">{row.trackingStartedAt === null ? '—' : row.daysAtOrBelowReorderPoint.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right text-sm">{row.percentTimeAtOrBelowReorderPoint === null ? '—' : `${row.percentTimeAtOrBelowReorderPoint.toFixed(1)}%`}</td>
+                          <td className="px-4 py-3 text-right text-sm">{row.trackingStartedAt === null ? '—' : row.outOfStockDays.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right text-sm">{row.reorderPointChanges}</td>
+                          <td className="px-4 py-3 text-sm">{row.trackingStartedAt ? `${row.trackingDays.toFixed(2)} days` : 'awaiting baseline'}</td>
+                        </tr>
+                        <tr><td colSpan={8} className="px-4 py-3">
+                          <details><summary className="cursor-pointer text-xs font-semibold text-emerald-800">Observed comparisons by reorder-point period ({periods.length}) — not causal effects</summary>
+                            <div className="mt-2 space-y-2">{periods.length ? periods.map((period, index) => <div key={`${period.startedAt}-${index}`} className="rounded-lg bg-emerald-50 p-3 text-xs text-slate-700">
+                              <strong>Reorder point {period.reorderPoint}</strong> · {formatDate(period.startedAt)} – {period.endedAt ? formatDate(period.endedAt) : 'Current'} · {period.trackingDays.toFixed(2)} days<br />
+                              Average on hand {period.timeWeightedAverageOnHand?.toFixed(2) ?? '—'} {row.unit}; at/below point {period.daysAtOrBelowReorderPoint.toFixed(2)} days ({period.percentTimeAtOrBelowReorderPoint?.toFixed(1) ?? '—'}%); out of stock {period.outOfStockDays.toFixed(2)} days
+                            </div>) : <p className="text-xs text-slate-500">No completed observation interval.</p>}</div>
+                          </details>
+                        </td></tr>
+                      </React.Fragment>
+                    })}</tbody>
                   </table></div>
                   {observedPolicy.page.hasMore && <div ref={observedPolicySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more observed policy rows…</div>}
                   {observedPolicyLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more observed policy rows…</p>}

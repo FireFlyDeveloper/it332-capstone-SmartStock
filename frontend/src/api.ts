@@ -148,6 +148,17 @@ export interface PurchaseAnalyticsResponse {
   groups: { materialType: string; supplier: string; transactionCount: number; totalQuantity: number; totalCost: number; unpricedReceiptCount: number; unpricedQuantity: number }[]
 }
 
+export interface PolicyPerformancePeriod {
+  startedAt: string
+  endedAt: string | null
+  reorderPoint: number
+  trackingDays: number
+  timeWeightedAverageOnHand: number | null
+  daysAtOrBelowReorderPoint: number
+  percentTimeAtOrBelowReorderPoint: number | null
+  outOfStockDays: number
+}
+
 export interface PolicyPerformanceProduct {
   productId: string
   sku: string
@@ -156,6 +167,7 @@ export interface PolicyPerformanceProduct {
   currentStock: number
   currentReorderPoint: number
   trackingStartedAt: string | null
+  policyPeriods?: PolicyPerformancePeriod[]
   trackingDays: number
   timeWeightedAverageOnHand: number | null
   daysAtOrBelowReorderPoint: number

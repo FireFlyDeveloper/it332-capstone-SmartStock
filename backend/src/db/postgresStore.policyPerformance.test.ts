@@ -19,6 +19,7 @@ const reportRow = (product_id: string, name: string, stock = 4) => ({
   days_at_or_below_reorder_point: '5.0000',
   percent_time_at_or_below_reorder_point: '50.0000',
   out_of_stock_days: '1.0000',
+  policy_periods: [{ started_at: '2026-01-01T00:00:00.000Z', ended_at: null, reorder_point: 5, tracking_days: '10', time_weighted_average_on_hand: '3.5', days_at_or_below_reorder_point: '5', percent_time_at_or_below_reorder_point: '50', out_of_stock_days: '1' }],
   reorder_point_changes: 2,
   current_stock: stock,
   current_reorder_point: 5,
@@ -50,7 +51,7 @@ describe('PostgreSQL observed policy-performance cursor query', () => {
       trackingStart: '2026-01-01T00:00:00.000Z',
       totals: { products: 3, productsWithHistory: 2, trackingDays: 302, outOfStockProductCount: 1, reorderPointChanges: 5 },
       rows: [
-        { productId: 'p-1', name: 'Alpha', trackingDays: 10, timeWeightedAverageOnHand: 3.5, status: 'at_or_below_reorder_point' },
+        { productId: 'p-1', name: 'Alpha', trackingDays: 10, timeWeightedAverageOnHand: 3.5, status: 'at_or_below_reorder_point', policyPeriods: [{ startedAt: '2026-01-01T00:00:00.000Z', endedAt: null, reorderPoint: 5, trackingDays: 10, timeWeightedAverageOnHand: 3.5, daysAtOrBelowReorderPoint: 5, percentTimeAtOrBelowReorderPoint: 50, outOfStockDays: 1 }] },
         { productId: 'p-2', name: 'Beta', trackingDays: 10, timeWeightedAverageOnHand: 3.5, status: 'at_or_below_reorder_point' },
       ],
       page: { limit: 2, totalCount: 3, hasMore: true, nextCursor: { name: 'Beta', productId: 'p-2' } },
@@ -58,6 +59,10 @@ describe('PostgreSQL observed policy-performance cursor query', () => {
     const [sql, values] = database.query.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain('LEAD(recorded_at) OVER (PARTITION BY product_id ORDER BY recorded_at, id)');
     expect(sql).toContain('FROM inventory_policy_history');
+    expect(sql).toContain('AS policy_periods');
+    expect(sql).toContain('period_number');
+    expect(sql).toContain('CASE WHEN BOOL_OR(next_recorded_at IS NULL) THEN NULL ELSE MAX(next_recorded_at) END AS ended_at');
+    expect(sql).toContain('MAX(CASE WHEN next_recorded_at IS NULL THEN $1::timestamptz ELSE next_recorded_at END)');
     expect(sql).toContain('ORDER BY name COLLATE "C" ASC, product_id COLLATE "C" ASC');
     expect(sql).toContain('LIMIT $4');
     expect(values).toEqual([now, null, null, 3]);

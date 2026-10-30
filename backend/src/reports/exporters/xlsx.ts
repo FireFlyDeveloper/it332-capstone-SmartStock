@@ -53,7 +53,16 @@ export async function exportReportXlsx(report: ReportDto): Promise<Buffer> {
   }
   worksheet.addRow([]);
 
-  if (report.rows.length > 0) {
+  if (report.report === 'policy_performance') {
+    worksheet.addRow([]);
+    worksheet.addRow(['Observed policy-period comparisons (not causal effects)']);
+    worksheet.addRow(['Product', 'SKU', 'Reorder point', 'Started at', 'Ended at', 'Tracking days', 'Average on hand', 'Days at/below', 'Percent at/below', 'Out-of-stock days']);
+    for (const row of report.rows) for (const period of row.policyPeriods) worksheet.addRow([
+      row.name, row.sku, period.reorderPoint, period.startedAt, period.endedAt ?? 'Current', period.trackingDays,
+      period.timeWeightedAverageOnHand ?? '', period.daysAtOrBelowReorderPoint, period.percentTimeAtOrBelowReorderPoint ?? '', period.outOfStockDays,
+    ]);
+    worksheet.addRow(['Caveat', 'No missed demand, lead-time, holding-cost, or causal effects are estimated.']);
+  } else if (report.rows.length > 0) {
     const headers = Object.keys(report.rows[0]);
     worksheet.addRow(headers);
     for (const row of report.rows) {

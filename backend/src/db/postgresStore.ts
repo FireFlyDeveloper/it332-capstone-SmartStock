@@ -701,18 +701,43 @@ export async function listPolicyPerformancePageDb(input: {
         COUNT(*) FILTER (WHERE threshold_before IS NOT NULL AND threshold_before <> threshold_after)::int AS threshold_changes
       FROM event_intervals
       GROUP BY product_id
+    ), ordered_events AS (
+      SELECT e.*, SUM(CASE WHEN e.threshold_before IS NOT NULL AND e.threshold_before <> e.threshold_after THEN 1 ELSE 0 END)
+        OVER (PARTITION BY product_id ORDER BY recorded_at, id ROWS UNBOUNDED PRECEDING)::int AS period_number
+      FROM event_windows e
+    ), period_intervals AS (
+      SELECT product_id, period_number, MIN(recorded_at) AS started_at,
+        MIN(threshold_after) AS reorder_point,
+        GREATEST(0, EXTRACT(EPOCH FROM (LEAST($1::timestamptz, MAX(CASE WHEN next_recorded_at IS NULL THEN $1::timestamptz ELSE next_recorded_at END))
+          - LEAST($1::timestamptz, MIN(recorded_at)))) * 1000)::numeric AS tracked_ms,
+        SUM(stock_after * GREATEST(0, EXTRACT(EPOCH FROM (GREATEST(LEAST($1::timestamptz, recorded_at), LEAST($1::timestamptz, COALESCE(next_recorded_at, $1::timestamptz))) - LEAST($1::timestamptz, recorded_at))) * 1000))::numeric AS weighted_stock_ms,
+        SUM(GREATEST(0, EXTRACT(EPOCH FROM (GREATEST(LEAST($1::timestamptz, recorded_at), LEAST($1::timestamptz, COALESCE(next_recorded_at, $1::timestamptz))) - LEAST($1::timestamptz, recorded_at))) * 1000)) FILTER (WHERE stock_after <= threshold_after)::numeric AS below_ms,
+        SUM(GREATEST(0, EXTRACT(EPOCH FROM (GREATEST(LEAST($1::timestamptz, recorded_at), LEAST($1::timestamptz, COALESCE(next_recorded_at, $1::timestamptz))) - LEAST($1::timestamptz, recorded_at))) * 1000)) FILTER (WHERE stock_after <= 0)::numeric AS out_ms,
+        CASE WHEN BOOL_OR(next_recorded_at IS NULL) THEN NULL ELSE MAX(next_recorded_at) END AS ended_at
+      FROM ordered_events GROUP BY product_id, period_number
+    ), policy_periods AS (
+      SELECT product_id, jsonb_agg(jsonb_build_object(
+        'started_at', started_at, 'ended_at', CASE WHEN ended_at IS NULL OR ended_at >= $1::timestamptz THEN NULL ELSE ended_at END,
+        'reorder_point', reorder_point, 'tracking_days', ROUND((tracked_ms / 86400000)::numeric, 4),
+        'time_weighted_average_on_hand', CASE WHEN tracked_ms > 0 THEN ROUND((weighted_stock_ms / tracked_ms)::numeric, 4) END,
+        'days_at_or_below_reorder_point', ROUND((COALESCE(below_ms, 0) / 86400000)::numeric, 4),
+        'percent_time_at_or_below_reorder_point', CASE WHEN tracked_ms > 0 THEN ROUND((COALESCE(below_ms, 0) / tracked_ms * 100)::numeric, 4) END,
+        'out_of_stock_days', ROUND((COALESCE(out_ms, 0) / 86400000)::numeric, 4)
+      ) ORDER BY period_number) FILTER (WHERE tracked_ms > 0 AND started_at < $1::timestamptz) AS policy_periods
+      FROM period_intervals GROUP BY product_id
     ), product_rows AS (
       SELECT p.id::text AS product_id, p.sku, p.name, p.unit, p.stock, p.threshold,
+        COALESCE(pp.policy_periods, '[]'::jsonb) AS policy_periods,
         h.tracking_started_at,
         COALESCE(h.tracked_ms, 0)::numeric AS tracked_ms,
         COALESCE(h.weighted_stock_ms, 0)::numeric AS weighted_stock_ms,
         COALESCE(h.at_or_below_ms, 0)::numeric AS at_or_below_ms,
         COALESCE(h.out_of_stock_ms, 0)::numeric AS out_of_stock_ms,
         COALESCE(h.threshold_changes, 0)::int AS threshold_changes
-      FROM products p LEFT JOIN history_metrics h ON h.product_id = p.id
+      FROM products p LEFT JOIN history_metrics h ON h.product_id = p.id LEFT JOIN policy_periods pp ON pp.product_id = p.id
       WHERE p.deleted_at IS NULL
     ), report_rows AS (
-      SELECT product_id, sku, name, unit, tracking_started_at,
+      SELECT product_id, sku, name, unit, policy_periods, tracking_started_at,
         ROUND((tracked_ms / 86400000)::numeric, 4) AS tracking_days,
         CASE WHEN tracked_ms > 0 THEN ROUND((weighted_stock_ms / tracked_ms)::numeric, 4) END AS time_weighted_average_on_hand,
         ROUND((at_or_below_ms / 86400000)::numeric, 4) AS days_at_or_below_reorder_point,
@@ -752,6 +777,11 @@ export async function listPolicyPerformancePageDb(input: {
   const reportRows = visible.map((row) => ({
     productId: String(row.product_id), sku: String(row.sku), name: String(row.name), unit: String(row.unit),
     trackingStartedAt: parseTimestamp(row.tracking_started_at),
+    policyPeriods: (Array.isArray(row.policy_periods) ? row.policy_periods : typeof row.policy_periods === 'string' ? JSON.parse(row.policy_periods) : []).map((period: Record<string, unknown>) => ({
+      startedAt: parseTimestamp(period.started_at), endedAt: parseTimestamp(period.ended_at), reorderPoint: Number(period.reorder_point),
+      trackingDays: Number(period.tracking_days), timeWeightedAverageOnHand: period.time_weighted_average_on_hand == null ? null : Number(period.time_weighted_average_on_hand),
+      daysAtOrBelowReorderPoint: Number(period.days_at_or_below_reorder_point), percentTimeAtOrBelowReorderPoint: period.percent_time_at_or_below_reorder_point == null ? null : Number(period.percent_time_at_or_below_reorder_point), outOfStockDays: Number(period.out_of_stock_days),
+    })),
     trackingDays: Number(row.tracking_days ?? 0),
     timeWeightedAverageOnHand: row.time_weighted_average_on_hand == null ? null : Number(row.time_weighted_average_on_hand),
     daysAtOrBelowReorderPoint: Number(row.days_at_or_below_reorder_point ?? 0),

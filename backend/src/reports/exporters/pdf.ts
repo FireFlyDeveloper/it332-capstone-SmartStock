@@ -65,6 +65,13 @@ export async function exportReportPdf(report: ReportDto): Promise<Buffer> {
 
     if (report.rows.length === 0) {
       doc.fontSize(10).text('No rows available.');
+    } else if (report.report === 'policy_performance') {
+      report.rows.forEach((row) => {
+        doc.fontSize(10).text(`${row.name} (${row.sku})`, { underline: true });
+        doc.fontSize(8).text(`Observed aggregate: ${row.trackingDays} days; average on hand ${row.timeWeightedAverageOnHand ?? '—'}; at/below reorder point ${row.daysAtOrBelowReorderPoint} days (${row.percentTimeAtOrBelowReorderPoint ?? '—'}%); out of stock ${row.outOfStockDays} days.`);
+        for (const period of row.policyPeriods) doc.fontSize(8).text(`Reorder point ${period.reorderPoint} | ${period.startedAt} – ${period.endedAt ?? 'Current'} | ${period.trackingDays} days | average on hand ${period.timeWeightedAverageOnHand ?? '—'} | at/below ${period.daysAtOrBelowReorderPoint} days (${period.percentTimeAtOrBelowReorderPoint ?? '—'}%) | stockout ${period.outOfStockDays} days`, { width: 500 });
+        doc.moveDown(0.4);
+      });
     } else {
       report.rows.forEach((row, index) => {
         const line = Object.entries(row)

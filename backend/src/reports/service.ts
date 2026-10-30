@@ -178,6 +178,41 @@ export async function buildPolicyPerformanceReport(now = new Date()) {
     const history = (byProduct.get(product.id) ?? []).slice().sort((a, b) =>
       Date.parse(a.recordedAt) - Date.parse(b.recordedAt) || Number(a.id) - Number(b.id));
     const first = history[0];
+    const policyPeriods: Array<{
+      startedAt: string; endedAt: string | null; reorderPoint: number; trackingDays: number;
+      timeWeightedAverageOnHand: number | null; daysAtOrBelowReorderPoint: number;
+      percentTimeAtOrBelowReorderPoint: number | null; outOfStockDays: number;
+    }> = [];
+    let periodStartIndex = 0;
+    const periodEnds = history.map((event, index) => index > 0 && event.thresholdBefore !== null && event.thresholdBefore !== event.thresholdAfter);
+    for (let index = 1; index <= history.length; index += 1) {
+      if (index < history.length && !periodEnds[index]) continue;
+      if (periodStartIndex >= history.length) break;
+      const periodEvents = history.slice(periodStartIndex, index);
+      const startTime = Date.parse(periodEvents[0].recordedAt);
+      const nextEventTime = index < history.length ? Date.parse(history[index].recordedAt) : currentTime;
+      const endTime = Math.min(currentTime, nextEventTime);
+      let tracked = 0, weighted = 0, below = 0, out = 0;
+      for (const [offset, event] of periodEvents.entries()) {
+        const eventTime = Math.min(currentTime, Date.parse(event.recordedAt));
+        const nextTime = offset + 1 < periodEvents.length ? Date.parse(periodEvents[offset + 1].recordedAt) : endTime;
+        const duration = Math.max(0, Math.max(eventTime, Math.min(currentTime, nextTime)) - eventTime);
+        tracked += duration; weighted += event.stockAfter * duration;
+        if (event.stockAfter <= event.thresholdAfter) below += duration;
+        if (event.stockAfter <= 0) out += duration;
+      }
+      if (endTime > startTime && tracked > 0) policyPeriods.push({
+        startedAt: periodEvents[0].recordedAt,
+        endedAt: index < history.length ? new Date(endTime).toISOString() : null,
+        reorderPoint: periodEvents[0].thresholdAfter,
+        trackingDays: roundFour(tracked / DAY_MS),
+        timeWeightedAverageOnHand: roundFour(weighted / tracked),
+        daysAtOrBelowReorderPoint: roundFour(below / DAY_MS),
+        percentTimeAtOrBelowReorderPoint: roundFour((below / tracked) * 100),
+        outOfStockDays: roundFour(out / DAY_MS),
+      });
+      periodStartIndex = index;
+    }
     let weightedStock = 0;
     let trackedMs = 0;
     let atOrBelowMs = 0;
@@ -202,6 +237,7 @@ export async function buildPolicyPerformanceReport(now = new Date()) {
       name: product.name,
       unit: product.unit,
       trackingStartedAt: first?.recordedAt ?? null,
+      policyPeriods,
       trackingDays: roundFour(trackingDays),
       timeWeightedAverageOnHand: trackedMs > 0 ? roundFour(weightedStock / trackedMs) : null,
       daysAtOrBelowReorderPoint: roundFour(atOrBelowMs / DAY_MS),

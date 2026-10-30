@@ -289,6 +289,11 @@ describe('reports routes', () => {
     expect(row.daysAtOrBelowReorderPoint).toBe(2);
     expect(row.percentTimeAtOrBelowReorderPoint).toBe(66.6667);
     expect(row.outOfStockDays).toBe(1);
+    expect(row.policyPeriods.map(period => ({ startedAt: period.startedAt, endedAt: period.endedAt, reorderPoint: period.reorderPoint, trackingDays: period.trackingDays }))).toEqual([
+      { startedAt: new Date(start).toISOString(), endedAt: new Date(start + 86400000).toISOString(), reorderPoint: 2, trackingDays: 1 },
+      { startedAt: new Date(start + 86400000).toISOString(), endedAt: new Date(start + 2 * 86400000).toISOString(), reorderPoint: 3, trackingDays: 1 },
+      { startedAt: new Date(start + 2 * 86400000).toISOString(), endedAt: null, reorderPoint: 1, trackingDays: 1 },
+    ]);
     expect(row.reorderPointChanges).toBe(2);
     expect(report.assumption).toContain('does not infer causal effects');
   });
@@ -327,6 +332,7 @@ describe('reports routes', () => {
       },
     });
     expect(row).toMatchObject({
+      policyPeriods: [],
       unit: 'sheet',
       currentStock: 0,
       currentReorderPoint: 3,
