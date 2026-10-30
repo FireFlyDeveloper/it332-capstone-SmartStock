@@ -384,12 +384,15 @@ export const DeliveryPage: React.FC = () => {
             </div>
           )}
         </div>
-        {pageHasMore && <div ref={sentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">{loadingMore ? 'Loading more deliveries…' : 'Scroll to load more deliveries…'}</div>}
+        {pageHasMore && <div ref={sentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">{loadingMore ? 'Loading more deliveries…' : typeof IntersectionObserver === 'undefined' ? 'More deliveries are available.' : 'Scroll to load more deliveries…'}</div>}
         {loadingMoreError && (
           <div role="alert" className="flex items-center justify-center gap-3 py-3 text-sm text-rose-700">
             <span>{loadingMoreError}</span>
             <button type="button" onClick={() => void loadMore()} className="font-semibold underline">Retry</button>
           </div>
+        )}
+        {pageHasMore && typeof IntersectionObserver === 'undefined' && !loadingMore && !loadingMoreError && (
+          <button type="button" onClick={() => void loadMore()} className="mx-auto block rounded-lg border px-4 py-2 text-sm">Load more deliveries</button>
         )}
         {!pageHasMore && pageItems.length > 0 && <p className="py-3 text-center text-xs text-slate-400">Showing all {pageTotalCount} matching deliveries</p>}
       </div>
