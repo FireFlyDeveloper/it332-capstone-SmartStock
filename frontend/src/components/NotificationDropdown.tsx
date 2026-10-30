@@ -527,7 +527,9 @@ export const NotificationDropdown: React.FC = () => {
               <div ref={sentinelRef} role="status" className="py-3 text-center text-[11px] text-slate-400">
                 {loadingMore ? 'Loading more notifications…' : loadMoreError
                   ? <button type="button" onClick={() => void loadMore()} className="font-semibold text-indigo-600 hover:underline">Could not load more. Retry</button>
-                  : 'Scroll to load more notifications…'}
+                  : typeof IntersectionObserver === 'undefined'
+                    ? <button type="button" onClick={() => void loadMore()} className="font-semibold text-indigo-600 hover:underline">Load more notifications</button>
+                    : 'Scroll to load more notifications…'}
               </div>
             )}
           </div>
