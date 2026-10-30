@@ -15,7 +15,7 @@ import {
 
 import { useData } from '../components/DataContext';
 import { formatCurrency, checkStockStatus, formatDateInput } from '../utils/helpers';
-import { getDemandForecastPage, getProductsPage, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse } from '../api';
+import { getAnalyticsOrderSummary, getDemandForecastPage, getProductsPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse } from '../api';
 import { toast } from 'sonner';
 import { 
   AreaChart, 
@@ -37,10 +37,15 @@ type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 
 export const Analytics: React.FC = () => {
   const navigate = useNavigate();
-  const { products, orders, productsLoading, productsError, ordersLoading, ordersError, refreshProducts, refreshOrders } = useData();
+  const { products, productsLoading, productsError, refreshProducts } = useData();
   const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
+  const [orderSummary, setOrderSummary] = useState<AnalyticsOrderSummary | null>(null);
+  const [orderSummaryLoading, setOrderSummaryLoading] = useState(true);
+  const [orderSummaryError, setOrderSummaryError] = useState('');
+  const [orderSummaryRetry, setOrderSummaryRetry] = useState(0);
+  const orderSummaryRequestRef = useRef(0);
   const [forecast, setForecast] = useState<DemandForecastProduct[]>([]);
   const [forecastLoading, setForecastLoading] = useState(true);
   const [forecastError, setForecastError] = useState('');
@@ -60,6 +65,26 @@ export const Analytics: React.FC = () => {
   const snapshotSentinelRef = useRef<HTMLDivElement | null>(null);
   const snapshotRequestRef = useRef(0);
   const snapshotLoadingMoreRef = useRef(false);
+
+  useEffect(() => {
+    const requestId = ++orderSummaryRequestRef.current;
+    setOrderSummary(null);
+    setOrderSummaryError('');
+    setOrderSummaryLoading(true);
+    getAnalyticsOrderSummary({ fromDate: fromDate || undefined, toDate: toDate || undefined })
+      .then((summary) => {
+        if (requestId === orderSummaryRequestRef.current) setOrderSummary(summary);
+      })
+      .catch((error) => {
+        if (requestId === orderSummaryRequestRef.current) setOrderSummaryError(error instanceof Error ? error.message : 'Could not load Analytics order summary.');
+      })
+      .finally(() => {
+        if (requestId === orderSummaryRequestRef.current) setOrderSummaryLoading(false);
+      });
+    return () => {
+      if (requestId === orderSummaryRequestRef.current) orderSummaryRequestRef.current += 1;
+    };
+  }, [fromDate, toDate, orderSummaryRetry]);
 
   useEffect(() => {
     const requestId = ++snapshotRequestRef.current;
@@ -153,15 +178,6 @@ export const Analytics: React.FC = () => {
     toast.info('Date filters cleared.');
   };
 
-  // Dynamically filter orders based on selected date range
-  const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      if (fromDate && order.date < fromDate) return false;
-      if (toDate && order.date > toDate) return false;
-      return true;
-    });
-  }, [orders, fromDate, toDate]);
-
   useEffect(() => {
     const requestId = ++forecastRequestRef.current;
     setForecast([]);
@@ -229,62 +245,26 @@ export const Analytics: React.FC = () => {
   const glassListedPriceShare = categoryListedPriceTotal > 0 ? glassValue / categoryListedPriceTotal * 100 : 0;
   const aluminumListedPriceShare = categoryListedPriceTotal > 0 ? aluminumValue / categoryListedPriceTotal * 100 : 0;
 
-  const nonCancelledOrders = useMemo(
-    () => filteredOrders.filter(order => order.orderStatus !== 'cancelled'),
-    [filteredOrders],
-  );
-
-  const avgOrderValue = useMemo(() => {
-    return nonCancelledOrders.length > 0
-      ? nonCancelledOrders.reduce((sum, order) => sum + order.total, 0) / nonCancelledOrders.length
-      : 0;
-  }, [nonCancelledOrders]);
+  const avgOrderValue = orderSummary?.averageOrderValue ?? 0;
 
   const lowStockCount = useMemo(() => {
     return products.filter(p => p.status === 'active' && checkStockStatus(p.stock, p.threshold) !== 'healthy').length;
   }, [products]);
 
-  // Highest ordered quantities in the selected date range; not paid-sales volume.
-  const topSellingItems = useMemo(() => {
-    const productCounts: Record<string, { name: string; quantity: number; category: string }> = {};
-    filteredOrders.forEach(o => {
-      if (o.orderStatus === 'cancelled') return;
-      o.items.forEach(i => {
-        if (!productCounts[i.productId]) {
-          const prod = products.find(p => p.id === i.productId);
-          productCounts[i.productId] = {
-            name: i.productName,
-            quantity: 0,
-            category: prod?.category ?? 'Unclassified',
-          };
-        }
-        productCounts[i.productId].quantity += i.quantity;
-      });
-    });
+  const topSellingItems = useMemo(() => (orderSummary?.topSellingItems ?? []).map((item) => {
+    let shortName = item.name
+      .replace(/^Aluminum\s+/i, '')
+      .replace(/\s*-\s*Bronze Finish/i, '')
+      .replace('Roller Nylon Bearing', 'Roller Bearing')
+      .replace('Tube Square', 'Tube Sq')
+      .trim();
+    if (shortName.length > 17) shortName = shortName.slice(0, 15) + '…';
+    return { ...item, shortName, fullName: item.name };
+  }), [orderSummary]);
 
-    const sorted = Object.values(productCounts)
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 5);
+  const mostOrderedItems = orderSummary?.mostOrderedItems ?? [];
+  const leastOrderedItems = orderSummary?.leastOrderedItems ?? [];
 
-    const itemsToUse = sorted;
-
-    return itemsToUse.map(item => {
-      let shortName = item.name
-        .replace(/^Aluminum\s+/i, '')
-        .replace(/\s*-\s*Bronze Finish/i, '')
-        .replace('Roller Nylon Bearing', 'Roller Bearing')
-        .replace('Tube Square', 'Tube Sq')
-        .trim();
-      if (shortName.length > 17) {
-        shortName = shortName.slice(0, 15) + '…';
-      }
-      return {
-        ...item,
-        shortName,
-        fullName: item.name,
-      };
-    });
-  }, [filteredOrders, products]);
 
   // Stock status distribution for pie chart
   const stockDistribution = [
@@ -293,34 +273,6 @@ export const Analytics: React.FC = () => {
     { name: 'Critical', value: products.filter(p => checkStockStatus(p.stock, p.threshold) === 'critical').length, color: '#ef4444' },
     { name: 'Out of Stock', value: products.filter(p => p.stock === 0).length, color: '#6b7280' }
   ].filter(item => item.value > 0);
-
-  // Rank current catalog products by non-cancelled order quantities in recorded history.
-  const { mostOrderedItems, leastOrderedItems } = useMemo(() => {
-    const quantityByProduct: Record<string, number> = {};
-    orders.forEach((o) => {
-      if (o.orderStatus === 'cancelled') return;
-      o.items.forEach((item) => {
-        quantityByProduct[item.productId] = (quantityByProduct[item.productId] || 0) + item.quantity;
-      });
-    });
-
-    const list = products.map((p) => ({
-      name: p.name,
-      category: p.category,
-      stock: p.stock,
-      unitsOrdered: quantityByProduct[p.id] || 0,
-      status: checkStockStatus(p.stock, p.threshold),
-    }));
-
-    const mostOrdered = [...list]
-      .filter((product) => product.unitsOrdered > 0)
-      .sort((a, b) => b.unitsOrdered - a.unitsOrdered || a.name.localeCompare(b.name))
-      .slice(0, 5);
-    const leastOrdered = [...list]
-      .sort((a, b) => a.unitsOrdered - b.unitsOrdered || a.name.localeCompare(b.name))
-      .slice(0, 5);
-    return { mostOrderedItems: mostOrdered, leastOrderedItems: leastOrdered };
-  }, [products, orders]);
 
   // Rule-based stock alerts derived from current product levels and thresholds.
   const stockAlerts = useMemo(() => {
@@ -361,103 +313,32 @@ export const Analytics: React.FC = () => {
     return recs;
   }, [products]);
 
-  const inventoryMovements = useMemo(() => {
-    return snapshotProducts.map(product => {
-      const orderedQty = filteredOrders
-        .filter(o => o.orderStatus !== 'cancelled')
-        .reduce((sum, o) => sum + o.items
-          .filter(item => item.productId === product.id)
-          .reduce((qty, item) => qty + item.quantity, 0), 0);
-      return {
-        productId: product.id,
-        productName: product.name,
-        category: product.category,
-        stock: product.stock,
-        orderedQty,
-      };
-    });
-  }, [snapshotProducts, filteredOrders]);
+  const inventoryMovements = useMemo(() => snapshotProducts.map((product) => ({
+    productId: product.id,
+    productName: product.name,
+    category: product.category,
+    stock: product.stock,
+    orderedQty: orderSummary?.orderedQuantities[product.id] ?? 0,
+  })), [snapshotProducts, orderSummary]);
   const availableForecastRows = useMemo(
     () => forecast.filter((item) => item.forecastQuantity !== null),
     [forecast],
   );
 
-  // Dynamic sales and order trend data aggregated from filtered orders
-  const salesTrendData = useMemo(() => {
-    if (filteredOrders.length === 0) {
-      return [];
-    }
-    const dates = filteredOrders.map(o => o.date).filter(Boolean).sort();
-    if (dates.length === 0) return [];
-
-    const minDate = dates[0];
-    const maxDate = dates[dates.length - 1];
-    const dayDiff = (new Date(maxDate).getTime() - new Date(minDate).getTime()) / (1000 * 60 * 60 * 24);
-
-    // If viewing short date range (<= 31 days) with an active filter, group by day
-    if (dayDiff <= 31 && (fromDate || toDate)) {
-      const dayMap: Record<string, { label: string; sales: number; orders: number }> = {};
-      filteredOrders.forEach(o => {
-        const d = o.date;
-        if (!dayMap[d]) {
-          const parsed = new Date(d);
-          const label = !isNaN(parsed.getTime())
-            ? parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-            : d;
-          dayMap[d] = { label, sales: 0, orders: 0 };
-        }
-        if (o.orderStatus !== 'cancelled') {
-          dayMap[d].sales += o.total;
-        }
-        dayMap[d].orders += 1;
-      });
-      return Object.keys(dayMap).sort().map(d => ({
-        month: dayMap[d].label,
-        sales: dayMap[d].sales,
-        orders: dayMap[d].orders,
-      }));
-    }
-
-    // Default or multi-month view: group by YYYY-MM
-    const monthMap: Record<string, { label: string; sales: number; orders: number }> = {};
-    filteredOrders.forEach(o => {
-      const m = o.date.slice(0, 7);
-      if (!monthMap[m]) {
-        const [yr, mo] = m.split('-');
-        const monthDate = new Date(Number(yr), Number(mo) - 1, 1);
-        const label = !isNaN(monthDate.getTime())
-          ? monthDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-          : m;
-        monthMap[m] = { label, sales: 0, orders: 0 };
-      }
-      if (o.orderStatus !== 'cancelled') {
-        monthMap[m].sales += o.total;
-      }
-      monthMap[m].orders += 1;
-    });
-
-    const results = Object.keys(monthMap).sort().map(m => ({
-      month: monthMap[m].label,
-      sales: monthMap[m].sales,
-      orders: monthMap[m].orders,
-    }));
-
-    return results;
-  }, [filteredOrders, fromDate, toDate]);
-
+  const salesTrendData = orderSummary?.salesTrendData ?? [];
   const chartSalesData = salesTrendData;
 
-  if (productsLoading || ordersLoading) {
+  if (productsLoading || orderSummaryLoading) {
     return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading analytics data from backend…</div>;
   }
-  const sourceError = [productsError && `Products: ${productsError}`, ordersError && `Orders: ${ordersError}`].filter(Boolean).join('; ');
+  const sourceError = [productsError && `Products: ${productsError}`, orderSummaryError && `Order summary: ${orderSummaryError}`].filter(Boolean).join('; ');
   if (sourceError) {
     return (
       <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
         <p className="font-semibold text-rose-700">Could not load analytics source data: {sourceError}</p>
         <button
           type="button"
-          onClick={() => void Promise.allSettled([refreshProducts(), refreshOrders()])}
+          onClick={() => { void refreshProducts(); setOrderSummaryRetry((current) => current + 1); }}
           className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
         >
           Retry
@@ -556,7 +437,7 @@ export const Analytics: React.FC = () => {
               )}
 
               <span className="text-xs font-semibold text-slate-400 pl-1 hidden sm:inline">
-                ({filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} analyzed)
+                ({(orderSummary?.totalOrderCount ?? 0)} {(orderSummary?.totalOrderCount ?? 0) === 1 ? 'order' : 'orders'} analyzed)
               </span>
             </div>
           </div>
@@ -601,10 +482,10 @@ export const Analytics: React.FC = () => {
               </p>
               <div className="min-w-0">
                 <span
-                  title={`${filteredOrders.length} orders`}
+                  title={`${(orderSummary?.totalOrderCount ?? 0)} orders`}
                   className="text-2xl sm:text-[26px] font-black text-slate-900 tracking-tight leading-none truncate block"
                 >
-                  {filteredOrders.length}
+                  {(orderSummary?.totalOrderCount ?? 0)}
                 </span>
                 <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Includes cancelled order records.</p>
               </div>

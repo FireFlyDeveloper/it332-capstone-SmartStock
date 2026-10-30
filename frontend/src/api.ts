@@ -212,6 +212,24 @@ export interface AnalyticsSalesTrend {
 }
 
 export type DashboardSalesRange = '6M' | '1Y' | 'ALL'
+export interface AnalyticsOrderSummary {
+  totalOrderCount: number
+  averageOrderValue: number
+  topSellingItems: Array<{ productId: string; name: string; quantity: number; category: string }>
+  mostOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>
+  leastOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>
+  orderedQuantities: Record<string, number>
+  salesTrendData: Array<{ month: string; sales: number; orders: number }>
+}
+
+export function getAnalyticsOrderSummary(options: { fromDate?: string | null; toDate?: string | null } = {}): Promise<AnalyticsOrderSummary> {
+  const params = new URLSearchParams()
+  if (options.fromDate) params.set('fromDate', options.fromDate)
+  if (options.toDate) params.set('toDate', options.toDate)
+  const query = params.toString()
+  return apiFetch<AnalyticsOrderSummary>(`/analytics/orders/summary${query ? `?${query}` : ''}`)
+}
+
 export interface DashboardOrderSummary {
   activeOrderCount: number
   orderStatusCounts: Array<{ status: string; count: number }>

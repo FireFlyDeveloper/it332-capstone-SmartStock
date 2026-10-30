@@ -11,6 +11,7 @@ import { getAnalyticsInsight } from '../ai/insights.js';
 import {
   getAnnualPurchases,
   getAnnualPurchasesPage,
+  getAnalyticsOrderSummary,
   getDashboardOrderSummary,
   getForecast,
   getMovementClassification,
@@ -67,6 +68,22 @@ analyticsRoutes.get('/demand-forecast', (c) => {
     return c.json({ error: 'historyMonths must be an integer between 1 and 60' }, 400);
   }
   return c.json(getDemandForecast(historyMonths));
+});
+
+function isDateOnly(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+analyticsRoutes.get('/orders/summary', (c) => {
+  const fromDate = c.req.query('fromDate') || undefined;
+  const toDate = c.req.query('toDate') || undefined;
+  if ((fromDate && !isDateOnly(fromDate)) || (toDate && !isDateOnly(toDate))) {
+    return c.json({ error: 'fromDate and toDate must be valid YYYY-MM-DD dates' }, 400);
+  }
+  if (fromDate && toDate && fromDate > toDate) return c.json({ error: 'fromDate must be on or before toDate' }, 400);
+  return c.json(getAnalyticsOrderSummary(fromDate, toDate));
 });
 
 analyticsRoutes.get('/dashboard-order-summary', (c) => c.json(getDashboardOrderSummary()));

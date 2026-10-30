@@ -16,6 +16,96 @@ export interface MonthlySalesTrendRow {
 
 export type DashboardSalesRange = '6M' | '1Y' | 'ALL';
 
+export interface AnalyticsOrderSummary {
+  totalOrderCount: number;
+  averageOrderValue: number;
+  topSellingItems: Array<{ productId: string; name: string; quantity: number; category: string }>;
+  mostOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>;
+  leastOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>;
+  orderedQuantities: Record<string, number>;
+  salesTrendData: Array<{ month: string; sales: number; orders: number }>;
+}
+
+export function buildAnalyticsOrderSummary(orders: Order[], products: Product[], fromDate?: string, toDate?: string): AnalyticsOrderSummary {
+  const filtered = orders.filter((order) => (!fromDate || order.deliveryDate >= fromDate) && (!toDate || order.deliveryDate <= toDate));
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const rangedQuantities = new Map<string, { productId: string; name: string; quantity: number; category: string }>();
+  const orderedQuantities: Record<string, number> = {};
+  const countsByProduct = new Map<string, number>();
+  let nonCancelledTotal = 0;
+  let nonCancelledCount = 0;
+
+  for (const order of filtered) {
+    if (order.orderStatus !== 'cancelled') {
+      nonCancelledTotal += order.total;
+      nonCancelledCount += 1;
+    }
+    for (const line of order.items) {
+      if (order.orderStatus === 'cancelled') continue;
+      orderedQuantities[line.productId] = (orderedQuantities[line.productId] ?? 0) + line.quantity;
+      const product = productById.get(line.productId);
+      const current = rangedQuantities.get(line.productId) ?? {
+        productId: line.productId,
+        name: line.name,
+        quantity: 0,
+        category: product?.category ?? 'Unclassified',
+      };
+      current.quantity += line.quantity;
+      rangedQuantities.set(line.productId, current);
+    }
+  }
+
+  for (const order of orders) {
+    if (order.orderStatus === 'cancelled') continue;
+    for (const line of order.items) countsByProduct.set(line.productId, (countsByProduct.get(line.productId) ?? 0) + line.quantity);
+  }
+
+  const topSellingItems = [...rangedQuantities.values()]
+    .sort((left, right) => right.quantity - left.quantity || left.productId.localeCompare(right.productId))
+    .slice(0, 5);
+  const rankings = products.map((product) => ({
+    name: product.name,
+    category: product.category,
+    stock: product.stock,
+    unitsOrdered: countsByProduct.get(product.id) ?? 0,
+    status: product.stock <= 0 ? 'out_of_stock' : product.stock <= product.threshold * 0.5 ? 'critical' : product.stock <= product.threshold ? 'low' : 'healthy',
+  }));
+  const mostOrderedItems = [...rankings].filter((product) => product.unitsOrdered > 0)
+    .sort((left, right) => right.unitsOrdered - left.unitsOrdered || left.name.localeCompare(right.name)).slice(0, 5);
+  const leastOrderedItems = [...rankings]
+    .sort((left, right) => left.unitsOrdered - right.unitsOrdered || left.name.localeCompare(right.name)).slice(0, 5);
+
+  const dates = filtered.map((order) => order.deliveryDate).filter(Boolean).sort();
+  const useDayBuckets = dates.length > 0 && (Boolean(fromDate || toDate))
+    && (new Date(`${dates[dates.length - 1]}T00:00:00.000Z`).getTime() - new Date(`${dates[0]}T00:00:00.000Z`).getTime()) / 86_400_000 <= 31;
+  const trendBuckets = new Map<string, { month: string; sales: number; orders: number }>();
+  for (const order of filtered) {
+    const key = useDayBuckets ? order.deliveryDate : order.deliveryDate.slice(0, 7);
+    if (!key) continue;
+    const bucket = trendBuckets.get(key) ?? {
+      month: useDayBuckets
+        ? new Date(`${key}T00:00:00.000Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+        : new Date(`${key}-01T00:00:00.000Z`).toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' }),
+      sales: 0,
+      orders: 0,
+    };
+    if (order.orderStatus !== 'cancelled') bucket.sales += order.total;
+    bucket.orders += 1;
+    trendBuckets.set(key, bucket);
+  }
+
+  return {
+    totalOrderCount: filtered.length,
+    averageOrderValue: nonCancelledCount ? nonCancelledTotal / nonCancelledCount : 0,
+    topSellingItems,
+    mostOrderedItems,
+    leastOrderedItems,
+    orderedQuantities,
+    salesTrendData: [...trendBuckets.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, row]) => row),
+  };
+}
+
+
 export interface DashboardOrderSummary {
   activeOrderCount: number;
   orderStatusCounts: Array<{ status: Order['orderStatus']; count: number }>;

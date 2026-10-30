@@ -15,6 +15,7 @@ import { _resetInventoryStore, createProduct, recordInboundStock, recordOutbound
 import { analyticsRoutes } from './routes.js';
 import {
   buildAnnualPurchaseSummary,
+  buildAnalyticsOrderSummary,
   buildDashboardOrderSummary,
   buildMonthlySalesTrend,
   buildDemandForecast,
@@ -121,6 +122,31 @@ describe('analytics pure functions', () => {
         { productId: 'ALU-1', name: 'Aluminum', category: null, unit: null, quantity: 3 },
         { productId: 'GLS-1', name: 'Glass', category: null, unit: null, quantity: 2 },
       ],
+    });
+  });
+
+  it('builds compact Analytics order metrics and honors delivery-date filters', () => {
+    _resetOrderStore(false);
+    seedDeterministicOrders();
+
+    const all = buildAnalyticsOrderSummary(listOrders(), []);
+    expect(all).toMatchObject({
+      totalOrderCount: 3,
+      averageOrderValue: 250,
+      topSellingItems: [
+        { productId: 'ALU-1', name: 'Aluminum', quantity: 3, category: 'Unclassified' },
+        { productId: 'GLS-1', name: 'Glass', quantity: 2, category: 'Unclassified' },
+      ],
+      orderedQuantities: { 'ALU-1': 3, 'GLS-1': 2 },
+      salesTrendData: [{ sales: 200, orders: 1 }, { sales: 300, orders: 2 }],
+      mostOrderedItems: [],
+      leastOrderedItems: [],
+    });
+
+    expect(buildAnalyticsOrderSummary(listOrders(), [], '2026-01-20', '2026-01-20')).toMatchObject({
+      totalOrderCount: 1,
+      averageOrderValue: 200,
+      salesTrendData: [{ sales: 200, orders: 1 }],
     });
   });
 
@@ -262,6 +288,25 @@ describe('analytics routes', () => {
       headers: { authorization: 'Bearer ' + token },
     });
     expect(staff.status).toBe(200);
+  });
+
+  it('serves compact, date-filtered Analytics metrics from the authenticated endpoint', async () => {
+    const anonymous = await app.request('/analytics/orders/summary');
+    expect(anonymous.status).toBe(401);
+
+    const token = await login(app, STAFF);
+    const headers = { authorization: 'Bearer ' + token };
+    const res = await app.request('/analytics/orders/summary?fromDate=2026-01-20&toDate=2026-01-20', { headers });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      totalOrderCount: 1,
+      averageOrderValue: 200,
+      orderedQuantities: { 'GLS-1': 2 },
+      salesTrendData: [{ sales: 200, orders: 1 }],
+    });
+
+    expect((await app.request('/analytics/orders/summary?fromDate=2026-02-31', { headers })).status).toBe(400);
+    expect((await app.request('/analytics/orders/summary?fromDate=2026-02-20&toDate=2026-01-20', { headers })).status).toBe(400);
   });
 
   it('serves compact order summary metrics from the authenticated analytics endpoint', async () => {
