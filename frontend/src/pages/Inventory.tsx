@@ -313,13 +313,13 @@ export const Inventory: React.FC = () => {
         cursor = result.page.nextCursor;
       } while (cursor);
       const csv = toCSV(exportRows, [
-        { key: 'sku', header: 'SKU' },
+        { key: 'sku', header: 'Product Code' },
         { key: 'name', header: 'Product' },
         { key: 'category', header: 'Category' },
         { key: 'unit', header: 'Unit' },
         { key: 'stock', header: 'Stock' },
         { key: 'price', header: 'Price (PHP)' },
-        { key: 'threshold', header: 'Reorder Threshold' },
+        { key: 'threshold', header: 'Restock Level' },
         { key: 'status', header: 'Status' },
       ]);
       downloadCSV(`inventory-${new Date().toISOString().split('T')[0]}.csv`, csv);
@@ -334,12 +334,12 @@ export const Inventory: React.FC = () => {
   const isEmpty = !pageLoading && !pageError && pageSummary.totalProducts === 0;
 
   if (pageLoading) {
-    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading inventory data from backend…</div>;
+    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading inventory…</div>;
   }
   if (pageError) {
     return (
       <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
-        <p className="font-semibold text-rose-700">Could not load inventory from backend: {pageError}</p>
+        <p className="font-semibold text-rose-700">Could not load inventory: {pageError}</p>
         <button type="button" onClick={() => void loadFirstPage()} className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Retry</button>
       </div>
     );
@@ -355,7 +355,7 @@ export const Inventory: React.FC = () => {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <input
                 type="search"
-                aria-label="Search by product name, SKU, category, unit, or description"
+                aria-label="Search by product name, product code, category, unit, or description"
                 placeholder="Search products..."
                 value={searchTerm}
                 onChange={(e) => {
@@ -465,7 +465,7 @@ export const Inventory: React.FC = () => {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">SKU</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Product Code</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Product Name</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock</th>
@@ -639,7 +639,7 @@ export const Inventory: React.FC = () => {
                   </div>
                   
                   <div>
-                    <label className="label">SKU</label>
+                    <label className="label">Product Code</label>
                     <input
                       type="text"
                       name="sku"
@@ -716,7 +716,7 @@ export const Inventory: React.FC = () => {
                   </div>
                   
                   <div>
-                    <label className="label">Low Stock Threshold</label>
+                    <label className="label">Low-stock Level</label>
                     <input
                       type="number"
                       name="threshold"

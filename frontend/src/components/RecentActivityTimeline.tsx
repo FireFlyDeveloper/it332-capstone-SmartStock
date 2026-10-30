@@ -30,7 +30,7 @@ export const RecentActivityTimeline: React.FC<RecentActivityTimelineProps> = ({
     <div className="flex items-center justify-between mb-5">
       <div>
         <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-          Backend records
+          RECENT UPDATES
         </span>
         <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em]">
           Recent Activity
@@ -40,7 +40,7 @@ export const RecentActivityTimeline: React.FC<RecentActivityTimelineProps> = ({
 
     {loading ? (
       <div role="status" className="py-8 text-center text-sm text-slate-500">
-        Loading activity from backend…
+        Loading activity…
       </div>
     ) : error ? (
       <div role="alert" className="flex flex-col items-center gap-3 py-6 text-center">
@@ -51,7 +51,7 @@ export const RecentActivityTimeline: React.FC<RecentActivityTimelineProps> = ({
         </button>
       </div>
     ) : activities.length === 0 ? (
-      <p className="py-8 text-center text-sm text-slate-500">No activity records were returned by the backend.</p>
+      <p className="py-8 text-center text-sm text-slate-500">No recent activity.</p>
     ) : (
       <div className="space-y-5">
         {activities.map((activity) => {

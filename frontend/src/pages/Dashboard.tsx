@@ -229,7 +229,7 @@ export const Dashboard: React.FC = () => {
   };
 
   if (deliveriesLoading || inventorySummaryLoading) {
-    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading dashboard data from backend…</div>;
+    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading your dashboard…</div>;
   }
   const sourceError = [deliveriesError && `Deliveries: ${deliveriesError}`, inventorySummaryError && `Inventory: ${inventorySummaryError}`].filter(Boolean).join('; ');
   if (sourceError) {
@@ -252,7 +252,7 @@ export const Dashboard: React.FC = () => {
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 font-normal">
-            Backend-sourced inventory, orders, and dispatch snapshot.
+            A quick look at current stock, orders, and deliveries.
           </p>
         </div>
 
@@ -265,7 +265,7 @@ export const Dashboard: React.FC = () => {
           <button
             type="button"
             onClick={retryDashboard}
-            title="Refresh data from backend"
+            title="Refresh dashboard"
             className="p-2 rounded-2xl bg-white border border-[#f1f5f9] text-slate-500 hover:text-indigo-600 hover:bg-indigo-50/50 shadow-2xs transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
@@ -286,7 +286,7 @@ export const Dashboard: React.FC = () => {
 
         {/* KPI 2: Current-month gross order value */}
         <KpiCard
-          label="THIS MONTH'S GROSS ORDER VALUE"
+          label="THIS MONTH'S ORDER TOTAL"
           value={salesTrendLoading ? 'Loading…' : salesTrendError ? 'Unavailable' : formatCurrencyWhole(currentMonthOrderValue)}
           icon={TrendingUp}
           iconBoxBg="bg-emerald-50"
@@ -423,7 +423,7 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500">
-              Gross order value from non-cancelled backend orders; includes unpaid/partial orders and does not deduct refunds.
+              Total value of orders that were not cancelled. Includes unpaid or partly paid orders; refunds are not subtracted.
             </div>
           </div>
 
@@ -440,8 +440,8 @@ export const Dashboard: React.FC = () => {
               {/* Spec: Interactive Donut Chart with Centered Metrics & Legend */}
               <InteractiveDonut
                 data={distributionData}
-                totalLabel="ACTIVE SKUs"
-                valueUnit="active SKUs"
+                totalLabel="ACTIVE PRODUCTS"
+                valueUnit="active products"
                 size={185}
               />
             </div>
@@ -501,7 +501,7 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="pt-3 border-t border-slate-100 text-xs text-slate-500">
-              Ranked by quantity in non-cancelled backend orders.
+              Ranked by quantity in orders that were not cancelled.
             </div>
           </div>
         </div>
@@ -528,7 +528,7 @@ export const Dashboard: React.FC = () => {
                     OVERALL PERFORMANCE
                   </span>
                   <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Gross order value in selected range
+                    Order total in selected range
                   </p>
                   {/* Large Currency Total */}
                   <div className="mt-2">
@@ -603,7 +603,7 @@ export const Dashboard: React.FC = () => {
           <div className="lg:col-span-3 bg-white rounded-[40px] p-6 sm:p-8 border border-[#f1f5f9] shadow-[0_4px_6px_-1px_rgb(0_0_0/0.05)] flex flex-col">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                BACKEND DATA
+                CURRENT SNAPSHOT
               </span>
               <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em] mb-4">
                 Record Status

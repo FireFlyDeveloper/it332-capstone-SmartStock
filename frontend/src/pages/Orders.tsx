@@ -593,7 +593,7 @@ export const Orders: React.FC = () => {
   }, [viewOrder, itemSearch]);
 
   if (pageLoading) {
-    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading orders from backend…</div>;
+    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading orders…</div>;
   }
   if (pageError) {
     return (

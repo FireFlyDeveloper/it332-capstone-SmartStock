@@ -56,7 +56,7 @@ export const DailySales: React.FC = () => {
         setHasMore(result.page.hasMore);
       }).catch((reason: unknown) => {
         if (active && requestVersion === requestVersionRef.current) {
-          setError(reason instanceof Error ? reason.message : 'Could not load Daily Sales from the backend.');
+          setError(reason instanceof Error ? reason.message : 'Could not load daily sales.');
         }
       }).finally(() => {
         if (active && requestVersion === requestVersionRef.current) setLoading(false);
@@ -124,7 +124,7 @@ export const DailySales: React.FC = () => {
         more = result.page.hasMore;
       }
       if (!allOrders.length) {
-        toast.info('No backend sales records are available for this date.');
+        toast.info('No sales records are available for this date.');
         return;
       }
       const rows = allOrders.map((order) => ({
@@ -148,7 +148,7 @@ export const DailySales: React.FC = () => {
         { key: 'createdAt', header: 'Created At' },
       ]);
       downloadCSV(`smartstock-daily-sales-${selectedDate}.csv`, csv);
-      toast.success(`Exported ${rows.length} backend sales records.`);
+      toast.success(`Exported ${rows.length} sales records.`);
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : 'Could not export Daily Sales.');
     } finally {
@@ -163,7 +163,7 @@ export const DailySales: React.FC = () => {
           <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600"><Banknote className="h-5 w-5" /></span>
           <div>
             <h1 className="text-2xl font-extrabold text-slate-900">Daily Sales</h1>
-            <p className="text-sm text-slate-500">Sales totals and order records loaded from the backend.</p>
+            <p className="text-sm text-slate-500">Daily totals and order details.</p>
           </div>
         </div>
         <button type="button" onClick={() => void exportCsv()} disabled={exporting} className="btn-secondary inline-flex items-center gap-2 self-start text-sm disabled:opacity-60 sm:self-auto">
@@ -178,7 +178,7 @@ export const DailySales: React.FC = () => {
       </div>
 
       {loading ? (
-        <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading Daily Sales from backend…</div>
+        <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading daily sales…</div>
       ) : error ? (
         <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
           <p className="font-semibold text-rose-700">Could not load Daily Sales: {error}</p>
@@ -197,7 +197,7 @@ export const DailySales: React.FC = () => {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Sales orders <span className="text-sm font-medium text-slate-500">({totalCount})</span></h2>
-                <p className="text-xs text-slate-500">Order records and totals are supplied by the backend.</p>
+                <p className="text-xs text-slate-500">Totals are based on recorded orders.</p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <label className="relative">
@@ -221,7 +221,7 @@ export const DailySales: React.FC = () => {
             {orders.length === 0 ? (
               <div className="rounded-2xl bg-slate-50 p-10 text-center text-sm text-slate-500">
                 <ShoppingBag className="mx-auto mb-2 h-8 w-8 text-slate-300" />
-                No backend sales records match this date and filter.
+                No sales records match this date and filter.
               </div>
             ) : (
               <div className="overflow-x-auto">

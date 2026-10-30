@@ -178,12 +178,12 @@ export const DeliveryPage: React.FC = () => {
   const hasNoFilterMatches = !pageLoading && pageSummary.totalCount > 0 && pageTotalCount === 0;
 
   if (pageLoading) {
-    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading delivery data from backend…</div>;
+    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading deliveries…</div>;
   }
   if (pageError) {
     return (
       <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
-        <p className="font-semibold text-rose-700">Could not load deliveries from backend: {pageError}</p>
+        <p className="font-semibold text-rose-700">Could not load deliveries: {pageError}</p>
         <button type="button" onClick={() => void loadFirstPage()} className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Retry</button>
       </div>
     );
@@ -379,7 +379,7 @@ export const DeliveryPage: React.FC = () => {
               </div>
               <h3 className="text-lg font-semibold text-gray-900">No delivery orders</h3>
               <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
-                Delivery orders will appear here from backend order status.
+                Delivery orders will appear here when an order is set for delivery.
               </p>
             </div>
           )}

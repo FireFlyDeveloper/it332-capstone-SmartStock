@@ -34,6 +34,46 @@ import {
 
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 
+function formatStockCheck(value: DemandForecastProduct['policyAssessment']): string {
+  switch (value) {
+    case 'below_reorder_point': return 'Below restock level';
+    case 'below_forecast': return 'May run low';
+    case 'adequate': return 'Stock looks adequate';
+    case 'insufficient_history': return 'Not enough sales history';
+  }
+}
+
+function simplifyInsightText(text: string): string {
+  return text
+    .replace(/\baggregated\b/gi, 'combined')
+    .replace(/\baggregates\b/gi, 'overall totals')
+    .replace(/\baggregate\b/gi, 'overall')
+    .replace(/\bsimple exponential smoothing\b/gi, 'a method based on recent sales')
+    .replace(/\bSES\b/g, 'sales estimate')
+    .replace(/\breorder points\b/gi, 'restock levels')
+    .replace(/\breorder point\b/gi, 'restock level')
+    .replace(/\breorder thresholds\b/gi, 'restock levels')
+    .replace(/\breorder threshold\b/gi, 'restock level')
+    .replace(/\boutbound stock movements\b/gi, 'stock sent out')
+    .replace(/\boutbound movements\b/gi, 'stock sent out')
+    .replace(/\boutbound\b/gi, 'sent out')
+    .replace(/\bSKUs\b/g, 'products')
+    .replace(/\bSKU\b/g, 'product code')
+    .replace(/\blead times?\b/gi, 'time it takes to restock')
+    .replace(/\breplenishment\b/gi, 'restocking')
+    .replace(/\binventory turnover\b/gi, 'how often products sell')
+    .replace(/\bstock coverage\b/gi, 'how long stock may last')
+    .replace(/\bpolicy assessment\b/gi, 'stock check')
+    .replace(/\bforecasts\b/gi, 'estimates')
+    .replace(/\bforecast\b/gi, 'estimate')
+    .replace(/\bprojected\b/gi, 'expected')
+    .replace(/\bvolatility\b/gi, 'frequent changes')
+    .replace(/\bshortfalls\b/gi, 'shortages')
+    .replace(/\bshortfall\b/gi, 'shortage')
+    .replace(/\bvariances\b/gi, 'differences')
+    .replace(/\bvariance\b/gi, 'difference');
+}
+
 export const Analytics: React.FC = () => {
   const navigate = useNavigate();
   const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
@@ -186,7 +226,7 @@ export const Analytics: React.FC = () => {
 
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(movementMonth)
       || movementThreshold.trim() === '' || !Number.isFinite(threshold) || threshold < 0) {
-      setMovementError('Choose a valid month and a non-negative movement threshold.');
+      setMovementError('Choose a valid month and enter a non-negative number of units.');
       setMovementLoading(false);
       return () => {
         if (requestId === movementRequestRef.current) movementRequestRef.current += 1;
@@ -247,7 +287,7 @@ export const Analytics: React.FC = () => {
   const generateInsights = useCallback(async () => {
     const threshold = Number(movementThreshold);
     if (movementThreshold.trim() === '' || !Number.isFinite(threshold) || threshold < 0) {
-      setAiInsightError('Enter a non-negative movement threshold first.');
+      setAiInsightError('Enter a valid number of units to mark a product as fast-moving.');
       return;
     }
     const requestId = ++aiInsightRequestRef.current;
@@ -259,8 +299,8 @@ export const Analytics: React.FC = () => {
     try {
       const result = await getAnalyticsInsights(year, threshold);
       if (requestId === aiInsightRequestRef.current) setAiInsight(result);
-    } catch (error) {
-      if (requestId === aiInsightRequestRef.current) setAiInsightError(error instanceof Error ? error.message : 'Could not generate analytics insights.');
+    } catch {
+      if (requestId === aiInsightRequestRef.current) setAiInsightError('We could not prepare the summary. Please try again.');
     } finally {
       if (requestId === aiInsightRequestRef.current) setAiInsightLoading(false);
     }
@@ -400,9 +440,9 @@ export const Analytics: React.FC = () => {
       recs.push({
         id: `rec-out-${product.id}`,
         priority: 'high',
-        type: 'Out of Stock Alert',
+        type: 'Out of stock',
         title: `No stock remaining for ${product.name}`,
-        description: `Current stock is ${product.stock} ${product.unit}; review replenishment for this active product.`,
+        description: `This active product has no units left. Review whether it should be restocked.`,
       });
     }
     if (alerts?.critical) {
@@ -410,9 +450,9 @@ export const Analytics: React.FC = () => {
       recs.push({
         id: 'rec-crit',
         priority: 'high',
-        type: 'Reorder Alert',
-        title: `Immediate restock needed for ${product.name}`,
-        description: `Current stock (${product.stock} ${product.unit}) is critically below the configured threshold (${product.threshold}).`,
+        type: 'Restock soon',
+        title: `Restock ${product.name} as soon as possible`,
+        description: `Only ${product.stock} ${product.unit} remain, below the restock level of ${product.threshold}.`,
       });
     }
     if (alerts?.low) {
@@ -420,9 +460,9 @@ export const Analytics: React.FC = () => {
       recs.push({
         id: 'rec-low',
         priority: 'medium',
-        type: 'Inventory Buffer',
-        title: `Plan procurement for ${product.name}`,
-        description: `Stock level has reached the configured reorder threshold (${product.stock} / ${product.threshold} ${product.unit}).`,
+        type: 'Low stock',
+        title: `Plan a restock for ${product.name}`,
+        description: `Stock has reached its restock level (${product.stock} of ${product.threshold} ${product.unit}).`,
       });
     }
     return recs;
@@ -444,13 +484,13 @@ export const Analytics: React.FC = () => {
   const chartSalesData = salesTrendData;
 
   if (inventorySummaryLoading || orderSummaryLoading) {
-    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading analytics data from backend…</div>;
+    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading your analytics…</div>;
   }
   const sourceError = [inventorySummaryError && `Inventory summary: ${inventorySummaryError}`, orderSummaryError && `Order summary: ${orderSummaryError}`].filter(Boolean).join('; ');
   if (sourceError) {
     return (
       <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
-        <p className="font-semibold text-rose-700">Could not load analytics source data: {sourceError}</p>
+        <p className="font-semibold text-rose-700">We could not load your analytics. Please try again.</p>
         <button
           type="button"
           onClick={() => {
@@ -471,10 +511,10 @@ export const Analytics: React.FC = () => {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
-              Operations Analytics &amp; Demand Estimates
+              Business Insights &amp; Sales Estimates
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Sales, stock, and order-history estimates from backend records. Demand estimates are rule-based, not AI-generated.
+              See sales trends, stock levels, and product movement. Sales estimates use past orders and are separate from the AI summary.
             </p>
           </div>
           <button
@@ -948,25 +988,28 @@ export const Analytics: React.FC = () => {
         <section className="space-y-4 rounded-[28px] border border-indigo-100 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h3 className="text-lg font-bold text-slate-900">AI-Assisted Analytics Interpretation</h3>
-              <p className="mt-1 max-w-3xl text-xs text-slate-500">Interprets aggregate sales, purchase and stock-movement data alongside the historical-sales SES forecast. The forecast is statistical, not generated by AI; no customer details are sent.</p>
+              <h3 className="text-lg font-bold text-slate-900">SmartStock Insights</h3>
+              <p className="mt-1 max-w-3xl text-xs text-slate-500">Get a plain-language summary of sales, purchases, and stock activity. The sales estimate is based on past orders and is separate from this summary. Customer details are not included.</p>
             </div>
             <button type="button" onClick={() => void generateInsights()} disabled={aiInsightLoading} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-60">
-              {aiInsightLoading ? 'Generating…' : aiInsight ? 'Refresh interpretation' : 'Generate interpretation'}
+              {aiInsightLoading ? 'Preparing…' : aiInsight ? 'Refresh summary' : 'Get a quick summary'}
             </button>
           </div>
           {aiInsightError && <p role="alert" className="text-sm text-rose-700">{aiInsightError}</p>}
-          {aiInsightLoading && <p role="status" className="text-sm text-slate-500">Preparing a privacy-safe aggregate interpretation…</p>}
+          {aiInsightLoading && <p role="status" className="text-sm text-slate-500">Reviewing sales, purchases, and stock activity…</p>}
           {aiInsight && <div aria-live="polite" className="space-y-4 rounded-2xl bg-indigo-50/60 p-4">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">{aiInsight.source === 'hermes' ? 'Hermes Agent aggregate interpretation' : aiInsight.source === 'deepseek' ? 'DeepSeek aggregate interpretation' : 'Local rule-based fallback'}</span>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold capitalize text-slate-600">Confidence: {aiInsight.confidence}</span>
-              {aiInsightCriteria && <span className="text-xs text-slate-500">{aiInsightCriteria.year} · movement threshold {aiInsightCriteria.threshold} units</span>}
+              <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">{aiInsight.source === 'fallback' ? 'SmartStock summary' : 'AI summary'}</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold capitalize text-slate-600">How sure: {aiInsight.confidence}</span>
+              {aiInsightCriteria && <span className="text-xs text-slate-500">For {aiInsightCriteria.year} · fast-moving starts at {aiInsightCriteria.threshold} units</span>}
             </div>
-            <p className="text-sm leading-6 text-slate-800">{aiInsight.summary}</p>
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">At a glance</h4>
+              <p className="mt-2 text-sm leading-6 text-slate-800">{simplifyInsightText(aiInsight.summary)}</p>
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <div><h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">Recommendations</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{aiInsight.recommendations.map((item, index) => <li key={`rec-${index}`}>{item}</li>)}</ul></div>
-              <div><h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">Risks</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{aiInsight.risks.map((item, index) => <li key={`risk-${index}`}>{item}</li>)}</ul></div>
+              <div><h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">What you can do</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{aiInsight.recommendations.map((item, index) => <li key={`rec-${index}`}>{simplifyInsightText(item)}</li>)}</ul></div>
+              <div><h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">Things to watch</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{aiInsight.risks.map((item, index) => <li key={`risk-${index}`}>{simplifyInsightText(item)}</li>)}</ul></div>
             </div>
           </div>}
         </section>
@@ -975,15 +1018,15 @@ export const Analytics: React.FC = () => {
         <section className="space-y-4 rounded-[28px] border border-sky-100 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Monthly Item Movement Classification</h3>
-              <p className="mt-1 max-w-3xl text-xs text-slate-500">Outbound stock movements are totaled per product for the selected UTC month. Products with no recorded outbound movement are shown as slow-moving. Fast-moving means at least the selected number of units moved.</p>
+              <h3 className="text-lg font-bold text-slate-900">Monthly Stock Movement</h3>
+              <p className="mt-1 max-w-3xl text-xs text-slate-500">Shows how many units of each product were sent out during the selected month. Products with no recorded movement are marked as slow-moving. Fast-moving means at least the number of units you choose were sent out.</p>
             </div>
             <div className="flex flex-wrap items-end gap-3">
               <label className="text-xs font-semibold text-slate-600">Month
                 <input aria-label="Movement month" type="month" value={movementMonth} onChange={(event) => setMovementMonth(event.target.value)} className="input mt-1 block w-40" />
               </label>
-              <label className="text-xs font-semibold text-slate-600">Fast-moving threshold (units)
-                <input aria-label="Fast-moving threshold" type="number" min="0" step="1" value={movementThreshold} onChange={(event) => setMovementThreshold(event.target.value)} className="input mt-1 block w-36" />
+              <label className="text-xs font-semibold text-slate-600">Units needed to count as fast-moving
+                <input aria-label="Units needed for fast-moving products" type="number" min="0" step="1" value={movementThreshold} onChange={(event) => setMovementThreshold(event.target.value)} className="input mt-1 block w-36" />
               </label>
             </div>
           </div>
@@ -991,23 +1034,23 @@ export const Analytics: React.FC = () => {
           {movementSummary && <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl bg-emerald-50 p-4"><p className="text-xs uppercase text-emerald-700">Fast-moving items</p><p className="mt-1 text-xl font-black text-emerald-900">{movementSummary.fastMovingCount}</p></div>
             <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-600">Slow-moving items</p><p className="mt-1 text-xl font-black text-slate-900">{movementSummary.slowMovingCount}</p></div>
-            <div className="rounded-2xl bg-sky-50 p-4"><p className="text-xs uppercase text-sky-700">Outbound quantity by unit · {movementMonth}</p><p className="mt-1 text-sm font-black text-sky-900">{movementSummary.outboundByUnit.length ? movementSummary.outboundByUnit.map((item) => `${item.quantity} ${item.unit}`).join(' · ') : 'No outbound movement'}</p></div>
+            <div className="rounded-2xl bg-sky-50 p-4"><p className="text-xs uppercase text-sky-700">Units sent out · {movementMonth}</p><p className="mt-1 text-sm font-black text-sky-900">{movementSummary.outboundByUnit.length ? movementSummary.outboundByUnit.map((item) => `${item.quantity} ${item.unit}`).join(' · ') : 'No stock sent out'}</p></div>
           </div>}
 
           {movementLoading && <p role="status" className="py-6 text-center text-sm text-slate-500">Loading monthly item movements…</p>}
           {movementError && <div role="alert" className="py-4 text-center text-sm text-rose-700"><p>{movementError}</p><button type="button" onClick={() => setMovementRetry((current) => current + 1)} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
-          {!movementLoading && !movementError && movementRows.length === 0 && <p className="py-6 text-center text-sm text-slate-500">No catalog items are available for classification.</p>}
+          {!movementLoading && !movementError && movementRows.length === 0 && <p className="py-6 text-center text-sm text-slate-500">No products are available for this report.</p>}
           {movementRows.length > 0 && <div className="overflow-x-auto"><table className="w-full text-left">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Catalog status</th><th className="px-4 py-3 text-right">Outbound quantity</th><th className="px-4 py-3">Classification</th></tr></thead>
+            <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Product status</th><th className="px-4 py-3 text-right">Units sent out</th><th className="px-4 py-3">Movement speed</th></tr></thead>
             <tbody className="divide-y divide-slate-100">{movementRows.map((row) => <tr key={row.productId}>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.name}<span className="block text-xs font-normal text-slate-500">{row.sku}</span></td>
+              <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.name}<span className="block text-xs font-normal text-slate-500">Code: {row.sku}</span></td>
               <td className="px-4 py-3 text-sm capitalize">{row.category}</td>
               <td className="px-4 py-3 text-sm capitalize">{row.status}</td>
               <td className="px-4 py-3 text-right text-sm">{row.quantity} {row.unit}</td>
               <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${row.classification === 'fast_moving' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>{row.classification.replaceAll('_', ' ')}</span></td>
             </tr>)}</tbody>
           </table></div>}
-          {movementPage && <p className="text-xs text-slate-500">Showing {movementRows.length} of {movementPage.totalCount} products for {movementMonth}; threshold {movementThreshold} units.</p>}
+          {movementPage && <p className="text-xs text-slate-500">Showing {movementRows.length} of {movementPage.totalCount} products for {movementMonth}; fast-moving starts at {movementThreshold} units.</p>}
           {movementPage?.hasMore && <div ref={movementSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more products…</div>}
           {movementPage?.hasMore && typeof IntersectionObserver === 'undefined' && <div className="py-3 text-center"><button type="button" onClick={() => void loadMoreMovement()} disabled={movementLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">{movementLoadingMore ? 'Loading…' : 'Load more products'}</button></div>}
           {movementLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more products…</p>}
@@ -1019,7 +1062,7 @@ export const Analytics: React.FC = () => {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-lg font-bold text-slate-900">Inventory and Order Snapshot</h3>
-              <p className="text-xs text-slate-500">Current backend stock compared with non-cancelled orders in the selected period</p>
+              <p className="text-xs text-slate-500">Current stock compared with orders that were not cancelled during the selected period</p>
             </div>
           </div>
           {snapshotPage && <p className="text-xs text-slate-400 -mt-4 mb-3">Showing {snapshotProducts.length} of {snapshotPage.totalCount} products</p>}
@@ -1079,21 +1122,21 @@ export const Analytics: React.FC = () => {
                 <Package className="w-5 h-5 text-violet-600" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Historical Demand Forecast (SES)</h3>
-                <p className="text-xs text-slate-600">Delivered-order quantities grouped by order-creation month in UTC; estimates require at least three positive months.</p>
+                <h3 className="text-lg font-bold text-slate-900">Sales Estimate for Next Month</h3>
+                <p className="text-xs text-slate-600">Based on completed orders from recent months. We need sales in at least three months to show an estimate.</p>
               </div>
             </div>
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
               <Clock className="w-3.5 h-3.5 text-violet-500" />
-              <span>Order-history forecast</span>
+              <span>Based on past orders</span>
             </div>
           </div>
           
           <div className="mb-6 overflow-hidden rounded-2xl border border-violet-100/80 bg-white shadow-2xs">
             <div className="border-b border-violet-100 bg-violet-50/60 p-4 text-xs text-slate-600">
-              Backend historical forecast: simple exponential smoothing (α=0.3), next-month horizon, using delivered-order quantities grouped by order-creation month in UTC (up to 12 months, including the current month to date). At least 3 positive-quantity months are required; sparse-history products are shown without an estimate.
+              Uses completed orders from recent months to estimate next month's sales. An estimate appears after sales are recorded in at least three different months.
             </div>
-            {forecastLoading ? <p className="p-8 text-center text-sm text-slate-500">Loading historical forecast…</p> : forecastError ? <div role="alert" className="p-8 text-center text-sm text-rose-700"><p>{forecastError}</p><button type="button" onClick={() => setForecastRefreshKey((current) => current + 1)} className="mt-3 font-semibold text-indigo-600 hover:text-indigo-800">Retry</button></div> : availableForecastRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-600">No products have enough delivered-order history for an SES estimate yet. At least three positive-quantity months are required.</p> : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-violet-50/70"><tr><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Product</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Stock / reorder point</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Forecast next month</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Suggested order</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Coverage</th><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Policy assessment</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">History</th></tr></thead><tbody className="divide-y divide-slate-100">{availableForecastRows.map(item => <tr key={item.productId}><td className="px-4 py-3"><p className="text-sm font-semibold text-slate-800">{item.name}</p><p className="text-xs text-slate-500">{item.sku} · {item.category}</p></td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.currentStock} / {item.reorderPoint} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-semibold text-slate-700">{item.forecastQuantity} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-bold text-violet-700">{item.recommendedOrderQuantity === null ? '—' : `${item.recommendedOrderQuantity} ${item.unit}`}</td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.stockCoverageDays === null ? '—' : `${item.stockCoverageDays} days`}</td><td className="px-4 py-3 text-sm text-slate-700">{item.policyAssessment.replaceAll('_', ' ')}</td><td className="px-4 py-3 text-right text-sm text-slate-500">{item.positiveMonths} positive months</td></tr>)}</tbody></table></div>}
+            {forecastLoading ? <p className="p-8 text-center text-sm text-slate-500">Preparing sales estimates…</p> : forecastError ? <div role="alert" className="p-8 text-center text-sm text-rose-700"><p>We could not load the sales estimate. Please try again.</p><button type="button" onClick={() => setForecastRefreshKey((current) => current + 1)} className="mt-3 font-semibold text-indigo-600 hover:text-indigo-800">Retry</button></div> : availableForecastRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-600">No products have enough sales history for an estimate yet. We need recorded sales in at least three months.</p> : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-violet-50/70"><tr><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Product</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Stock / restock level</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Expected sales next month</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Suggested restock</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Stock may last</th><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Stock check</th><th className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Months with sales</th></tr></thead><tbody className="divide-y divide-slate-100">{availableForecastRows.map(item => <tr key={item.productId}><td className="px-4 py-3"><p className="text-sm font-semibold text-slate-800">{item.name}</p><p className="text-xs text-slate-500">Code: {item.sku} · {item.category}</p></td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.currentStock} / {item.reorderPoint} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-semibold text-slate-700">{item.forecastQuantity} {item.unit}</td><td className="px-4 py-3 text-right text-sm font-bold text-violet-700">{item.recommendedOrderQuantity === null ? '—' : `${item.recommendedOrderQuantity} ${item.unit}`}</td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.stockCoverageDays === null ? '—' : `${item.stockCoverageDays} days`}</td><td className="px-4 py-3 text-sm text-slate-700">{formatStockCheck(item.policyAssessment)}</td><td className="px-4 py-3 text-right text-sm text-slate-500">{item.positiveMonths} months with sales</td></tr>)}</tbody></table></div>}
           </div>
           {forecastPage && <p className="text-xs text-slate-500 mt-2">Showing {availableForecastRows.length} of {forecastPage.totalCount} products with sufficient history.</p>}
           {forecastPage?.hasMore && <div ref={forecastSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more forecast rows…</div>}
@@ -1119,7 +1162,7 @@ export const Analytics: React.FC = () => {
               <AlertTriangle className="w-4 h-4 text-amber-500" />
               Stock Alerts
             </h4>
-            <p className="text-xs text-slate-500 mb-3">Based on current backend stock levels and configured reorder thresholds; not AI-generated.</p>
+            <p className="text-xs text-slate-500 mb-3">Based on current stock and restock levels.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {stockAlerts.slice(0, 4).map((rec) => (
                 <div key={rec.id} className="bg-white rounded-2xl p-4 border border-violet-100 shadow-2xs">
@@ -1134,7 +1177,7 @@ export const Analytics: React.FC = () => {
                     <span className="text-xs font-semibold text-slate-400">{rec.type}</span>
                   </div>
                   <p className="text-sm font-bold text-slate-900">{rec.title}</p>
-                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">{rec.description}</p>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">{simplifyInsightText(rec.description)}</p>
                 </div>
               ))}
               {stockAlerts.length === 0 && (

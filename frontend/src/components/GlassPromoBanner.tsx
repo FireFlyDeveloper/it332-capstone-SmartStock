@@ -22,7 +22,7 @@ export const OperationsInsightsBanner: React.FC = () => {
           </h2>
 
           <p className="text-sm sm:text-base text-indigo-100/90 leading-relaxed max-w-xl font-normal">
-            Review inventory levels, completed orders, and configured reorder thresholds. Demand estimates are rule-based and appear only when the order history is sufficient.
+            Review stock levels and completed orders. Sales estimates use past orders and appear once there is enough history.
           </p>
 
           <div className="pt-2 flex flex-wrap items-center gap-4">
@@ -55,14 +55,14 @@ export const OperationsInsightsBanner: React.FC = () => {
               <Boxes className="w-4 h-4 mt-0.5 text-emerald-300 shrink-0" />
               <div>
                 <p className="font-bold text-sm text-white">Current inventory</p>
-                <p className="text-[11px] text-indigo-100 mt-1">Stock quantities and reorder thresholds</p>
+                <p className="text-[11px] text-indigo-100 mt-1">Stock quantities and restock levels</p>
               </div>
             </div>
             <div className="bg-white/10 rounded-2xl p-3 border border-white/15 flex items-start gap-3">
               <BarChart3 className="w-4 h-4 mt-0.5 text-amber-300 shrink-0" />
               <div>
                 <p className="font-bold text-sm text-white">Completed orders</p>
-                <p className="text-[11px] text-indigo-100 mt-1">Used for demand estimates when enough history exists</p>
+                <p className="text-[11px] text-indigo-100 mt-1">Used to estimate future sales when enough history exists</p>
               </div>
             </div>
           </div>

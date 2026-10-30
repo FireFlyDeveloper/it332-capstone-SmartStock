@@ -293,7 +293,7 @@ export const ProfilePage: React.FC = () => {
             </p>
             <div className="flex items-center gap-2 pt-1 text-[11px] font-semibold text-slate-400">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Authenticated session</span>
+              <span>Signed in</span>
             </div>
           </div>
         </div>
@@ -505,7 +505,7 @@ export const ProfilePage: React.FC = () => {
                   <Laptop className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-extrabold text-slate-900">Current Login Session</h4>
+                  <h4 className="text-sm font-extrabold text-slate-900">Current Sign-in</h4>
                   <p className="text-xs text-slate-400">Authenticated device info</p>
                 </div>
               </div>
@@ -516,7 +516,7 @@ export const ProfilePage: React.FC = () => {
                   <span className="text-slate-500 font-mono text-right truncate">{navigator.userAgent}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-700">Session Status:</span>
+                  <span className="font-bold text-slate-700">Status:</span>
                   <span className="text-emerald-600 font-bold flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     Verified Active
@@ -587,40 +587,40 @@ export const ProfilePage: React.FC = () => {
           {/* Detailed Notification Preferences */}
           <div className="bg-white rounded-[28px] p-6 sm:p-8 border border-[#f1f5f9] shadow-sm space-y-6">
             <div className="border-b border-slate-100 pb-4">
-              <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Local Notification Preferences</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Saved only in this browser; these choices do not subscribe to backend events, send email digests, or control automated sound/alert delivery.</p>
+              <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Notification Preferences</h3>
+              <p className="text-xs text-slate-400 mt-0.5">These choices are saved in this browser. Alerts, emails, and sounds are not sent automatically yet.</p>
             </div>
 
             <div className="space-y-4">
               {[
                 {
                   key: 'lowStockAlerts',
-                  label: 'Low Stock & Critical Inventory Thresholds',
-                  desc: 'Local preference only; automated inventory threshold alerts are not configured.',
+                  label: 'Low-stock alerts',
+                  desc: 'Automatic low-stock alerts are not available yet.',
                   icon: AlertCircle,
                 },
                 {
                   key: 'orderStatusUpdates',
-                  label: 'New Customer Orders & Processing Status',
-                  desc: 'Local preference only; server-side order event alerts are not configured.',
+                  label: 'New orders & status changes',
+                  desc: 'Automatic order updates are not available yet.',
                   icon: CheckCircle2,
                 },
                 {
                   key: 'deliveryDispatches',
-                  label: 'Courier Dispatches & Live Tracking Updates',
-                  desc: 'Local preference only; server-side dispatch and tracking alerts are not configured.',
+                  label: 'Delivery updates',
+                  desc: 'Automatic delivery and tracking updates are not available yet.',
                   icon: Smartphone,
                 },
                 {
                   key: 'soundAlerts',
-                  label: 'Audio Chime for Urgent Notifications',
-                  desc: 'Local preference only; event-triggered sound playback is not configured.',
+                  label: 'Sound for urgent alerts',
+                  desc: 'Automatic alert sounds are not available yet.',
                   icon: Volume2,
                 },
                 {
                   key: 'weeklyFinancialReport',
-                  label: 'Weekly Financial & Inventory Summary Digest',
-                  desc: 'Local preference only; scheduled email or weekly digest delivery is not configured.',
+                  label: 'Weekly sales & inventory email',
+                  desc: 'Weekly summary emails are not available yet.',
                   icon: FileSpreadsheet,
                 },
               ].map((item) => {

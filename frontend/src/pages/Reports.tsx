@@ -29,6 +29,21 @@ import { useAuth } from '../components/AuthContext';
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 type ExportType = 'sales' | 'purchases' | 'inventory' | 'spending';
 
+const STOCK_CHECK_LABELS: Record<DemandForecastProduct['policyAssessment'], string> = {
+  below_reorder_point: 'Below restock level',
+  below_forecast: 'May run low',
+  adequate: 'Stock looks adequate',
+  insufficient_history: 'Not enough sales history',
+};
+
+const OBSERVED_STOCK_TOTAL_LABELS: Record<string, string> = {
+  products: 'Products',
+  productsWithHistory: 'Products with recorded history',
+  trackingDays: 'Days covered',
+  outOfStockProductCount: 'Products currently out of stock',
+  reorderPointChanges: 'Restock-level changes',
+};
+
 const EXPORT_TYPE_LABELS: Record<ExportType, string> = {
   sales: 'Sales Report',
   purchases: 'Purchases Report',
@@ -610,13 +625,13 @@ export const Reports: React.FC = () => {
   };
 
   if (inventorySummaryLoading || orderSummaryLoading) {
-    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading report source data from backend…</div>;
+    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading reports…</div>;
   }
   const sourceError = [inventorySummaryError && `Inventory summary: ${inventorySummaryError}`, orderSummaryError && `Order summary: ${orderSummaryError}`].filter(Boolean).join('; ');
   if (sourceError) {
     return (
       <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
-        <p className="font-semibold text-rose-700">Could not load report source data: {sourceError}</p>
+        <p className="font-semibold text-rose-700">We could not load your reports. Please try again.</p>
         <button
           type="button"
           onClick={() => {
@@ -803,7 +818,7 @@ export const Reports: React.FC = () => {
                 </>
               ) : (
                 <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
-                  Exports are admin-only
+                  Only admins can download reports.
                 </span>
               )}
 
@@ -893,18 +908,18 @@ export const Reports: React.FC = () => {
         {purchaseData?.page.hasMore && typeof IntersectionObserver === 'undefined' && <div className="py-3 text-center"><button type="button" onClick={() => void loadMorePurchaseGroups()} disabled={purchaseLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">{purchaseLoadingMore ? 'Loading…' : 'Load more purchase groups'}</button></div>}
 
         <section className="space-y-4 rounded-[28px] border border-violet-100 bg-violet-50/30 p-5 shadow-sm sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Current stock-policy assessment (SES)</h2><p className="max-w-3xl text-xs text-slate-600">This is a current assessment comparing present stock with the configured reorder threshold and next-month forecast. It does not measure historical policy decisions or causal effects.</p></div><div className="flex gap-2"><button onClick={() => void handleForecastExport('pdf')} className="btn-secondary text-xs">Download PDF</button><button onClick={() => void handleForecastExport('xlsx')} className="btn-secondary text-xs">Download XLSX</button></div></div>
-          <p className="text-xs text-slate-500">Method: simple exponential smoothing (α=0.3), up to 12 complete UTC months of delivered-order sales, one-month horizon. A forecast requires at least three positive-quantity months; sparse histories remain unavailable.</p>
-          {policyPage && <p className="text-xs text-slate-500">Showing {availablePolicyRows.length} of {policyPage.totalCount} products with sufficient history.</p>}
-          {policyLoading ? <p className="py-6 text-sm text-slate-500">Loading current policy assessment…</p> : policyError ? <p role="alert" className="py-6 text-sm text-rose-700">{policyError}</p> : availablePolicyRows.length === 0 ? <p className="py-6 text-center text-sm text-slate-600">No products currently have enough delivered-order history for an SES-based policy estimate. At least three positive-quantity months are required.</p> : <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-white text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3 text-right">Stock / threshold</th><th className="px-4 py-3 text-right">Next-month forecast</th><th className="px-4 py-3 text-right">Recommended order</th><th className="px-4 py-3">Assessment</th><th className="px-4 py-3">History</th></tr></thead><tbody className="divide-y divide-violet-100">{availablePolicyRows.map(row=><tr key={row.productId}><td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">{row.sku}</span></td><td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.reorderPoint} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.forecastQuantity} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.recommendedOrderQuantity===null?'—':`${row.recommendedOrderQuantity} ${row.unit}`}</td><td className="px-4 py-3 text-sm capitalize">{row.policyAssessment.replaceAll('_',' ')}</td><td className="px-4 py-3 text-sm">{row.positiveMonths} positive months</td></tr>)}</tbody></table></div>}
-          {policyLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more policy rows…</p>}
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Current Stock Check</h2><p className="max-w-3xl text-xs text-slate-600">Compares current stock with its restock level and estimated sales for next month. This is a current snapshot, not a review of past settings.</p></div><div className="flex gap-2"><button onClick={() => void handleForecastExport('pdf')} className="btn-secondary text-xs">Download PDF</button><button onClick={() => void handleForecastExport('xlsx')} className="btn-secondary text-xs">Download XLSX</button></div></div>
+          <p className="text-xs text-slate-500">Sales estimates use completed orders from recent months. We need recorded sales in at least three months before showing an estimate.</p>
+          {policyPage && <p className="text-xs text-slate-500">Showing {availablePolicyRows.length} of {policyPage.totalCount} products with enough sales history.</p>}
+          {policyLoading ? <p className="py-6 text-sm text-slate-500">Preparing stock checks…</p> : policyError ? <p role="alert" className="py-6 text-sm text-rose-700">We could not load the stock check. Please try again.</p> : availablePolicyRows.length === 0 ? <p className="py-6 text-center text-sm text-slate-600">No products have enough sales history for an estimate yet. We need recorded sales in at least three months.</p> : <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-white text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3 text-right">Stock / restock level</th><th className="px-4 py-3 text-right">Expected sales next month</th><th className="px-4 py-3 text-right">Suggested restock</th><th className="px-4 py-3">Stock check</th><th className="px-4 py-3">Months with sales</th></tr></thead><tbody className="divide-y divide-violet-100">{availablePolicyRows.map(row=><tr key={row.productId}><td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">Code: {row.sku}</span></td><td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.reorderPoint} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.forecastQuantity} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.recommendedOrderQuantity===null?'—':`${row.recommendedOrderQuantity} ${row.unit}`}</td><td className="px-4 py-3 text-sm">{STOCK_CHECK_LABELS[row.policyAssessment]}</td><td className="px-4 py-3 text-sm">{row.positiveMonths} months</td></tr>)}</tbody></table></div>}
+          {policyLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more products…</p>}
           {policyLoadMoreError && <div role="alert" className="text-center text-sm text-rose-700"><p>{policyLoadMoreError}</p><button type="button" onClick={() => void loadMorePolicyRows()} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
         </section>
-        {policyPage?.hasMore && <div ref={policySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more policy rows…</div>}
+        {policyPage?.hasMore && <div ref={policySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to see more products…</div>}
         {policyPage?.hasMore && typeof IntersectionObserver === 'undefined' && (
           <div className="py-3 text-center">
             <button type="button" onClick={() => void loadMorePolicyRows()} disabled={policyLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">
-              {policyLoadingMore ? 'Loading…' : 'Load more policy rows'}
+              {policyLoadingMore ? 'Loading…' : 'Load more products'}
             </button>
           </div>
         )}
@@ -912,71 +927,69 @@ export const Reports: React.FC = () => {
         <section className="space-y-4 rounded-[28px] border border-emerald-100 bg-emerald-50/30 p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-extrabold text-slate-900">Observed stock &amp; reorder-policy performance</h2>
-              <p className="mt-1 max-w-3xl text-xs text-slate-600">This is observed stock history, not a forecast or a causal evaluation. Tracking starts at the baseline after rollout; no pre-baseline history is included.</p>
+              <h2 className="text-lg font-extrabold text-slate-900">Stock Levels Over Time</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-600">This shows recorded stock levels after tracking began. It does not prove that a restock setting caused the results, and it does not include earlier history.</p>
             </div>
             {canExportReports ? (
               <div className="flex gap-2">
                 <button type="button" onClick={() => void handlePolicyPerformanceExport('pdf')} className="btn-secondary text-xs">Download PDF</button>
                 <button type="button" onClick={() => void handlePolicyPerformanceExport('xlsx')} className="btn-secondary text-xs">Download XLSX</button>
               </div>
-            ) : <span className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500">Exports are admin-only</span>}
+            ) : <span className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500">Only admins can download reports.</span>}
           </div>
-          {observedPolicyLoading ? <p className="py-6 text-sm text-slate-500">Loading observed stock-policy performance…</p>
-            : observedPolicyError ? <p role="alert" className="py-6 text-sm text-rose-700">{observedPolicyError}</p>
-              : !observedPolicy || observedPolicy.rows.length === 0 ? <p className="py-6 text-sm text-slate-500">No observed policy-performance data is available yet.</p>
+          {observedPolicyLoading ? <p className="py-6 text-sm text-slate-500">Loading stock history…</p>
+            : observedPolicyError ? <p role="alert" className="py-6 text-sm text-rose-700">We could not load stock history. Please try again.</p>
+              : !observedPolicy || observedPolicy.rows.length === 0 ? <p className="py-6 text-sm text-slate-500">No stock history is available yet.</p>
                 : <>
                   <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
-                    <span>Tracking since <strong className="text-slate-700">{observedPolicy.trackingStart ? formatDate(observedPolicy.trackingStart) : 'Not started'}</strong></span>
-                    <span><strong className="text-slate-700">{observedPolicy.totals.trackingDays}</strong> tracking days</span>
+                    <span>History from <strong className="text-slate-700">{observedPolicy.trackingStart ? formatDate(observedPolicy.trackingStart) : 'Not started'}</strong></span>
+                    <span><strong className="text-slate-700">{observedPolicy.totals.trackingDays}</strong> days covered</span>
                     <span>Report generated <strong className="text-slate-700">{formatDate(observedPolicy.generatedAt)}</strong></span>
                   </div>
                   {Object.keys(observedPolicy.totals).length > 0 && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {Object.entries(observedPolicy.totals).map(([key, value]) => <div key={key} className="rounded-2xl bg-white p-4">
-                      <p className="text-xs uppercase text-slate-500">{key.replaceAll(/([A-Z])/g, ' $1').replaceAll('_', ' ')}</p>
+                      <p className="text-xs uppercase text-slate-500">{OBSERVED_STOCK_TOTAL_LABELS[key] ?? key}</p>
                       <p className="mt-1 text-xl font-black text-slate-900">{Number.isInteger(value) ? value : value.toFixed(2)}</p>
                     </div>)}
                   </div>}
                   <div className="rounded-2xl border border-emerald-100 bg-white/80 p-4 text-xs text-slate-600">
-                    <p><strong>Method:</strong> {observedPolicy.method}</p>
-                    <p className="mt-1">{observedPolicy.assumption}</p>
-                    <p className="mt-2">This report describes measured stock exposure only. It does not estimate missed demand, lead-time effects, holding costs, or causal effects of reorder policies.</p>
+                    <p>This report describes recorded stock levels only. It does not show missed sales, restocking delays, storage costs, or prove that a restock setting caused the results.</p>
                   </div>
                   <p className="text-xs text-slate-500">Showing {observedPolicy.rows.length} of {observedPolicy.page.totalCount} products.</p>
                   <div className="overflow-x-auto"><table className="w-full text-left">
                     <thead className="bg-white text-xs uppercase text-slate-500"><tr>
-                      <th className="px-4 py-3">Product</th><th className="px-4 py-3 text-right">Stock / threshold</th><th className="px-4 py-3 text-right">Avg. on hand</th>
-                      <th className="px-4 py-3 text-right">Days ≤ threshold</th><th className="px-4 py-3 text-right">Time ≤ threshold</th><th className="px-4 py-3 text-right">Out-of-stock days</th>
-                      <th className="px-4 py-3 text-right">Threshold changes</th><th className="px-4 py-3">Tracking</th>
+                      <th className="px-4 py-3">Product</th><th className="px-4 py-3 text-right">Stock / restock level</th><th className="px-4 py-3 text-right">Average stock</th>
+                      <th className="px-4 py-3 text-right">Days at or below level</th><th className="px-4 py-3 text-right">Time at or below level</th><th className="px-4 py-3 text-right">Days out of stock</th>
+                      <th className="px-4 py-3 text-right">Restock-level changes</th><th className="px-4 py-3">History</th>
                     </tr></thead>
                     <tbody className="divide-y divide-emerald-100">{observedPolicy.rows.map(row => {
                       const periods = row.policyPeriods ?? []
                       return <React.Fragment key={row.productId}>
                         <tr>
-                          <td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">{row.sku}</span></td>
+                          <td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">Code: {row.sku}</span></td>
                           <td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.currentReorderPoint} {row.unit}</td>
                           <td className="px-4 py-3 text-right text-sm">{row.timeWeightedAverageOnHand === null ? '—' : `${row.timeWeightedAverageOnHand.toFixed(2)} ${row.unit}`}</td>
                           <td className="px-4 py-3 text-right text-sm">{row.trackingStartedAt === null ? '—' : row.daysAtOrBelowReorderPoint.toFixed(2)}</td>
                           <td className="px-4 py-3 text-right text-sm">{row.percentTimeAtOrBelowReorderPoint === null ? '—' : `${row.percentTimeAtOrBelowReorderPoint.toFixed(1)}%`}</td>
                           <td className="px-4 py-3 text-right text-sm">{row.trackingStartedAt === null ? '—' : row.outOfStockDays.toFixed(2)}</td>
                           <td className="px-4 py-3 text-right text-sm">{row.reorderPointChanges}</td>
-                          <td className="px-4 py-3 text-sm">{row.trackingStartedAt ? `${row.trackingDays.toFixed(2)} days` : 'awaiting baseline'}</td>
+                          <td className="px-4 py-3 text-sm">{row.trackingStartedAt ? `${row.trackingDays.toFixed(2)} days` : 'Not started'}</td>
                         </tr>
                         <tr><td colSpan={8} className="px-4 py-3">
-                          <details><summary className="cursor-pointer text-xs font-semibold text-emerald-800">Observed comparisons by reorder-point period ({periods.length}) — not causal effects</summary>
+                          <details><summary className="cursor-pointer text-xs font-semibold text-emerald-800">Stock levels under each restock level ({periods.length}) — descriptive only</summary>
                             <div className="mt-2 space-y-2">{periods.length ? periods.map((period, index) => <div key={`${period.startedAt}-${index}`} className="rounded-lg bg-emerald-50 p-3 text-xs text-slate-700">
-                              <strong>Reorder point {period.reorderPoint}</strong> · {formatDate(period.startedAt)} – {period.endedAt ? formatDate(period.endedAt) : 'Current'} · {period.trackingDays.toFixed(2)} days<br />
-                              Average on hand {period.timeWeightedAverageOnHand?.toFixed(2) ?? '—'} {row.unit}; at/below point {period.daysAtOrBelowReorderPoint.toFixed(2)} days ({period.percentTimeAtOrBelowReorderPoint?.toFixed(1) ?? '—'}%); out of stock {period.outOfStockDays.toFixed(2)} days
-                            </div>) : <p className="text-xs text-slate-500">No completed observation interval.</p>}</div>
+                              <strong>Restock level {period.reorderPoint}</strong> · {formatDate(period.startedAt)} – {period.endedAt ? formatDate(period.endedAt) : 'Current'} · {period.trackingDays.toFixed(2)} days<br />
+                              Average stock {period.timeWeightedAverageOnHand?.toFixed(2) ?? '—'} {row.unit}; at or below level {period.daysAtOrBelowReorderPoint.toFixed(2)} days ({period.percentTimeAtOrBelowReorderPoint?.toFixed(1) ?? '—'}%); out of stock {period.outOfStockDays.toFixed(2)} days
+                            </div>) : <p className="text-xs text-slate-500">No completed tracking period yet.</p>}</div>
                           </details>
                         </td></tr>
                       </React.Fragment>
                     })}</tbody>
                   </table></div>
-                  {observedPolicy.page.hasMore && <div ref={observedPolicySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more observed policy rows…</div>}
-                  {observedPolicyLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more observed policy rows…</p>}
+                  {observedPolicy.page.hasMore && <div ref={observedPolicySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to see more products…</div>}
+                  {observedPolicyLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more products…</p>}
                   {observedPolicyLoadMoreError && <div role="alert" className="text-center text-sm text-rose-700"><p>{observedPolicyLoadMoreError}</p><button type="button" onClick={() => void loadMoreObservedPolicy()} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
-                  {observedPolicy.page.hasMore && typeof IntersectionObserver === 'undefined' && <div className="py-3 text-center"><button type="button" onClick={() => void loadMoreObservedPolicy()} disabled={observedPolicyLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">{observedPolicyLoadingMore ? 'Loading…' : 'Load more policy rows'}</button></div>}
+                  {observedPolicy.page.hasMore && typeof IntersectionObserver === 'undefined' && <div className="py-3 text-center"><button type="button" onClick={() => void loadMoreObservedPolicy()} disabled={observedPolicyLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">{observedPolicyLoadingMore ? 'Loading…' : 'Load more products'}</button></div>}
                 </>}
         </section>
 
@@ -1039,7 +1052,7 @@ export const Reports: React.FC = () => {
         <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] overflow-hidden">
           <div className="p-6 border-b border-[#f1f5f9]">
             <h3 className="text-lg font-bold text-slate-900">Order History</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Orders returned by the backend for the selected period</p>
+            <p className="text-xs text-slate-500 mt-0.5">Orders from the selected period</p>
             {!historyLoading && <p className="text-xs text-slate-400 mt-1">Showing {historyOrders.length} of {historyTotalCount} matching orders</p>}
           </div>
           
