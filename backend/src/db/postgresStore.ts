@@ -9,7 +9,7 @@ import { getPool } from './client.js';
 import { hasDatabaseUrl } from './config.js';
 import { setDbSyncActive } from './syncState.js';
 
-import type { RecentActivityRecord } from '../analytics/analytics.js';
+import type { AnalyticsOrderSummary, RecentActivityRecord } from '../analytics/analytics.js';
 import type { InventoryPolicyEvent, Product, ProductCreateInput, ProductUpdateInput, StockMovement, StockMovementInput } from '../inventory/store.js';
 import type { Order, OrderCreateInput, OrderUpdateInput, PaymentStatus, RefundType } from '../orders/store.js';
 import type { Delivery, DeliveryCreateInput, DeliveryUpdateInput } from '../delivery/store.js';
@@ -935,6 +935,112 @@ export async function listDemandForecastPageDb(input: {
       hasMore,
       nextCursor: hasMore && last ? { name: last.name, productId: last.productId } : null,
     },
+  };
+}
+
+export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: string): Promise<AnalyticsOrderSummary | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH filtered_orders AS MATERIALIZED (
+      SELECT id, order_no, delivery_date, order_status, total_amount, items
+      FROM orders o
+      WHERE o.deleted_at IS NULL
+        AND ($1::date IS NULL OR o.delivery_date >= $1::date)
+        AND ($2::date IS NULL OR o.delivery_date <= $2::date)
+    ), all_item_quantities AS (
+      SELECT item.value->>'productId' AS product_id,
+        SUM((item.value->>'quantity')::int)::int AS units_ordered
+      FROM orders o
+      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS item(value)
+      WHERE o.deleted_at IS NULL AND o.order_status <> 'cancelled'
+      GROUP BY item.value->>'productId'
+    ), range_item_quantities AS (
+      SELECT item.value->>'productId' AS product_id,
+        (ARRAY_AGG(item.value->>'name' ORDER BY o.order_no COLLATE "C"))[1] AS name,
+        SUM((item.value->>'quantity')::int)::int AS quantity
+      FROM filtered_orders o
+      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS item(value)
+      WHERE o.order_status <> 'cancelled'
+      GROUP BY item.value->>'productId'
+    ), top_selling AS (
+      SELECT r.product_id, r.name, COALESCE(NULLIF(p.category, ''), 'Unclassified') AS category, r.quantity
+      FROM range_item_quantities r
+      LEFT JOIN products p ON p.id = r.product_id AND p.deleted_at IS NULL
+      ORDER BY r.quantity DESC, r.product_id COLLATE "C" ASC
+      LIMIT 5
+    ), rankings AS (
+      SELECT p.id::text AS product_id, p.name,
+        COALESCE(NULLIF(p.category, ''), 'glass') AS category,
+        p.stock, COALESCE(p.threshold, 0) AS threshold,
+        COALESCE(q.units_ordered, 0)::int AS units_ordered,
+        CASE WHEN p.stock <= 0 THEN 'out_of_stock'
+          WHEN p.stock <= COALESCE(p.threshold, 0) * 0.5 THEN 'critical'
+          WHEN p.stock <= COALESCE(p.threshold, 0) THEN 'low'
+          ELSE 'healthy' END AS status
+      FROM products p
+      LEFT JOIN all_item_quantities q ON q.product_id = p.id::text
+      WHERE p.deleted_at IS NULL
+    ), date_meta AS (
+      SELECT CASE WHEN ($1::date IS NOT NULL OR $2::date IS NOT NULL)
+          AND MAX(delivery_date) - MIN(delivery_date) <= 31 THEN TRUE ELSE FALSE END AS use_day_buckets
+      FROM filtered_orders WHERE delivery_date IS NOT NULL
+    ), trends AS (
+      SELECT CASE WHEN d.use_day_buckets THEN o.delivery_date
+          ELSE date_trunc('month', o.delivery_date::timestamp)::date END AS bucket,
+        d.use_day_buckets,
+        COALESCE(SUM(o.total_amount) FILTER (WHERE o.order_status <> 'cancelled'), 0)::double precision AS sales,
+        COUNT(*)::int AS orders
+      FROM filtered_orders o CROSS JOIN date_meta d
+      WHERE o.delivery_date IS NOT NULL
+      GROUP BY 1, d.use_day_buckets
+    )
+    SELECT
+      (SELECT COUNT(*)::int FROM filtered_orders) AS total_order_count,
+      COALESCE((SELECT SUM(total_amount) FILTER (WHERE order_status <> 'cancelled')
+        / NULLIF(COUNT(*) FILTER (WHERE order_status <> 'cancelled'), 0) FROM filtered_orders), 0)::double precision AS average_order_value,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('productId', t.product_id, 'name', t.name,
+        'quantity', t.quantity, 'category', t.category) ORDER BY t.quantity DESC, t.product_id COLLATE "C") FROM top_selling t), '[]'::jsonb) AS top_selling_items,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('name', r.name, 'category', r.category, 'stock', r.stock,
+        'unitsOrdered', r.units_ordered, 'status', r.status) ORDER BY r.units_ordered DESC, r.name COLLATE "C", r.product_id COLLATE "C")
+        FROM (SELECT * FROM rankings WHERE units_ordered > 0 ORDER BY units_ordered DESC, name COLLATE "C", product_id COLLATE "C" LIMIT 5) r), '[]'::jsonb) AS most_ordered_items,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('name', r.name, 'category', r.category, 'stock', r.stock,
+        'unitsOrdered', r.units_ordered, 'status', r.status) ORDER BY r.units_ordered ASC, r.name COLLATE "C", r.product_id COLLATE "C")
+        FROM (SELECT * FROM rankings ORDER BY units_ordered ASC, name COLLATE "C", product_id COLLATE "C" LIMIT 5) r), '[]'::jsonb) AS least_ordered_items,
+      COALESCE((SELECT jsonb_object_agg(product_id, quantity) FROM range_item_quantities), '{}'::jsonb) AS ordered_quantities,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object(
+        'month', CASE WHEN use_day_buckets THEN to_char(bucket, 'FMMon FMDD') ELSE to_char(bucket, 'FMMon YY') END,
+        'sales', sales, 'orders', orders) ORDER BY bucket ASC) FROM trends), '[]'::jsonb) AS sales_trend_data
+  `, [fromDate ?? null, toDate ?? null]);
+  const row = rows[0];
+  if (!row) return null;
+  const decode = (value: unknown): unknown => typeof value === 'string' ? JSON.parse(value) : value;
+  const array = (value: unknown): Record<string, unknown>[] => {
+    const parsed = decode(value);
+    return Array.isArray(parsed) ? parsed as Record<string, unknown>[] : [];
+  };
+  const rawQuantities = decode(row.ordered_quantities);
+  const quantities = rawQuantities && typeof rawQuantities === 'object' && !Array.isArray(rawQuantities)
+    ? Object.fromEntries(Object.entries(rawQuantities as Record<string, unknown>).map(([productId, quantity]) => [productId, Number(quantity)]))
+    : {};
+  return {
+    totalOrderCount: Number(row.total_order_count ?? 0),
+    averageOrderValue: Number(row.average_order_value ?? 0),
+    topSellingItems: array(row.top_selling_items).map((item) => ({
+      productId: String(item.productId), name: String(item.name ?? ''), quantity: Number(item.quantity ?? 0), category: String(item.category ?? 'Unclassified'),
+    })),
+    mostOrderedItems: array(row.most_ordered_items).map((item) => ({
+      name: String(item.name ?? ''), category: String(item.category ?? 'glass'), stock: Number(item.stock ?? 0),
+      unitsOrdered: Number(item.unitsOrdered ?? 0), status: String(item.status ?? 'healthy'),
+    })),
+    leastOrderedItems: array(row.least_ordered_items).map((item) => ({
+      name: String(item.name ?? ''), category: String(item.category ?? 'glass'), stock: Number(item.stock ?? 0),
+      unitsOrdered: Number(item.unitsOrdered ?? 0), status: String(item.status ?? 'healthy'),
+    })),
+    orderedQuantities: quantities,
+    salesTrendData: array(row.sales_trend_data).map((item) => ({
+      month: String(item.month), sales: Number(item.sales ?? 0), orders: Number(item.orders ?? 0),
+    })),
   };
 }
 

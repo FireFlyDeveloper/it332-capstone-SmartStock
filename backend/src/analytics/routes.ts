@@ -76,14 +76,14 @@ function isDateOnly(value: string): boolean {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
-analyticsRoutes.get('/orders/summary', (c) => {
+analyticsRoutes.get('/orders/summary', async (c) => {
   const fromDate = c.req.query('fromDate') || undefined;
   const toDate = c.req.query('toDate') || undefined;
   if ((fromDate && !isDateOnly(fromDate)) || (toDate && !isDateOnly(toDate))) {
     return c.json({ error: 'fromDate and toDate must be valid YYYY-MM-DD dates' }, 400);
   }
   if (fromDate && toDate && fromDate > toDate) return c.json({ error: 'fromDate must be on or before toDate' }, 400);
-  return c.json(getAnalyticsOrderSummary(fromDate, toDate));
+  return c.json(await getAnalyticsOrderSummary(fromDate, toDate));
 });
 
 analyticsRoutes.get('/dashboard-order-summary', async (c) => c.json(await getDashboardOrderSummary()));

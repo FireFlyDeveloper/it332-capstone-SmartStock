@@ -6,7 +6,7 @@
  */
 
 import { isDbSyncActive } from '../db/syncState.js';
-import { getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlySalesTrendDb, listRecentActivityDb } from '../db/postgresStore.js';
+import { getAnalyticsOrderSummaryDb, getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlySalesTrendDb, listRecentActivityDb } from '../db/postgresStore.js';
 import { listProducts, listProductMovements } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import {
@@ -49,7 +49,12 @@ export async function getDashboardOrderSummary() {
   return buildDashboardOrderSummary(listOrders(), listProducts());
 }
 
-export function getAnalyticsOrderSummary(fromDate?: string, toDate?: string) {
+export async function getAnalyticsOrderSummary(fromDate?: string, toDate?: string) {
+  if (isDbSyncActive()) {
+    const summary = await getAnalyticsOrderSummaryDb(fromDate, toDate);
+    if (!summary) throw new Error('PostgreSQL is unavailable for analytics order summary');
+    return summary;
+  }
   return buildAnalyticsOrderSummary(listOrders(), listProducts(), fromDate, toDate);
 }
 
