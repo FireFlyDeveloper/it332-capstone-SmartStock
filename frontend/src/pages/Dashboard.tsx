@@ -108,7 +108,7 @@ function formatMonthLabel(month: string): string {
 }
 
 export const Dashboard: React.FC = () => {
-  const { products, orders, deliveries, loading, error, refresh } = useData();
+  const { products, orders, deliverySummary, loading, error, refresh } = useData();
   const { user } = useAuth();
   const [timeRange, setTimeRange] = useState<DashboardSalesRange>('6M');
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
@@ -157,10 +157,7 @@ export const Dashboard: React.FC = () => {
     () => orders.filter((order) => !['completed', 'cancelled'].includes(order.orderStatus)).length,
     [orders],
   );
-  const inTransitDeliveries = useMemo(
-    () => deliveries.filter((delivery) => delivery.status === 'in_transit').length,
-    [deliveries],
-  );
+  const inTransitDeliveries = deliverySummary.inTransitCount;
 
   const monthlySales = useMemo(
     () => salesTrend.map((row) => ({ ...row, month: formatMonthLabel(row.month) })),
@@ -212,11 +209,11 @@ export const Dashboard: React.FC = () => {
     orders.forEach((order) => counts.set(order.orderStatus, (counts.get(order.orderStatus) ?? 0) + 1));
     return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [orders]);
-  const deliveryStatusCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    deliveries.forEach((delivery) => counts.set(delivery.status, (counts.get(delivery.status) ?? 0) + 1));
-    return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [deliveries]);
+  const deliveryStatusCounts = ([
+    ['pending', deliverySummary.pendingCount],
+    ['in_transit', deliverySummary.inTransitCount],
+    ['delivered', deliverySummary.deliveredCount],
+  ] as [string, number][]).filter(([, count]) => count > 0).sort(([a], [b]) => a.localeCompare(b));
 
   const customTooltipFormatter = (value: number) => [formatCurrency(value), 'Gross order value'];
 

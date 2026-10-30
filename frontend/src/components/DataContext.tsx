@@ -1,6 +1,6 @@
 /**
  * DataContext - replaces the Capstone's localStorage-backed AppContext.
- * Holds products / orders / deliveries, fetches them from the Hono backend
+ * Holds product and order records plus summary counts, fetches them from the Hono backend
  * via apiFetch, and exposes mutators that hit the appropriate endpoints
  * before updating local state.
  *
@@ -18,8 +18,8 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { apiFetch } from '../api'
-import type { Delivery, Order, Product, StockMovement } from '../types'
+import { apiFetch, getDeliveriesPage } from '../api'
+import type { Order, Product, StockMovement } from '../types'
 import { toFrontendOrder, type BackendOrder, type BackendOrderStatus } from './orderMapper'
 
 function toBackendOrderStatus(status: Order['orderStatus']): BackendOrderStatus {
@@ -59,7 +59,7 @@ interface DataContextValue {
   // Data
   products: Product[]
   orders: Order[]
-  deliveries: Delivery[]
+  deliverySummary: { totalCount: number; pendingCount: number; inTransitCount: number; deliveredCount: number }
   loading: boolean
   error: string | null
   productsLoading: boolean
@@ -94,8 +94,6 @@ interface DataContextValue {
     type: 'full' | 'partial',
   ) => Promise<void>
 
-  // Delivery mutators
-  updateDeliveryStatus: (id: string, status: Delivery['status'], step: number) => Promise<void>
 }
 
 const DataContext = createContext<DataContextValue | null>(null)
@@ -107,7 +105,7 @@ async function safeFetch<T>(path: string): Promise<T> {
 export function DataProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([])
   const [orders, setOrders] = useState<Order[]>([])
-  const [deliveries, setDeliveries] = useState<Delivery[]>([])
+  const [deliverySummary, setDeliverySummary] = useState({ totalCount: 0, pendingCount: 0, inTransitCount: 0, deliveredCount: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [productsLoading, setProductsLoading] = useState(true)
@@ -148,7 +146,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setDeliveriesLoading(true)
     setDeliveriesError(null)
     try {
-      setDeliveries(await safeFetch<Delivery[]>('/deliveries'))
+      const result = await getDeliveriesPage({ limit: 1 })
+      setDeliverySummary(result.summary)
     } catch (err) {
       setDeliveriesError(err instanceof Error ? err.message : 'Failed to load deliveries')
       throw err
@@ -301,35 +300,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [],
   )
 
-  // ── Delivery mutators ─────────────────────────────────────────────
-  const updateDeliveryStatus = useCallback(
-    async (id: string, status: Delivery['status'], _step: number) => {
-      const delivery = deliveries.find((item) => item.id === id);
-      const orderId = delivery?.orderId ?? id;
-      const orderStatus = status === 'pending'
-        ? 'pending'
-        : status === 'in_transit'
-          ? 'out_for_delivery'
-          : status === 'delivered'
-            ? 'completed'
-            : null;
-      if (!orderStatus) throw new Error('Only pending, in-transit, and delivered order statuses are supported.');
-      try {
-        await updateOrder(orderId, { orderStatus });
-        await refreshDeliveries();
-      } catch (err) {
-        await refreshDeliveries().catch(() => undefined);
-        throw err
-      }
-    },
-    [deliveries, refreshDeliveries, updateOrder],
-  )
-
   const value = useMemo<DataContextValue>(
     () => ({
       products,
       orders,
-      deliveries,
+      deliverySummary,
       loading,
       error,
       productsLoading,
@@ -352,12 +327,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       cancelOrder,
       processPayment,
       processRefund,
-      updateDeliveryStatus,
     }),
     [
       products,
       orders,
-      deliveries,
+      deliverySummary,
       loading,
       error,
       productsLoading,
@@ -380,7 +354,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       cancelOrder,
       processPayment,
       processRefund,
-      updateDeliveryStatus,
     ],
   )
 
