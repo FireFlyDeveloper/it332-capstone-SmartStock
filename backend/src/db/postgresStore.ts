@@ -136,6 +136,99 @@ export interface ProductsDbPage {
   nextCursor: { name: string; id: string } | null;
 }
 
+export interface AnnualPurchaseDbPage {
+  groups: Array<{
+    materialType: string;
+    supplier: string;
+    transactionCount: number;
+    totalQuantity: number;
+    totalCost: number;
+    unpricedReceiptCount: number;
+    unpricedQuantity: number;
+  }>;
+  totalSpend: number;
+  unpricedReceiptCount: number;
+  unpricedQuantity: number;
+  pricedReceiptCount: number;
+  page: {
+    limit: number;
+    totalCount: number;
+    hasMore: boolean;
+    nextCursor: { materialType: string; supplier: string } | null;
+  };
+}
+
+export async function listAnnualPurchasesPageDb(input: {
+  year: number;
+  limit: number;
+  cursor: { materialType: string; supplier: string } | null;
+}): Promise<AnnualPurchaseDbPage | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const start = new Date(Date.UTC(input.year, 0, 1));
+  const end = new Date(Date.UTC(input.year + 1, 0, 1));
+  const { rows } = await pool.query(`
+    WITH grouped AS (
+      SELECT COALESCE(p.category, 'unknown') AS material_type,
+        COALESCE(NULLIF(BTRIM(m.supplier), ''), 'Unspecified') AS supplier,
+        COUNT(*)::int AS transaction_count,
+        SUM(m.quantity)::numeric AS total_quantity,
+        COALESCE(SUM(m.quantity * m.unit_cost), 0)::numeric AS total_cost,
+        COUNT(*) FILTER (WHERE m.unit_cost IS NULL)::int AS unpriced_receipt_count,
+        COALESCE(SUM(m.quantity) FILTER (WHERE m.unit_cost IS NULL), 0)::numeric AS unpriced_quantity
+      FROM stock_movements m
+      LEFT JOIN products p ON p.id = m.product_id AND p.deleted_at IS NULL
+      WHERE m.type = 'inbound' AND m.occurred_at >= $1 AND m.occurred_at < $2
+      GROUP BY 1, 2
+    ), page_rows AS (
+      SELECT * FROM grouped
+      WHERE $3::text IS NULL
+        OR material_type COLLATE "C" > $3::text COLLATE "C"
+        OR (material_type COLLATE "C" = $3::text COLLATE "C" AND supplier COLLATE "C" > $4::text COLLATE "C")
+      ORDER BY material_type COLLATE "C" ASC, supplier COLLATE "C" ASC
+      LIMIT $5
+    ), totals AS (
+      SELECT COUNT(*)::int AS total_count,
+        COALESCE(SUM(total_cost), 0)::numeric AS total_spend,
+        COALESCE(SUM(unpriced_receipt_count), 0)::int AS unpriced_receipt_count,
+        COALESCE(SUM(unpriced_quantity), 0)::numeric AS unpriced_quantity,
+        COALESCE(SUM(transaction_count - unpriced_receipt_count), 0)::int AS priced_receipt_count
+      FROM grouped
+    )
+    SELECT totals.total_count, totals.total_spend, totals.unpriced_receipt_count,
+      totals.unpriced_quantity, totals.priced_receipt_count,
+      COALESCE((SELECT jsonb_agg(to_jsonb(page_rows) ORDER BY page_rows.material_type COLLATE "C", page_rows.supplier COLLATE "C") FROM page_rows), '[]'::jsonb) AS page_items
+    FROM totals
+  `, [start, end, input.cursor?.materialType ?? null, input.cursor?.supplier ?? null, input.limit + 1]);
+  const row = rows[0];
+  if (!row) return null;
+  const rawItems = (typeof row.page_items === 'string' ? JSON.parse(row.page_items) : row.page_items ?? []) as Record<string, unknown>[];
+  const groups = rawItems.slice(0, input.limit).map((item) => ({
+    materialType: String(item.material_type),
+    supplier: String(item.supplier),
+    transactionCount: Number(item.transaction_count ?? 0),
+    totalQuantity: Number(item.total_quantity ?? 0),
+    totalCost: Number(item.total_cost ?? 0),
+    unpricedReceiptCount: Number(item.unpriced_receipt_count ?? 0),
+    unpricedQuantity: Number(item.unpriced_quantity ?? 0),
+  }));
+  const hasMore = rawItems.length > input.limit;
+  const last = groups.at(-1);
+  return {
+    groups,
+    totalSpend: Number(row.total_spend ?? 0),
+    unpricedReceiptCount: Number(row.unpriced_receipt_count ?? 0),
+    unpricedQuantity: Number(row.unpriced_quantity ?? 0),
+    pricedReceiptCount: Number(row.priced_receipt_count ?? 0),
+    page: {
+      limit: input.limit,
+      totalCount: Number(row.total_count ?? 0),
+      hasMore,
+      nextCursor: hasMore && last ? { materialType: last.materialType, supplier: last.supplier } : null,
+    },
+  };
+}
+
 export async function listProductsPageDb(input: {
   limit: number;
   category: 'all' | 'glass' | 'aluminum';

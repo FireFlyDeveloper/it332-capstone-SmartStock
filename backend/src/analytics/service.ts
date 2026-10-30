@@ -5,6 +5,8 @@
  * Last touched: 2026-07-17
  */
 
+import { isDbSyncActive } from '../db/syncState.js';
+import { listAnnualPurchasesPageDb } from '../db/postgresStore.js';
 import { listProducts, listProductMovements } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import {
@@ -48,7 +50,13 @@ export function getAnnualPurchases(year = new Date().getUTCFullYear()) {
   return buildAnnualPurchaseSummary(listAllMovements(), listProducts(), year);
 }
 
-export function getAnnualPurchasesPage(year: number, limit: number, cursor: AnnualPurchaseCursor | null) {
+export async function getAnnualPurchasesPage(year: number, limit: number, cursor: AnnualPurchaseCursor | null) {
+  if (isDbSyncActive()) {
+    const page = await listAnnualPurchasesPageDb({ year, limit, cursor });
+    if (!page) throw new Error('PostgreSQL is unavailable for annual purchase pagination');
+    return { year, ...page };
+  }
+
   const groups = getAnnualPurchases(year);
   const paginated = paginateAnnualPurchaseSummary(groups, limit, cursor);
   return {

@@ -106,7 +106,7 @@ analyticsRoutes.get('/recent-activity', (c) => {
   return c.json(getRecentActivity(limit));
 });
 
-analyticsRoutes.get('/purchases/page', (c) => {
+analyticsRoutes.get('/purchases/page', async (c) => {
   const rawYear = c.req.query('year');
   const year = rawYear === undefined ? new Date().getUTCFullYear() : Number(rawYear);
   if (!Number.isInteger(year) || year < 1900 || year > 3000) {
@@ -132,7 +132,7 @@ analyticsRoutes.get('/purchases/page', (c) => {
       return c.json({ error: 'cursor is invalid' }, 400);
     }
   }
-  const result = getAnnualPurchasesPage(year, limit, cursor);
+  const result = await getAnnualPurchasesPage(year, limit, cursor);
   const nextCursor = result.page.nextCursor
     ? Buffer.from(JSON.stringify(result.page.nextCursor)).toString('base64url')
     : null;

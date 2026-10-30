@@ -292,6 +292,16 @@ export function buildRecentActivity(
     .slice(0, limit);
 }
 
+function comparePurchaseKey(left: string, right: string): number {
+  const leftPoints = Array.from(left, (character) => character.codePointAt(0)!);
+  const rightPoints = Array.from(right, (character) => character.codePointAt(0)!);
+  const sharedLength = Math.min(leftPoints.length, rightPoints.length);
+  for (let index = 0; index < sharedLength; index += 1) {
+    if (leftPoints[index] !== rightPoints[index]) return leftPoints[index] - rightPoints[index];
+  }
+  return leftPoints.length - rightPoints.length;
+}
+
 export function buildAnnualPurchaseSummary(
   movements: StockMovement[],
   products: Product[],
@@ -329,7 +339,7 @@ export function buildAnnualPurchaseSummary(
   }
 
   return [...byGroup.values()].sort((a, b) => (
-    a.materialType.localeCompare(b.materialType) || a.supplier.localeCompare(b.supplier)
+    comparePurchaseKey(a.materialType, b.materialType) || comparePurchaseKey(a.supplier, b.supplier)
   ));
 }
 
@@ -343,7 +353,7 @@ export function paginateAnnualPurchaseSummary(
   limit: number,
   cursor: AnnualPurchaseCursor | null,
 ) {
-  const compare = (left: string, right: string) => left.localeCompare(right);
+  const compare = comparePurchaseKey;
   const filtered = cursor
     ? rows.filter((row) => compare(row.materialType, cursor.materialType) > 0
       || (row.materialType === cursor.materialType && compare(row.supplier, cursor.supplier) > 0))
