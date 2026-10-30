@@ -959,7 +959,7 @@ export const Analytics: React.FC = () => {
           {aiInsightLoading && <p role="status" className="text-sm text-slate-500">Preparing a privacy-safe aggregate interpretation…</p>}
           {aiInsight && <div aria-live="polite" className="space-y-4 rounded-2xl bg-indigo-50/60 p-4">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">{aiInsight.source === 'deepseek' ? 'DeepSeek aggregate interpretation' : 'Local rule-based fallback'}</span>
+              <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">{aiInsight.source === 'hermes' ? 'Hermes Agent aggregate interpretation' : aiInsight.source === 'deepseek' ? 'DeepSeek aggregate interpretation' : 'Local rule-based fallback'}</span>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold capitalize text-slate-600">Confidence: {aiInsight.confidence}</span>
               {aiInsightCriteria && <span className="text-xs text-slate-500">{aiInsightCriteria.year} · movement threshold {aiInsightCriteria.threshold} units</span>}
             </div>

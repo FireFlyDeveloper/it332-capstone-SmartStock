@@ -26,6 +26,9 @@ services:
       PORT: "3000"
       CLIENT_URL: ${SMARTSTOCK_CLIENT_URL:?Set SMARTSTOCK_CLIENT_URL in the protected env file}
       JWT_SECRET: ${SMARTSTOCK_JWT_SECRET:?Set SMARTSTOCK_JWT_SECRET in the protected env file}
+      HERMES_API_BASE_URL: ${SMARTSTOCK_HERMES_API_BASE_URL:-}
+      HERMES_API_KEY: ${SMARTSTOCK_HERMES_API_KEY:-}
+      HERMES_MODEL: ${SMARTSTOCK_HERMES_MODEL:-smartstockanalytics}
       DATABASE_URL: postgresql://${SMARTSTOCK_DB_USER:?Set SMARTSTOCK_DB_USER in the protected env file}:${SMARTSTOCK_DB_PASSWORD:?Set SMARTSTOCK_DB_PASSWORD in the protected env file}@database:5432/${SMARTSTOCK_DB_NAME:?Set SMARTSTOCK_DB_NAME in the protected env file}
     depends_on:
       database:

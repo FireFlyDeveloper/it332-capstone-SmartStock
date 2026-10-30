@@ -6,8 +6,8 @@
  */
 
 import { getAnnualPurchases, getDemandForecast, getMovementClassification, getSalesTrends } from '../analytics/service.js';
-import { getDeepSeekConfig } from './config.js';
-import { callDeepSeekInsight } from './deepseek.js';
+import { getHermesConfig } from './config.js';
+import { callHermesInsight } from './hermes.js';
 import type { AiInsight, AiInsightContent, InsightRequestOptions, SafeInsightPayload } from './types.js';
 
 function stableGeneratedAt(year: number): string {
@@ -116,12 +116,12 @@ export function generateFallbackInsight(payload: SafeInsightPayload): AiInsightC
 export async function getAnalyticsInsight(options: InsightRequestOptions = {}): Promise<AiInsight> {
   const payload = await buildSafeInsightPayload(options);
   const fallback = (): AiInsight => ({ ...generateFallbackInsight(payload), source: 'fallback' });
-  const config = getDeepSeekConfig();
-  if (!config.apiKey) return fallback();
+  const config = getHermesConfig();
+  if (!config.apiKey || !config.baseUrl) return fallback();
 
   try {
-    const ai = await callDeepSeekInsight(payload, { apiKey: config.apiKey, endpoint: config.endpoint, model: config.model });
-    return { ...ai, source: 'deepseek' };
+    const ai = await callHermesInsight(payload, { apiKey: config.apiKey, baseUrl: config.baseUrl, model: config.model });
+    return { ...ai, source: 'hermes' };
   } catch {
     return fallback();
   }

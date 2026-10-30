@@ -1,5 +1,5 @@
 /**
- * AI insight tests — DeepSeek interpretation fallback layer.
+ * AI insight tests — Hermes-backed interpretation and local fallback.
  *
  * Author: Hermes Agent
  * Last touched: 2026-07-17
@@ -15,7 +15,7 @@ import { _resetInventoryStore, createProduct, recordInboundStock, recordOutbound
 import { analyticsRoutes } from '../analytics/routes.js';
 import { generateFallbackInsight, getAnalyticsInsight, buildSafeInsightPayload } from './insights.js';
 import { validateAiInsightResponse } from './validator.js';
-import { callDeepSeekInsight } from './deepseek.js';
+import { callHermesInsight } from './hermes.js';
 
 function buildApp() {
   const app = new Hono();
@@ -83,9 +83,9 @@ describe('AI insight fallback layer', () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
     process.env = { ...ORIGINAL_ENV };
-    delete process.env.DEEPSEEK_API_KEY;
-    delete process.env.DEEPSEEK_API_ENDPOINT;
-    delete process.env.DEEPSEEK_MODEL;
+    delete process.env.HERMES_API_KEY;
+    delete process.env.HERMES_API_BASE_URL;
+    delete process.env.HERMES_MODEL;
     _resetUserStore();
     _resetOrderStore(false);
     _resetInventoryStore(false);
@@ -97,7 +97,7 @@ describe('AI insight fallback layer', () => {
     process.env = { ...ORIGINAL_ENV };
   });
 
-  it('returns a deterministic local insight when DEEPSEEK_API_KEY is missing', async () => {
+  it('returns a deterministic local insight when Hermes is not configured', async () => {
     const first = await getAnalyticsInsight({ year: 2026, threshold: 5 });
     const second = await getAnalyticsInsight({ year: 2026, threshold: 5 });
 
@@ -149,37 +149,61 @@ describe('AI insight fallback layer', () => {
     expect(serialized).not.toContain('123 Full Secret Street');
     expect(serialized).not.toContain('Barangay Hidden');
     expect(serialized).not.toContain('Bearer ');
-    expect(serialized).not.toContain('DEEPSEEK_API_KEY');
+    expect(serialized).not.toContain('HERMES_API_KEY');
     expect(serialized).toContain('salesTrends');
     expect(serialized).toContain('movement');
   });
 
-  it('uses HTTPS DeepSeek requests, retries once on failure, and falls back after an invalid AI response', async () => {
-    process.env.DEEPSEEK_API_KEY = 'test-key-not-secret';
-    process.env.DEEPSEEK_API_ENDPOINT = 'https://api.deepseek.example/chat/completions';
-    process.env.DEEPSEEK_MODEL = 'deepseek-chat';
-    const fetchMock = vi.fn()
-      .mockRejectedValueOnce(new Error('network down'))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: '{"summary":"missing fields"}' } }] }), { status: 200 }));
+  it('calls the configured Hermes profile with only aggregate JSON and validates its response', async () => {
+    process.env.HERMES_API_KEY = 'test-hermes-api-key';
+    process.env.HERMES_API_BASE_URL = 'http://172.29.0.1:8643/v1';
+    process.env.HERMES_MODEL = 'smartstockanalytics';
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+      summary: 'Aggregate sales increased over the sampled months.',
+      recommendations: ['Review replenishment timing for fast-moving categories.'],
+      risks: ['Sparse history limits confidence in the SES estimate.'],
+      confidence: 'medium',
+    }) } }] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await getAnalyticsInsight({ year: 2026, threshold: 5 });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const [endpoint, init] = fetchMock.mock.calls[0];
-    expect(endpoint).toBe('https://api.deepseek.example/chat/completions');
-    expect(init.headers.authorization).toBe('Bearer test-key-not-secret');
+    expect(endpoint).toBe('http://172.29.0.1:8643/v1/chat/completions');
+    expect(init.headers.authorization).toBe('Bearer test-hermes-api-key');
+    expect(init.headers['idempotency-key']).toMatch(/^smartstock-[a-f0-9]{64}$/);
+    const requestBody = JSON.parse(init.body);
+    expect(requestBody.model).toBe('smartstockanalytics');
+    expect(requestBody.tools).toEqual([]);
+    expect(requestBody.tool_choice).toBe('none');
+    expect(requestBody.messages[1].content).not.toContain('Private Customer');
+    expect(requestBody.messages[1].content).not.toContain('secret-phone');
+    expect(requestBody.messages[1].content).not.toContain('secret-address');
+    expect(result.source).toBe('hermes');
+    expect(result.summary).toContain('Aggregate sales increased');
+  });
+
+  it('falls back after an Hermes request or response validation failure', async () => {
+    process.env.HERMES_API_KEY = 'test-hermes-api-key';
+    process.env.HERMES_API_BASE_URL = 'https://hermes.example/v1';
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: '{"summary":"missing fields"}' } }] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await getAnalyticsInsight({ year: 2026, threshold: 5 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.source).toBe('fallback');
     expect(result.summary).toContain('SmartStock analytics');
   });
 
-  it('rejects non-HTTPS DeepSeek endpoints before making a network call', async () => {
+  it('rejects public plain-HTTP Hermes endpoints before making a network call', async () => {
     const fetchMock = vi.fn();
-    await expect(callDeepSeekInsight({ summary: 'safe aggregate payload' }, {
-      apiKey: 'test-key-not-secret',
-      endpoint: 'http://api.deepseek.example/chat/completions',
-      model: 'deepseek-chat',
-    }, fetchMock)).rejects.toThrow('DeepSeek endpoint must use HTTPS');
+    await expect(callHermesInsight({ summary: 'safe aggregate payload' }, {
+      apiKey: 'test-hermes-api-key',
+      baseUrl: 'http://api.example/v1',
+      model: 'smartstockanalytics',
+    }, fetchMock)).rejects.toThrow('Hermes API must use HTTPS or a loopback/private HTTP address');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

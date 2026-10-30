@@ -345,7 +345,7 @@ export interface AnalyticsInsightsResponse {
   recommendations: string[]
   risks: string[]
   confidence: 'low' | 'medium' | 'high'
-  source: 'deepseek' | 'fallback'
+  source: 'hermes' | 'deepseek' | 'fallback'
 }
 
 export function getDashboardOrderSummary(): Promise<DashboardOrderSummary> {

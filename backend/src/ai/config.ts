@@ -1,20 +1,18 @@
 /**
- * AI config — DeepSeek environment configuration.
+ * AI config — Hermes API server environment configuration.
  *
- * Author: Hermes Agent
- * Last touched: 2026-07-17
+ * The backend talks only to the dedicated, aggregate-only Hermes profile.
  */
-
-export interface DeepSeekConfig {
+export interface HermesConfig {
   apiKey?: string;
-  endpoint: string;
+  baseUrl?: string;
   model: string;
 }
 
-export function getDeepSeekConfig(env: NodeJS.ProcessEnv = process.env): DeepSeekConfig {
+export function getHermesConfig(env: NodeJS.ProcessEnv = process.env): HermesConfig {
   return {
-    apiKey: env.DEEPSEEK_API_KEY,
-    endpoint: env.DEEPSEEK_API_ENDPOINT ?? 'https://api.deepseek.com/chat/completions',
-    model: env.DEEPSEEK_MODEL ?? 'deepseek-chat',
+    apiKey: env.HERMES_API_KEY,
+    baseUrl: env.HERMES_API_BASE_URL,
+    model: env.HERMES_MODEL ?? 'smartstockanalytics',
   };
 }

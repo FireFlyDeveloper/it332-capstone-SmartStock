@@ -6,7 +6,7 @@
  */
 
 export type InsightConfidence = 'low' | 'medium' | 'high';
-export type InsightSource = 'deepseek' | 'fallback';
+export type InsightSource = 'hermes' | 'fallback';
 
 export interface AiInsightContent {
   summary: string;
