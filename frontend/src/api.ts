@@ -263,6 +263,18 @@ export function getDashboardRecentActivity(limit = 6): Promise<DashboardActivity
   return apiFetch<DashboardActivityRecord[]>(`/analytics/recent-activity?limit=${encodeURIComponent(String(limit))}`)
 }
 
+export interface PurchaseAnalyticsPageResponse extends PurchaseAnalyticsResponse {
+  page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null }
+}
+
+export function getAnalyticsPurchasesPage(options: { year?: number; limit?: number; cursor?: string | null } = {}): Promise<PurchaseAnalyticsPageResponse> {
+  const params = new URLSearchParams()
+  if (options.year !== undefined) params.set('year', String(options.year))
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.cursor) params.set('cursor', options.cursor)
+  return apiFetch<PurchaseAnalyticsPageResponse>(`/analytics/purchases/page?${params.toString()}`)
+}
+
 export async function getAnalyticsPurchases(year: number): Promise<PurchaseAnalyticsResponse> {
   const groups = await apiFetch<PurchaseAnalyticsResponse['groups']>(`/analytics/purchases?year=${encodeURIComponent(String(year))}`)
   return { year, groups, totalSpend: groups.reduce((sum, row) => sum + row.totalCost, 0),

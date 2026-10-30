@@ -10,6 +10,7 @@ import { requireAuth } from '../auth/middleware.js';
 import { getAnalyticsInsight } from '../ai/insights.js';
 import {
   getAnnualPurchases,
+  getAnnualPurchasesPage,
   getForecast,
   getMovementClassification,
   getRecentActivity,
@@ -17,7 +18,7 @@ import {
   getDemandForecast,
   getDemandForecastPage,
 } from './service.js';
-import type { DashboardSalesRange, DemandForecastCursor } from './analytics.js';
+import type { AnnualPurchaseCursor, DashboardSalesRange, DemandForecastCursor } from './analytics.js';
 
 export const analyticsRoutes = new Hono();
 
@@ -83,6 +84,39 @@ analyticsRoutes.get('/recent-activity', (c) => {
     return c.json({ error: 'limit must be an integer between 1 and 20' }, 400);
   }
   return c.json(getRecentActivity(limit));
+});
+
+analyticsRoutes.get('/purchases/page', (c) => {
+  const rawYear = c.req.query('year');
+  const year = rawYear === undefined ? new Date().getUTCFullYear() : Number(rawYear);
+  if (!Number.isInteger(year) || year < 1900 || year > 3000) {
+    return c.json({ error: 'year must be an integer between 1900 and 3000' }, 400);
+  }
+  const rawLimit = c.req.query('limit');
+  const limit = rawLimit === undefined ? 25 : Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    return c.json({ error: 'limit must be an integer between 1 and 100' }, 400);
+  }
+  let cursor: AnnualPurchaseCursor | null = null;
+  const rawCursor = c.req.query('cursor');
+  if (rawCursor !== undefined) {
+    if (rawCursor.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(rawCursor)) return c.json({ error: 'cursor is invalid' }, 400);
+    try {
+      const decoded = Buffer.from(rawCursor, 'base64url').toString('utf8');
+      if (Buffer.from(decoded, 'utf8').toString('base64url') !== rawCursor) return c.json({ error: 'cursor is invalid' }, 400);
+      const parsed = JSON.parse(decoded) as Record<string, unknown>;
+      if (typeof parsed.materialType !== 'string' || parsed.materialType.length > 100
+        || typeof parsed.supplier !== 'string' || parsed.supplier.length > 200) return c.json({ error: 'cursor is invalid' }, 400);
+      cursor = { materialType: parsed.materialType, supplier: parsed.supplier };
+    } catch {
+      return c.json({ error: 'cursor is invalid' }, 400);
+    }
+  }
+  const result = getAnnualPurchasesPage(year, limit, cursor);
+  const nextCursor = result.page.nextCursor
+    ? Buffer.from(JSON.stringify(result.page.nextCursor)).toString('base64url')
+    : null;
+  return c.json({ ...result, page: { ...result.page, nextCursor } });
 });
 
 analyticsRoutes.get('/purchases', (c) => {

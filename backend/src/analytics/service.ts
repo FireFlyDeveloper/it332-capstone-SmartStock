@@ -16,6 +16,8 @@ import {
   simpleExponentialSmoothingForecast,
   buildDemandForecast,
   paginateDemandForecast,
+  paginateAnnualPurchaseSummary,
+  type AnnualPurchaseCursor,
   type DashboardSalesRange,
   type DemandForecastCursor,
 } from './analytics.js';
@@ -34,6 +36,20 @@ export function getRecentActivity(limit = 6) {
 
 export function getAnnualPurchases(year = new Date().getUTCFullYear()) {
   return buildAnnualPurchaseSummary(listAllMovements(), listProducts(), year);
+}
+
+export function getAnnualPurchasesPage(year: number, limit: number, cursor: AnnualPurchaseCursor | null) {
+  const groups = getAnnualPurchases(year);
+  const paginated = paginateAnnualPurchaseSummary(groups, limit, cursor);
+  return {
+    year,
+    groups: paginated.rows,
+    totalSpend: groups.reduce((sum, row) => sum + row.totalCost, 0),
+    unpricedReceiptCount: groups.reduce((sum, row) => sum + row.unpricedReceiptCount, 0),
+    unpricedQuantity: groups.reduce((sum, row) => sum + row.unpricedQuantity, 0),
+    pricedReceiptCount: groups.reduce((sum, row) => sum + row.transactionCount - row.unpricedReceiptCount, 0),
+    page: paginated.page,
+  };
 }
 
 export function getMovementClassification(threshold = 10) {

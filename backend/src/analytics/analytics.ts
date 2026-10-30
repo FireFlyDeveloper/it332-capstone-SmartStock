@@ -196,6 +196,36 @@ export function buildAnnualPurchaseSummary(
   ));
 }
 
+export interface AnnualPurchaseCursor {
+  materialType: string;
+  supplier: string;
+}
+
+export function paginateAnnualPurchaseSummary(
+  rows: AnnualPurchaseSummaryRow[],
+  limit: number,
+  cursor: AnnualPurchaseCursor | null,
+) {
+  const compare = (left: string, right: string) => left.localeCompare(right);
+  const filtered = cursor
+    ? rows.filter((row) => compare(row.materialType, cursor.materialType) > 0
+      || (row.materialType === cursor.materialType && compare(row.supplier, cursor.supplier) > 0))
+    : rows;
+  const selected = filtered.slice(0, limit + 1);
+  const hasMore = selected.length > limit;
+  const pageRows = selected.slice(0, limit);
+  const last = pageRows.at(-1);
+  return {
+    rows: pageRows,
+    page: {
+      limit,
+      totalCount: rows.length,
+      hasMore,
+      nextCursor: hasMore && last ? { materialType: last.materialType, supplier: last.supplier } : null,
+    },
+  };
+}
+
 export function buildMonthlyOutboundQuantities(movements: StockMovement[]): MonthlyQuantity[] {
   const byMonth = new Map<string, MonthlyQuantity>();
   for (const movement of movements) {

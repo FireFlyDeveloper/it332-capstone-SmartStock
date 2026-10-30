@@ -23,10 +23,9 @@ import type { Order } from '../types';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
-import { apiFetchBlob, getAnalyticsPurchases, getDemandForecastPage, getPolicyPerformancePage, getOrdersPage, type ApiError, type PurchaseAnalyticsResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
+import { apiFetchBlob, getAnalyticsPurchasesPage, getDemandForecastPage, getPolicyPerformancePage, getOrdersPage, type ApiError, type PurchaseAnalyticsPageResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
 import { toFrontendOrder } from '../components/orderMapper';
 import { useAuth } from '../components/AuthContext';
-import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 type ExportType = 'sales' | 'purchases' | 'inventory' | 'spending';
@@ -107,9 +106,14 @@ export const Reports: React.FC = () => {
   const [exportType, setExportType] = useState<ExportType>('sales');
   const [generatedAt] = useState(() => new Date().toLocaleString());
   const [purchaseYear, setPurchaseYear] = useState(new Date().getFullYear());
-  const [purchaseData, setPurchaseData] = useState<PurchaseAnalyticsResponse | null>(null);
+  const [purchaseData, setPurchaseData] = useState<PurchaseAnalyticsPageResponse | null>(null);
   const [purchaseLoading, setPurchaseLoading] = useState(true);
   const [purchaseError, setPurchaseError] = useState('');
+  const [purchaseLoadingMore, setPurchaseLoadingMore] = useState(false);
+  const [purchaseLoadMoreError, setPurchaseLoadMoreError] = useState('');
+  const purchaseSentinelRef = useRef<HTMLDivElement | null>(null);
+  const purchaseRequestRef = useRef(0);
+  const purchaseLoadingMoreRef = useRef(false);
   const [policyRows, setPolicyRows] = useState<DemandForecastProduct[]>([]);
   const [policyPage, setPolicyPage] = useState<DemandForecastPageResponse['page'] | null>(null);
   const [policyLoading, setPolicyLoading] = useState(true);
@@ -208,14 +212,55 @@ export const Reports: React.FC = () => {
     return () => observer.disconnect();
   }, [historyHasMore, historyLoading, historyLoadingMore, loadMoreHistory]);
 
-  // Anchor date: latest date in orders (or fallback to current date)
   useEffect(() => {
-    let active = true; setPurchaseLoading(true); setPurchaseError('');
-    getAnalyticsPurchases(purchaseYear).then(data => { if (active) setPurchaseData(data) })
-      .catch(error => { if (active) setPurchaseError(error instanceof Error ? error.message : 'Could not load annual spending.') })
-      .finally(() => { if (active) setPurchaseLoading(false) });
-    return () => { active = false };
+    const requestId = ++purchaseRequestRef.current;
+    setPurchaseData(null);
+    setPurchaseLoading(true);
+    setPurchaseError('');
+    setPurchaseLoadMoreError('');
+    purchaseLoadingMoreRef.current = false;
+    setPurchaseLoadingMore(false);
+    getAnalyticsPurchasesPage({ year: purchaseYear, limit: 25 }).then(data => {
+      if (requestId === purchaseRequestRef.current) setPurchaseData(data);
+    }).catch(error => {
+      if (requestId === purchaseRequestRef.current) setPurchaseError(error instanceof Error ? error.message : 'Could not load annual spending.');
+    }).finally(() => {
+      if (requestId === purchaseRequestRef.current) setPurchaseLoading(false);
+    });
+    return () => {
+      if (requestId === purchaseRequestRef.current) purchaseRequestRef.current += 1;
+    };
   }, [purchaseYear]);
+
+  const loadMorePurchaseGroups = useCallback(async () => {
+    if (!purchaseData?.page.hasMore || !purchaseData.page.nextCursor || purchaseLoading || purchaseLoadingMoreRef.current) return;
+    const requestId = purchaseRequestRef.current;
+    purchaseLoadingMoreRef.current = true;
+    setPurchaseLoadingMore(true);
+    setPurchaseLoadMoreError('');
+    try {
+      const response = await getAnalyticsPurchasesPage({ year: purchaseYear, limit: 25, cursor: purchaseData.page.nextCursor });
+      if (requestId !== purchaseRequestRef.current) return;
+      setPurchaseData(current => current ? { ...current, groups: [...current.groups, ...response.groups], page: response.page } : response);
+    } catch (error) {
+      if (requestId === purchaseRequestRef.current) setPurchaseLoadMoreError(error instanceof Error ? error.message : 'Could not load more purchase groups.');
+    } finally {
+      if (requestId === purchaseRequestRef.current) {
+        purchaseLoadingMoreRef.current = false;
+        setPurchaseLoadingMore(false);
+      }
+    }
+  }, [purchaseData, purchaseLoading, purchaseYear]);
+
+  useEffect(() => {
+    const sentinel = purchaseSentinelRef.current;
+    if (!sentinel || !purchaseData?.page.hasMore || purchaseLoading || purchaseLoadingMore || purchaseLoadMoreError || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) void loadMorePurchaseGroups();
+    }, { rootMargin: '320px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [purchaseData?.page.hasMore, purchaseLoading, purchaseLoadingMore, purchaseLoadMoreError, loadMorePurchaseGroups]);
   useEffect(() => {
     const requestId = ++policyRequestRef.current;
     setPolicyRows([]);
@@ -384,7 +429,6 @@ export const Reports: React.FC = () => {
   }, [historyOrders]);
   const filteredTransactions = transactionHistory;
   const availablePolicyRows = policyRows;
-  const { visibleItems: visiblePurchaseGroups, sentinelRef: purchaseSentinelRef, hasMore: hasMorePurchaseGroups } = useInfiniteScroll(purchaseData?.groups ?? []);
 
   // Calculate summary stats dynamically based on filtered orders
   const totalSales = filteredOrders.filter(o => o.orderStatus === 'completed').reduce((sum, o) => sum + o.total, 0);
@@ -796,9 +840,13 @@ export const Reports: React.FC = () => {
 
         <section className="space-y-4 rounded-[28px] border border-[#f1f5f9] bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Annual procurement spending</h2><p className="text-xs text-slate-500">Recorded receipt acquisition costs only. Unknown costs are excluded, never estimated from selling prices.</p></div><label className="text-xs font-semibold text-slate-600">Year <input className="input ml-2 w-28" type="number" min="2000" max="2100" value={purchaseYear} onChange={e => setPurchaseYear(Number(e.target.value))}/></label></div>
-          {purchaseLoading ? <p className="py-6 text-sm text-slate-500">Loading purchase costs…</p> : purchaseError ? <p role="alert" className="py-6 text-sm text-rose-700">{purchaseError}</p> : purchaseData ? <><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-500">Priced spend · {purchaseYear}</p><p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(purchaseData.totalSpend)}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced receipts</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedReceiptCount}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced quantity</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedQuantity}</p></div></div><div className="mt-4 overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Material</th><th className="px-4 py-3">Supplier</th><th className="px-4 py-3 text-right">Priced receipts</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Recorded spend</th><th className="px-4 py-3 text-right">Unpriced qty</th></tr></thead><tbody className="divide-y divide-slate-100">{visiblePurchaseGroups.map((row,i)=><tr key={`${row.materialType}-${row.supplier}-${i}`}><td className="px-4 py-3 text-sm capitalize">{row.materialType}</td><td className="px-4 py-3 text-sm">{row.supplier || '—'}</td><td className="px-4 py-3 text-right text-sm">{Math.max(0, row.transactionCount - row.unpricedReceiptCount)}</td><td className="px-4 py-3 text-right text-sm">{row.totalQuantity}</td><td className="px-4 py-3 text-right text-sm font-semibold">{formatCurrency(row.totalCost)}</td><td className="px-4 py-3 text-right text-sm">{row.unpricedQuantity ?? 0}</td></tr>)}{purchaseData.groups.length===0&&<tr><td colSpan={6} className="p-6 text-center text-sm text-slate-500">No purchase receipts recorded for this year.</td></tr>}</tbody></table></div></> : null}
+          {purchaseLoading ? <p className="py-6 text-sm text-slate-500">Loading purchase costs…</p> : purchaseError ? <p role="alert" className="py-6 text-sm text-rose-700">{purchaseError}</p> : purchaseData ? <><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-500">Priced spend · {purchaseYear}</p><p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(purchaseData.totalSpend)}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced receipts</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedReceiptCount}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced quantity</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedQuantity}</p></div></div><div className="mt-4 overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Material</th><th className="px-4 py-3">Supplier</th><th className="px-4 py-3 text-right">Priced receipts</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Recorded spend</th><th className="px-4 py-3 text-right">Unpriced qty</th></tr></thead><tbody className="divide-y divide-slate-100">{purchaseData.groups.map(row=><tr key={`${row.materialType}-${row.supplier}`}><td className="px-4 py-3 text-sm capitalize">{row.materialType}</td><td className="px-4 py-3 text-sm">{row.supplier || '—'}</td><td className="px-4 py-3 text-right text-sm">{Math.max(0, row.transactionCount - row.unpricedReceiptCount)}</td><td className="px-4 py-3 text-right text-sm">{row.totalQuantity}</td><td className="px-4 py-3 text-right text-sm font-semibold">{formatCurrency(row.totalCost)}</td><td className="px-4 py-3 text-right text-sm">{row.unpricedQuantity ?? 0}</td></tr>)}{purchaseData.groups.length===0&&<tr><td colSpan={6} className="p-6 text-center text-sm text-slate-500">No purchase receipts recorded for this year.</td></tr>}</tbody></table></div></> : null}
         </section>
-        {hasMorePurchaseGroups && <div ref={purchaseSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more purchase groups…</div>}
+        {purchaseData && <p className="px-1 text-xs text-slate-500">Showing {purchaseData.groups.length} of {purchaseData.page.totalCount} purchase groups.</p>}
+        {purchaseData?.page.hasMore && <div ref={purchaseSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more purchase groups…</div>}
+        {purchaseLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more purchase groups…</p>}
+        {purchaseLoadMoreError && <div role="alert" className="text-center text-sm text-rose-700"><p>{purchaseLoadMoreError}</p><button type="button" onClick={() => void loadMorePurchaseGroups()} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
+        {purchaseData?.page.hasMore && typeof IntersectionObserver === 'undefined' && <div className="py-3 text-center"><button type="button" onClick={() => void loadMorePurchaseGroups()} disabled={purchaseLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">{purchaseLoadingMore ? 'Loading…' : 'Load more purchase groups'}</button></div>}
 
         <section hidden={!policyLoading && !policyError && availablePolicyRows.length === 0} className="space-y-4 rounded-[28px] border border-violet-100 bg-violet-50/30 p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Current stock-policy assessment</h2><p className="max-w-3xl text-xs text-slate-600">This is a current assessment comparing present stock with the configured reorder threshold and next-month forecast. It does not measure historical policy decisions or causal effects.</p></div><div className="flex gap-2"><button onClick={() => void handleForecastExport('pdf')} className="btn-secondary text-xs">Download PDF</button><button onClick={() => void handleForecastExport('xlsx')} className="btn-secondary text-xs">Download XLSX</button></div></div>

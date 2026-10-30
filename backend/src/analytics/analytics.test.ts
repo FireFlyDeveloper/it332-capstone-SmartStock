@@ -304,6 +304,28 @@ describe('analytics routes', () => {
     ]);
   });
 
+  it('returns cursor-paginated annual purchase groups with full-year totals', async () => {
+    const token = await login(app, STAFF);
+    const first = await app.request('/analytics/purchases/page?year=2026&limit=2', { headers: { authorization: 'Bearer ' + token } });
+    expect(first.status).toBe(200);
+    const firstPage = await first.json() as { year: number; groups: Array<{ materialType: string; supplier: string }>; totalSpend: number; pricedReceiptCount: number; page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null } };
+    expect(firstPage).toMatchObject({ year: 2026, totalSpend: 1700, pricedReceiptCount: 3 });
+    expect(firstPage.page).toMatchObject({ limit: 2, totalCount: 3, hasMore: true });
+    expect(firstPage.groups.map(({ materialType, supplier }) => [materialType, supplier])).toEqual([
+      ['aluminum', 'Supplier A'], ['glass', 'Supplier A'],
+    ]);
+    expect(firstPage.page.nextCursor).toEqual(expect.any(String));
+
+    const second = await app.request(`/analytics/purchases/page?year=2026&limit=2&cursor=${encodeURIComponent(firstPage.page.nextCursor!)}`, { headers: { authorization: 'Bearer ' + token } });
+    expect(second.status).toBe(200);
+    const secondPage = await second.json() as typeof firstPage;
+    expect(secondPage.page).toMatchObject({ limit: 2, totalCount: 3, hasMore: false, nextCursor: null });
+    expect(secondPage.groups.map(({ materialType, supplier }) => [materialType, supplier])).toEqual([['glass', 'Supplier B']]);
+
+    expect((await app.request('/analytics/purchases/page?limit=101', { headers: { authorization: 'Bearer ' + token } })).status).toBe(400);
+    expect((await app.request('/analytics/purchases/page?cursor=invalid!', { headers: { authorization: 'Bearer ' + token } })).status).toBe(400);
+  });
+
   it('returns stable fast and slow movement classification', async () => {
     const token = await login(app, STAFF);
     const res = await app.request('/analytics/movement?threshold=5', {
