@@ -7,7 +7,7 @@
 
 import { listOrders } from '../orders/store.js';
 import { isDbSyncActive } from '../db/syncState.js';
-import { listPolicyPerformancePageDb } from '../db/postgresStore.js';
+import { getOrderSummaryReportDb, listPolicyPerformancePageDb } from '../db/postgresStore.js';
 import { getAnnualPurchases, getSalesTrends, getDemandForecast } from '../analytics/service.js';
 import { listProducts, readInventoryPolicyHistory, type InventoryPolicyEvent, type Product } from '../inventory/store.js';
 
@@ -19,7 +19,12 @@ function roundTwo(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-export function buildOrderSummaryReport(fromDate?: string, toDate?: string) {
+export async function buildOrderSummaryReport(fromDate?: string, toDate?: string) {
+  if (isDbSyncActive()) {
+    const summary = await getOrderSummaryReportDb(fromDate, toDate);
+    if (!summary) throw new Error('PostgreSQL is unavailable for reports order summary');
+    return summary;
+  }
   const orders = listOrders().filter((order) => (
     (!fromDate || order.deliveryDate >= fromDate) && (!toDate || order.deliveryDate <= toDate)
   ));

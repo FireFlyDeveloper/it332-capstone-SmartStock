@@ -937,6 +937,61 @@ export async function listDemandForecastPageDb(input: {
   };
 }
 
+export interface OrderSummaryReportDb {
+  totalOrders: number;
+  totalSales: number;
+  completedCount: number;
+  pendingOrders: number;
+  statusCounts: { completed: number; inProgress: number; pending: 0; cancelled: number };
+  paymentCounts: { paid: number; pending: number; partial: number; refunded: number };
+}
+
+export async function getOrderSummaryReportDb(fromDate?: string, toDate?: string): Promise<OrderSummaryReportDb | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH filtered_orders AS MATERIALIZED (
+      SELECT order_status, payment_status, total_amount
+      FROM orders
+      WHERE deleted_at IS NULL
+        AND ($1::date IS NULL OR delivery_date >= $1::date)
+        AND ($2::date IS NULL OR delivery_date <= $2::date)
+    )
+    SELECT COUNT(*)::int AS total_orders,
+      ROUND(COALESCE(SUM(total_amount) FILTER (WHERE order_status = 'delivered'), 0)::numeric, 2)::double precision AS total_sales,
+      COUNT(*) FILTER (WHERE order_status = 'delivered')::int AS completed_count,
+      (COUNT(*) FILTER (WHERE order_status = 'processing') + COUNT(*) FILTER (WHERE order_status = 'in_transit'))::int AS pending_orders,
+      COUNT(*) FILTER (WHERE order_status = 'cancelled')::int AS cancelled_count,
+      COUNT(*) FILTER (WHERE payment_status = 'paid')::int AS paid_count,
+      COUNT(*) FILTER (WHERE payment_status = 'unpaid')::int AS pending_payment_count,
+      COUNT(*) FILTER (WHERE payment_status = 'partial')::int AS partial_count,
+      COUNT(*) FILTER (WHERE payment_status = 'refunded')::int AS refunded_count
+    FROM filtered_orders
+  `, [fromDate ?? null, toDate ?? null]);
+  const row = rows[0];
+  if (!row) return null;
+  const completedCount = Number(row.completed_count ?? 0);
+  const processingAndTransit = Number(row.pending_orders ?? 0);
+  return {
+    totalOrders: Number(row.total_orders ?? 0),
+    totalSales: Number(row.total_sales ?? 0),
+    completedCount,
+    pendingOrders: processingAndTransit,
+    statusCounts: {
+      completed: completedCount,
+      inProgress: processingAndTransit,
+      pending: 0,
+      cancelled: Number(row.cancelled_count ?? 0),
+    },
+    paymentCounts: {
+      paid: Number(row.paid_count ?? 0),
+      pending: Number(row.pending_payment_count ?? 0),
+      partial: Number(row.partial_count ?? 0),
+      refunded: Number(row.refunded_count ?? 0),
+    },
+  };
+}
+
 export interface DashboardOrderSummaryDb {
   activeOrderCount: number;
   orderStatusCounts: Array<{ status: string; count: number }>;

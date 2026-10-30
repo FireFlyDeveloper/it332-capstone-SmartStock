@@ -32,7 +32,7 @@ function isDateOnly(value: string): boolean {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
-reportsRoutes.get('/orders/summary', (c) => {
+reportsRoutes.get('/orders/summary', async (c) => {
   const fromDate = c.req.query('fromDate') || undefined;
   const toDate = c.req.query('toDate') || undefined;
   if ((fromDate && !isDateOnly(fromDate)) || (toDate && !isDateOnly(toDate))) {
@@ -41,7 +41,7 @@ reportsRoutes.get('/orders/summary', (c) => {
   if (fromDate && toDate && fromDate > toDate) {
     return c.json({ error: 'fromDate must be on or before toDate' }, 400);
   }
-  return c.json(buildOrderSummaryReport(fromDate, toDate));
+  return c.json(await buildOrderSummaryReport(fromDate, toDate));
 });
 
 function parseYear(rawYear: string | undefined): { ok: true; year: number | undefined } | { ok: false; error: string } {
