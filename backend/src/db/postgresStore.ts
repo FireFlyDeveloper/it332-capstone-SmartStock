@@ -939,7 +939,7 @@ export async function listDemandForecastPageDb(input: {
   };
 }
 
-const NOTIFICATION_FEED_CTE = `WITH notification_feed AS MATERIALIZED (
+const NOTIFICATION_FEED_CTE = `WITH notification_feed AS NOT MATERIALIZED (
   SELECT 'stock-' || p.id AS id, 'stock'::text AS type, 0::int AS type_rank,
     CASE WHEN p.stock = 0 OR (p.stock > 0 AND p.stock <= p.threshold * 0.5) THEN 'critical' ELSE 'warning' END AS severity,
     jsonb_build_object('name', p.name, 'stock', p.stock, 'threshold', p.threshold) AS source
@@ -1051,24 +1051,25 @@ export async function getNotificationPageDb(input: NotificationPageInput = {}): 
   const { rows } = await pool.query(`
     ${NOTIFICATION_FEED_CTE}, visible AS MATERIALIZED (
       SELECT * FROM notification_feed WHERE NOT (id = ANY($2::text[]))
-    ), filtered AS MATERIALIZED (
-      SELECT * FROM visible WHERE NOT $3::boolean OR NOT (id = ANY($1::text[]))
     ), summary AS (
       SELECT COUNT(*)::int AS total_count,
         COUNT(*) FILTER (WHERE NOT (id = ANY($1::text[])))::int AS unread_count
       FROM visible
+    ), page_summary AS (
+      SELECT COUNT(*)::int AS filtered_count FROM visible
+      WHERE NOT $3::boolean OR NOT (id = ANY($1::text[]))
     ), page_rows AS (
-      SELECT * FROM filtered
-      WHERE $4::int IS NULL OR type_rank > $4::int
-        OR (type_rank = $4::int AND id COLLATE "C" > $5::text COLLATE "C")
+      SELECT * FROM visible
+      WHERE (NOT $3::boolean OR NOT (id = ANY($1::text[])))
+        AND ($4::int IS NULL OR type_rank > $4::int
+          OR (type_rank = $4::int AND id COLLATE "C" > $5::text COLLATE "C"))
       ORDER BY type_rank ASC, id COLLATE "C" ASC
       LIMIT $6::int
     )
-    SELECT summary.total_count, summary.unread_count,
-      (SELECT COUNT(*)::int FROM filtered) AS filtered_count,
+    SELECT summary.total_count, summary.unread_count, page_summary.filtered_count,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id', page_rows.id, 'type', page_rows.type,
         'severity', page_rows.severity, 'source', page_rows.source) ORDER BY page_rows.type_rank, page_rows.id COLLATE "C") FROM page_rows), '[]'::jsonb) AS page_items
-    FROM summary
+    FROM summary CROSS JOIN page_summary
   `, [input.readIds ?? [], input.dismissedIds ?? [], input.unreadOnly ?? false, cursorType, cursor?.id ?? null, limit + 1]);
   const result = rows[0];
   if (!result) return null;

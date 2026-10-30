@@ -43,6 +43,8 @@ describe('PostgreSQL Notifications cursor page', () => {
     expect(sql).toContain("o.order_status = 'processing'");
     expect(sql).toContain('ORDER BY type_rank ASC, id COLLATE "C" ASC');
     expect(sql).toContain('LIMIT $6::int');
+    expect(sql).toContain('WITH notification_feed AS NOT MATERIALIZED');
+    expect(sql).not.toContain('filtered AS MATERIALIZED');
     expect(parameters).toEqual([['stock-p1'], ['delivery-d1'], true, null, null, 3]);
     expect(database.query).toHaveBeenCalledOnce();
   });
