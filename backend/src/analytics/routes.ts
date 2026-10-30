@@ -16,6 +16,7 @@ import {
   getForecast,
   getMovementClassification,
   getMonthlyItemMovementPage,
+  getMonthlyStockMovementByUnit,
   getRecentActivity,
   getSalesTrends,
   getDemandForecast,
@@ -149,6 +150,15 @@ analyticsRoutes.get('/purchases', requireRole('admin'), (c) => {
   return c.json(getAnnualPurchases(year));
 });
 
+analyticsRoutes.get('/movement/monthly', requireRole('admin'), async (c) => {
+  const rawMonths = c.req.query('months');
+  const months = rawMonths === undefined ? 12 : Number(rawMonths);
+  if (!Number.isInteger(months) || months < 1 || months > 60) {
+    return c.json({ error: 'months must be an integer between 1 and 60' }, 400);
+  }
+  return c.json(await getMonthlyStockMovementByUnit(months));
+});
+
 analyticsRoutes.get('/movement', requireRole('admin'), (c) => {
   const rawThreshold = c.req.query('threshold');
   const threshold = rawThreshold === undefined ? undefined : Number(rawThreshold);
@@ -158,7 +168,7 @@ analyticsRoutes.get('/movement', requireRole('admin'), (c) => {
   return c.json(getMovementClassification(threshold));
 });
 
-analyticsRoutes.get('/movement/items', requireRole('admin'), (c) => {
+analyticsRoutes.get('/movement/items', requireRole('admin'), async (c) => {
   const rawMonth = c.req.query('month');
   const month = rawMonth ?? new Date().toISOString().slice(0, 7);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return c.json({ error: 'month must be YYYY-MM' }, 400);
@@ -189,7 +199,7 @@ analyticsRoutes.get('/movement/items', requireRole('admin'), (c) => {
     }
   }
 
-  const result = getMonthlyItemMovementPage(month, threshold, limit, cursor);
+  const result = await getMonthlyItemMovementPage(month, threshold, limit, cursor);
   const nextCursor = result.page.nextCursor
     ? Buffer.from(JSON.stringify(result.page.nextCursor)).toString('base64url')
     : null;

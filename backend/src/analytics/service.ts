@@ -6,7 +6,7 @@
  */
 
 import { isDbSyncActive } from '../db/syncState.js';
-import { getAnalyticsOrderSummaryDb, getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlySalesTrendDb, listOutboundMovementByUnitDb, listRecentActivityDb } from '../db/postgresStore.js';
+import { getAnalyticsOrderSummaryDb, getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlyItemMovementPageDb, listMonthlySalesTrendDb, listMonthlyStockMovementAggregatesDb, listOutboundMovementByUnitDb, listRecentActivityDb } from '../db/postgresStore.js';
 import { listProducts, listProductMovements } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import {
@@ -14,6 +14,8 @@ import {
   buildAnalyticsOrderSummary,
   buildDashboardOrderSummary,
   buildMonthlyOutboundQuantities,
+  buildMonthlyStockMovementByUnit,
+  buildMonthlyStockMovementReport,
   buildOutboundMovementByUnit,
   buildMonthlySalesTrend,
   buildRecentActivity,
@@ -108,12 +110,29 @@ export async function getOutboundMovementByUnit(startAt: Date, endAt: Date) {
   return buildOutboundMovementByUnit(listAllMovements(), listProducts(), startAt, endAt);
 }
 
-export function getMonthlyItemMovementPage(
+export async function getMonthlyStockMovementByUnit(months = 12, now = new Date()) {
+  if (!Number.isInteger(months) || months < 1 || months > 60) throw new Error('months must be an integer between 1 and 60');
+  const endAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const startAt = new Date(Date.UTC(endAt.getUTCFullYear(), endAt.getUTCMonth() - months, 1));
+  if (isDbSyncActive()) {
+    const aggregates = await listMonthlyStockMovementAggregatesDb(startAt, endAt);
+    if (!aggregates) throw new Error('PostgreSQL is unavailable for monthly stock movement');
+    return buildMonthlyStockMovementReport(aggregates, startAt, endAt);
+  }
+  return buildMonthlyStockMovementByUnit(listAllMovements(), listProducts(), startAt, endAt);
+}
+
+export async function getMonthlyItemMovementPage(
   month: string,
   threshold: number,
   limit: number,
   cursor: MonthlyItemMovementCursor | null,
 ) {
+  if (isDbSyncActive()) {
+    const page = await listMonthlyItemMovementPageDb({ month, threshold, limit, cursor });
+    if (!page) throw new Error('PostgreSQL is unavailable for monthly item movement');
+    return { month, threshold, ...page };
+  }
   const rows = buildMonthlyItemMovementClassification(listAllMovements(), listProducts(), month, threshold);
   return { month, threshold, ...paginateMonthlyItemMovement(rows, limit, cursor) };
 }

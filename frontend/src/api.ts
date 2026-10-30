@@ -587,6 +587,24 @@ export function getAnalyticsMonthlyItemMovementPage(options: { month?: string; t
   return apiFetch<AnalyticsMonthlyItemMovementPage>(`/analytics/movement/items?${params.toString()}`)
 }
 
+export interface AnalyticsMonthlyMovementResponse {
+  period: { startMonth: string; endMonth: string; months: number }
+  months: string[]
+  units: string[]
+  rows: Array<{
+    month: string
+    unit: string
+    inboundQuantity: number
+    outboundQuantity: number
+    inboundMovementCount: number
+    outboundMovementCount: number
+  }>
+}
+
+export function getAnalyticsMonthlyMovement(months = 12): Promise<AnalyticsMonthlyMovementResponse> {
+  return apiFetch<AnalyticsMonthlyMovementResponse>(`/analytics/movement/monthly?months=${encodeURIComponent(String(months))}`)
+}
+
 export function getAnalyticsForecast(quantities: number[], alpha = 0.35): Promise<AnalyticsForecastResponse> {
   return apiFetch<AnalyticsForecastResponse>('/analytics/forecast', {
     method: 'POST',

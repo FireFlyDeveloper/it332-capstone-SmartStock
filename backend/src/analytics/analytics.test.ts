@@ -18,6 +18,7 @@ import {
   buildAnalyticsOrderSummary,
   buildDashboardOrderSummary,
   buildMonthlySalesTrend,
+  buildMonthlyStockMovementByUnit,
   buildDemandForecast,
   paginateDemandForecast,
   classifyMovement,
@@ -227,6 +228,35 @@ describe('analytics pure functions', () => {
     ]);
   });
 
+  it('groups monthly inbound and outbound stock movement by product unit', () => {
+    const products = [
+      { id: 'pcs', sku: 'P1', name: 'Piece', category: 'aluminum' as const, unit: 'pcs', stock: 2, price: 1, threshold: 1, status: 'active' as const },
+      { id: 'sqm', sku: 'P2', name: 'Glass', category: 'glass' as const, unit: 'sqm', stock: 2, price: 1, threshold: 1, status: 'active' as const },
+    ];
+    const movements = [
+      { id: 'before', productId: 'pcs', type: 'outbound' as const, quantity: 99, referenceNo: 'SO-BEFORE', occurredAt: '2025-12-31T23:59:59.999Z', createdBy: 'test' },
+      { id: 'in-pcs', productId: 'pcs', type: 'inbound' as const, quantity: 10, referenceNo: 'PO-PCS', occurredAt: '2026-01-15T12:00:00.000Z', createdBy: 'test' },
+      { id: 'out-pcs', productId: 'pcs', type: 'outbound' as const, quantity: 3, referenceNo: 'SO-PCS', occurredAt: '2026-02-15T12:00:00.000Z', createdBy: 'test' },
+      { id: 'in-sqm', productId: 'sqm', type: 'inbound' as const, quantity: 5, referenceNo: 'PO-SQM', occurredAt: '2026-02-20T12:00:00.000Z', createdBy: 'test' },
+      { id: 'out-sqm', productId: 'sqm', type: 'outbound' as const, quantity: 7, referenceNo: 'SO-SQM', occurredAt: '2026-02-21T12:00:00.000Z', createdBy: 'test' },
+      { id: 'after', productId: 'pcs', type: 'inbound' as const, quantity: 99, referenceNo: 'PO-AFTER', occurredAt: '2026-04-01T00:00:00.000Z', createdBy: 'test' },
+    ];
+
+    expect(buildMonthlyStockMovementByUnit(movements, products, new Date('2026-01-01T00:00:00.000Z'), new Date('2026-04-01T00:00:00.000Z'))).toEqual({
+      period: { startMonth: '2026-01', endMonth: '2026-03', months: 3 },
+      months: ['2026-01', '2026-02', '2026-03'],
+      units: ['pcs', 'sqm'],
+      rows: [
+        { month: '2026-01', unit: 'pcs', inboundQuantity: 10, outboundQuantity: 0, inboundMovementCount: 1, outboundMovementCount: 0 },
+        { month: '2026-01', unit: 'sqm', inboundQuantity: 0, outboundQuantity: 0, inboundMovementCount: 0, outboundMovementCount: 0 },
+        { month: '2026-02', unit: 'pcs', inboundQuantity: 0, outboundQuantity: 3, inboundMovementCount: 0, outboundMovementCount: 1 },
+        { month: '2026-02', unit: 'sqm', inboundQuantity: 5, outboundQuantity: 7, inboundMovementCount: 1, outboundMovementCount: 1 },
+        { month: '2026-03', unit: 'pcs', inboundQuantity: 0, outboundQuantity: 0, inboundMovementCount: 0, outboundMovementCount: 0 },
+        { month: '2026-03', unit: 'sqm', inboundQuantity: 0, outboundQuantity: 0, inboundMovementCount: 0, outboundMovementCount: 0 },
+      ],
+    });
+  });
+
   it('paginates monthly product movement with full-set classification totals', () => {
     const rows = [
       { month: '2026-02', productId: 'P1', name: 'Alpha', sku: 'A', category: 'glass' as const, unit: 'sheet', status: 'active' as const, quantity: 8, threshold: 5, classification: 'fast_moving' as const },
@@ -329,6 +359,7 @@ describe('analytics routes', () => {
       { path: '/analytics/purchases/page' },
       { path: '/analytics/purchases' },
       { path: '/analytics/movement' },
+      { path: '/analytics/movement/monthly' },
       { path: '/analytics/movement/items' },
       { path: '/analytics/insights' },
       { path: '/analytics/forecast', method: 'POST' },
@@ -480,6 +511,35 @@ describe('analytics routes', () => {
     expect(await res.json()).toEqual([
       { month: '2026-02', quantity: 9, classification: 'fast_moving' },
     ]);
+  });
+
+  it('returns monthly inflows and outflows from stock movements grouped by unit', async () => {
+    expect((await app.request('/analytics/movement/monthly?months=60')).status).toBe(401);
+    const token = await login(app, ADMIN);
+    const headers = { authorization: 'Bearer ' + token };
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const response = await app.request('/analytics/movement/monthly?months=60', { headers });
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      period: { startMonth: string; endMonth: string; months: number };
+      months: string[];
+      units: string[];
+      rows: Array<{ month: string; unit: string; inboundQuantity: number; outboundQuantity: number }>;
+    };
+    expect(body.period.months).toBe(60);
+    expect(body.period.endMonth).toBe(currentMonth);
+    expect(body.months).toHaveLength(60);
+    expect(body.units).toEqual(['length', 'sheet']);
+    expect(body.rows.find((row) => row.month === '2026-01' && row.unit === 'length'))
+      .toMatchObject({ inboundQuantity: 6, outboundQuantity: 0 });
+    expect(body.rows.find((row) => row.month === '2026-02' && row.unit === 'length'))
+      .toMatchObject({ inboundQuantity: 0, outboundQuantity: 2 });
+    expect(body.rows.find((row) => row.month === '2026-01' && row.unit === 'sheet'))
+      .toMatchObject({ inboundQuantity: 10, outboundQuantity: 0 });
+    expect(body.rows.find((row) => row.month === '2026-02' && row.unit === 'sheet'))
+      .toMatchObject({ inboundQuantity: 0, outboundQuantity: 7 });
+    expect((await app.request('/analytics/movement/monthly?months=0', { headers })).status).toBe(400);
+    expect((await app.request('/analytics/movement/monthly?months=61', { headers })).status).toBe(400);
   });
 
   it('returns paginated per-product movement classification for a selected month', async () => {

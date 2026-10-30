@@ -9,7 +9,7 @@ import { getPool } from './client.js';
 import { hasDatabaseUrl } from './config.js';
 import { setDbSyncActive } from './syncState.js';
 
-import type { AnalyticsOrderSummary, OutboundMovementByUnit, RecentActivityRecord } from '../analytics/analytics.js';
+import type { AnalyticsOrderSummary, MonthlyItemMovementCursor, MonthlyItemMovementRow, MonthlyStockMovementRow, OutboundMovementByUnit, RecentActivityRecord } from '../analytics/analytics.js';
 import { decodeNotificationCursor, encodeNotificationCursor, notificationTypeRank, type NotificationFeedItem, type NotificationPageInput, type NotificationPageResult } from '../notifications/feed.js';
 import type { InventoryPolicyEvent, Product, ProductCreateInput, ProductUpdateInput, StockMovement, StockMovementInput } from '../inventory/store.js';
 import type { Order, OrderCreateInput, OrderUpdateInput, PaymentStatus, RefundType } from '../orders/store.js';
@@ -613,6 +613,132 @@ export async function listOutboundMovementByUnitDb(startAt: Date, endAt: Date): 
     quantity: Number(row.quantity ?? 0),
     movementCount: Number(row.movement_count ?? 0),
   }));
+}
+
+export async function listMonthlyStockMovementAggregatesDb(startAt: Date, endAt: Date): Promise<MonthlyStockMovementRow[] | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH monthly AS (
+      SELECT TO_CHAR(DATE_TRUNC('month', m.occurred_at AT TIME ZONE 'UTC'), 'YYYY-MM') AS month,
+        COALESCE(NULLIF(BTRIM(p.unit), ''), 'unknown') AS unit,
+        COALESCE(SUM(m.quantity) FILTER (WHERE m.type = 'inbound'), 0)::numeric AS inbound_quantity,
+        COALESCE(SUM(m.quantity) FILTER (WHERE m.type = 'outbound'), 0)::numeric AS outbound_quantity,
+        COUNT(*) FILTER (WHERE m.type = 'inbound')::int AS inbound_movement_count,
+        COUNT(*) FILTER (WHERE m.type = 'outbound')::int AS outbound_movement_count
+      FROM stock_movements m
+      LEFT JOIN products p ON p.id = m.product_id AND p.deleted_at IS NULL
+      WHERE m.type IN ('inbound', 'outbound') AND m.occurred_at >= $1 AND m.occurred_at < $2
+      GROUP BY 1, 2
+    )
+    SELECT month, unit, inbound_quantity, outbound_quantity, inbound_movement_count, outbound_movement_count
+    FROM monthly
+    ORDER BY month COLLATE "C", unit COLLATE "C"
+  `, [startAt, endAt]);
+  return rows.map((row) => ({
+    month: String(row.month),
+    unit: String(row.unit ?? 'unknown'),
+    inboundQuantity: Number(row.inbound_quantity ?? 0),
+    outboundQuantity: Number(row.outbound_quantity ?? 0),
+    inboundMovementCount: Number(row.inbound_movement_count ?? 0),
+    outboundMovementCount: Number(row.outbound_movement_count ?? 0),
+  }));
+}
+
+export async function listMonthlyItemMovementPageDb(input: {
+  month: string;
+  threshold: number;
+  limit: number;
+  cursor: MonthlyItemMovementCursor | null;
+}): Promise<{
+  rows: MonthlyItemMovementRow[];
+  summary: { productCount: number; fastMovingCount: number; slowMovingCount: number; outboundByUnit: Array<{ unit: string; quantity: number }> };
+  page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: MonthlyItemMovementCursor | null };
+} | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const monthStart = new Date(`${input.month}-01T00:00:00.000Z`);
+  const monthEnd = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1));
+  const { rows } = await pool.query(`
+    WITH movement_totals AS MATERIALIZED (
+      SELECT product_id, SUM(quantity)::numeric AS quantity
+      FROM stock_movements
+      WHERE type = 'outbound' AND occurred_at >= $1 AND occurred_at < $2
+      GROUP BY product_id
+    ), product_rows AS MATERIALIZED (
+      SELECT p.id::text AS product_id, p.name, p.sku, p.category, p.unit, p.status, p.threshold,
+        COALESCE(mt.quantity, 0)::numeric AS quantity,
+        CASE WHEN COALESCE(mt.quantity, 0) > 0 AND COALESCE(mt.quantity, 0) >= $3
+          THEN 'fast_moving' ELSE 'slow_moving' END AS classification
+      FROM products p
+      LEFT JOIN movement_totals mt ON mt.product_id = p.id
+      WHERE p.deleted_at IS NULL
+    ), summary AS (
+      SELECT COUNT(*)::int AS total_count,
+        COUNT(*) FILTER (WHERE classification = 'fast_moving')::int AS fast_moving_count,
+        COUNT(*) FILTER (WHERE classification = 'slow_moving')::int AS slow_moving_count
+      FROM product_rows
+    ), unit_summary AS (
+      SELECT COALESCE(NULLIF(BTRIM(unit), ''), 'unknown') AS unit,
+        SUM(quantity)::numeric AS quantity
+      FROM product_rows
+      WHERE quantity > 0
+      GROUP BY 1
+    ), page_rows AS (
+      SELECT * FROM product_rows
+      WHERE $5::text IS NULL
+        OR name COLLATE "C" > $5::text COLLATE "C"
+        OR (name COLLATE "C" = $5::text COLLATE "C" AND product_id COLLATE "C" > $6::text COLLATE "C")
+      ORDER BY name COLLATE "C", product_id COLLATE "C"
+      LIMIT $4
+    )
+    SELECT summary.total_count, summary.fast_moving_count, summary.slow_moving_count,
+      (SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'month', $7::text, 'productId', page_rows.product_id, 'name', page_rows.name,
+        'sku', page_rows.sku, 'category', page_rows.category, 'unit', page_rows.unit,
+        'status', page_rows.status, 'quantity', page_rows.quantity, 'threshold', page_rows.threshold,
+        'classification', page_rows.classification
+      ) ORDER BY page_rows.name COLLATE "C", page_rows.product_id COLLATE "C"), '[]'::jsonb) FROM page_rows) AS page_rows,
+      (SELECT COALESCE(jsonb_agg(jsonb_build_object('unit', unit, 'quantity', quantity) ORDER BY unit COLLATE "C"), '[]'::jsonb) FROM unit_summary) AS outbound_by_unit
+    FROM summary
+  `, [monthStart, monthEnd, input.threshold, input.limit + 1, input.cursor?.name ?? null, input.cursor?.productId ?? null, input.month]);
+
+  const record = rows[0] as Record<string, unknown> | undefined;
+  if (!record) return null;
+  const pageRowsRaw = Array.isArray(record.page_rows) ? record.page_rows
+    : typeof record.page_rows === 'string' ? JSON.parse(record.page_rows) as unknown[] : [];
+  const aggregateRows = Array.isArray(record.outbound_by_unit) ? record.outbound_by_unit
+    : typeof record.outbound_by_unit === 'string' ? JSON.parse(record.outbound_by_unit) as unknown[] : [];
+  const pageRows = pageRowsRaw.map((value) => {
+    const row = value as Record<string, unknown>;
+    return {
+      month: String(row.month), productId: String(row.productId), name: String(row.name), sku: String(row.sku),
+      category: String(row.category) as Product['category'], unit: String(row.unit ?? 'unknown'),
+      status: String(row.status) as Product['status'], quantity: Number(row.quantity ?? 0),
+      threshold: Number(row.threshold ?? 0), classification: String(row.classification) as MonthlyItemMovementRow['classification'],
+    } satisfies MonthlyItemMovementRow;
+  });
+  const hasMore = pageRows.length > input.limit;
+  const visibleRows = pageRows.slice(0, input.limit);
+  const last = visibleRows.at(-1);
+  return {
+    rows: visibleRows,
+    summary: {
+      productCount: Number(record.total_count ?? 0),
+      fastMovingCount: Number(record.fast_moving_count ?? 0),
+      slowMovingCount: Number(record.slow_moving_count ?? 0),
+      outboundByUnit: aggregateRows.map((value) => {
+        const row = value as Record<string, unknown>;
+        return { unit: String(row.unit ?? 'unknown'), quantity: Number(row.quantity ?? 0) };
+      }),
+    },
+    page: {
+      limit: input.limit,
+      totalCount: Number(record.total_count ?? 0),
+      hasMore,
+      nextCursor: hasMore && last ? { name: last.name, productId: last.productId } : null,
+    },
+  };
 }
 
 // ── ORDERS ──────────────────────────────────────────────────────────

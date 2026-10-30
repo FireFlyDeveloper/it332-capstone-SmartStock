@@ -481,6 +481,98 @@ export function buildMonthlyOutboundQuantities(movements: StockMovement[]): Mont
   return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
 }
 
+export interface MonthlyStockMovementRow {
+  month: string;
+  unit: string;
+  inboundQuantity: number;
+  outboundQuantity: number;
+  inboundMovementCount: number;
+  outboundMovementCount: number;
+}
+
+export interface MonthlyStockMovementReport {
+  period: { startMonth: string; endMonth: string; months: number };
+  months: string[];
+  units: string[];
+  rows: MonthlyStockMovementRow[];
+}
+
+export function buildMonthlyStockMovementReport(
+  aggregates: MonthlyStockMovementRow[],
+  startAt: Date,
+  endAt: Date,
+): MonthlyStockMovementReport {
+  const isMonthBoundary = (date: Date) => date.getUTCDate() === 1 && date.getUTCHours() === 0
+    && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0;
+  if (!Number.isFinite(startAt.getTime()) || !Number.isFinite(endAt.getTime()) || startAt >= endAt
+    || !isMonthBoundary(startAt) || !isMonthBoundary(endAt)) {
+    throw new Error('monthly stock movement requires increasing UTC month boundaries');
+  }
+
+  const months: string[] = [];
+  for (let cursor = new Date(startAt); cursor < endAt; cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1))) {
+    months.push(cursor.toISOString().slice(0, 7));
+    if (months.length > 60) throw new Error('monthly stock movement is limited to 60 months');
+  }
+  const monthSet = new Set(months);
+  const byKey = new Map<string, MonthlyStockMovementRow>();
+  for (const aggregate of aggregates) {
+    if (!monthSet.has(aggregate.month)) continue;
+    const unit = aggregate.unit.trim() || 'unknown';
+    const key = JSON.stringify([aggregate.month, unit]);
+    const current = byKey.get(key) ?? {
+      month: aggregate.month, unit, inboundQuantity: 0, outboundQuantity: 0,
+      inboundMovementCount: 0, outboundMovementCount: 0,
+    };
+    current.inboundQuantity += aggregate.inboundQuantity;
+    current.outboundQuantity += aggregate.outboundQuantity;
+    current.inboundMovementCount += aggregate.inboundMovementCount;
+    current.outboundMovementCount += aggregate.outboundMovementCount;
+    byKey.set(key, current);
+  }
+  const units = [...new Set([...byKey.values()].map((row) => row.unit))].sort((left, right) => left.localeCompare(right));
+  const rows = months.flatMap((month) => units.map((unit) => byKey.get(JSON.stringify([month, unit])) ?? ({
+    month, unit, inboundQuantity: 0, outboundQuantity: 0, inboundMovementCount: 0, outboundMovementCount: 0,
+  })));
+  return {
+    period: { startMonth: months[0]!, endMonth: months.at(-1)!, months: months.length },
+    months,
+    units,
+    rows,
+  };
+}
+
+export function buildMonthlyStockMovementByUnit(
+  movements: StockMovement[],
+  products: Product[],
+  startAt: Date,
+  endAt: Date,
+): MonthlyStockMovementReport {
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const aggregates = new Map<string, MonthlyStockMovementRow>();
+  for (const movement of movements) {
+    if (movement.type !== 'inbound' && movement.type !== 'outbound') continue;
+    const occurredAt = Date.parse(movement.occurredAt);
+    if (!Number.isFinite(occurredAt) || occurredAt < startAt.getTime() || occurredAt >= endAt.getTime()) continue;
+    const month = new Date(occurredAt).toISOString().slice(0, 7);
+    const unit = productById.get(movement.productId)?.unit?.trim() || 'unknown';
+    const key = JSON.stringify([month, unit]);
+    const row = aggregates.get(key) ?? {
+      month, unit, inboundQuantity: 0, outboundQuantity: 0,
+      inboundMovementCount: 0, outboundMovementCount: 0,
+    };
+    if (movement.type === 'inbound') {
+      row.inboundQuantity += movement.quantity;
+      row.inboundMovementCount += 1;
+    } else {
+      row.outboundQuantity += movement.quantity;
+      row.outboundMovementCount += 1;
+    }
+    aggregates.set(key, row);
+  }
+  return buildMonthlyStockMovementReport([...aggregates.values()], startAt, endAt);
+}
+
 export interface OutboundMovementByUnit {
   unit: string;
   quantity: number;
