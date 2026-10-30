@@ -83,6 +83,10 @@ export async function listProductPageController(c: Context) {
         activeGlassCount: result.activeGlassCount,
         activeAluminumCount: result.activeAluminumCount,
         activeLowStockCount: result.activeLowStockCount,
+        healthyStockCount: result.healthyStockCount,
+        lowStockStatusCount: result.lowStockStatusCount,
+        criticalStockCount: result.criticalStockCount,
+        stockAlertProducts: result.stockAlertProducts,
       },
     });
   } catch (error) {

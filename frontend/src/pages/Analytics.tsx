@@ -13,8 +13,7 @@ import {
   Banknote
 } from 'lucide-react';
 
-import { useData } from '../components/DataContext';
-import { formatCurrency, checkStockStatus, formatDateInput } from '../utils/helpers';
+import { formatCurrency, formatDateInput } from '../utils/helpers';
 import { getAnalyticsOrderSummary, getDemandForecastPage, getProductsPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse } from '../api';
 import { toast } from 'sonner';
 import { 
@@ -37,7 +36,6 @@ type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 
 export const Analytics: React.FC = () => {
   const navigate = useNavigate();
-  const { products, productsLoading, productsError, refreshProducts } = useData();
   const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
@@ -58,6 +56,9 @@ export const Analytics: React.FC = () => {
   const forecastLoadingMoreRef = useRef(false);
   const [snapshotProducts, setSnapshotProducts] = useState<ProductsPageResponse['items']>([]);
   const [snapshotPage, setSnapshotPage] = useState<ProductsPageResponse['page'] | null>(null);
+  const [inventorySummary, setInventorySummary] = useState<ProductsPageResponse['summary'] | null>(null);
+  const [inventorySummaryLoading, setInventorySummaryLoading] = useState(true);
+  const [inventorySummaryError, setInventorySummaryError] = useState('');
   const [snapshotLoading, setSnapshotLoading] = useState(true);
   const [snapshotLoadingMore, setSnapshotLoadingMore] = useState(false);
   const [snapshotError, setSnapshotError] = useState('');
@@ -90,6 +91,9 @@ export const Analytics: React.FC = () => {
     const requestId = ++snapshotRequestRef.current;
     setSnapshotProducts([]);
     setSnapshotPage(null);
+    setInventorySummary(null);
+    setInventorySummaryLoading(true);
+    setInventorySummaryError('');
     setSnapshotError('');
     setSnapshotLoading(true);
     snapshotLoadingMoreRef.current = false;
@@ -99,17 +103,25 @@ export const Analytics: React.FC = () => {
         if (requestId !== snapshotRequestRef.current) return;
         setSnapshotProducts(response.items);
         setSnapshotPage(response.page);
+        setInventorySummary(response.summary);
       })
       .catch((error) => {
-        if (requestId === snapshotRequestRef.current) setSnapshotError(error instanceof Error ? error.message : 'Could not load inventory snapshot.');
+        if (requestId === snapshotRequestRef.current) {
+          const message = error instanceof Error ? error.message : 'Could not load inventory summary.';
+          setSnapshotError(message);
+          setInventorySummaryError(message);
+        }
       })
       .finally(() => {
-        if (requestId === snapshotRequestRef.current) setSnapshotLoading(false);
+        if (requestId === snapshotRequestRef.current) {
+          setSnapshotLoading(false);
+          setInventorySummaryLoading(false);
+        }
       });
     return () => {
       if (requestId === snapshotRequestRef.current) snapshotRequestRef.current += 1;
     };
-  }, [products, snapshotRetry]);
+  }, [snapshotRetry]);
 
   const loadMoreSnapshot = useCallback(async () => {
     if (!snapshotPage?.hasMore || !snapshotPage.nextCursor || snapshotLoading || snapshotLoadingMoreRef.current) return;
@@ -235,21 +247,16 @@ export const Analytics: React.FC = () => {
     return () => observer.disconnect();
   }, [forecastPage?.hasMore, forecastLoading, forecastLoadingMore, forecastLoadMoreError, loadMoreForecast]);
 
-  // Calculate inventory stats
-  const totalInventoryValue = products.reduce((sum, p) => sum + (p.stock * p.price), 0);
-  const glassProducts = products.filter(p => p.category === 'glass');
-  const aluminumProducts = products.filter(p => p.category === 'aluminum');
-  const glassValue = glassProducts.reduce((sum, p) => sum + (p.stock * p.price), 0);
-  const aluminumValue = aluminumProducts.reduce((sum, p) => sum + (p.stock * p.price), 0);
+  // Inventory statistics are aggregated by the backend over the full catalog.
+  const totalInventoryValue = inventorySummary?.totalInventoryValue ?? 0;
+  const glassValue = inventorySummary?.glassInventoryValue ?? 0;
+  const aluminumValue = inventorySummary?.aluminumInventoryValue ?? 0;
   const categoryListedPriceTotal = glassValue + aluminumValue;
   const glassListedPriceShare = categoryListedPriceTotal > 0 ? glassValue / categoryListedPriceTotal * 100 : 0;
   const aluminumListedPriceShare = categoryListedPriceTotal > 0 ? aluminumValue / categoryListedPriceTotal * 100 : 0;
 
   const avgOrderValue = orderSummary?.averageOrderValue ?? 0;
-
-  const lowStockCount = useMemo(() => {
-    return products.filter(p => p.status === 'active' && checkStockStatus(p.stock, p.threshold) !== 'healthy').length;
-  }, [products]);
+  const lowStockCount = inventorySummary?.activeLowStockCount ?? 0;
 
   const topSellingItems = useMemo(() => (orderSummary?.topSellingItems ?? []).map((item) => {
     let shortName = item.name
@@ -266,24 +273,18 @@ export const Analytics: React.FC = () => {
   const leastOrderedItems = orderSummary?.leastOrderedItems ?? [];
 
 
-  // Stock status distribution for pie chart
   const stockDistribution = [
-    { name: 'Healthy Stock', value: products.filter(p => checkStockStatus(p.stock, p.threshold) === 'healthy').length, color: '#22c55e' },
-    { name: 'Low Stock', value: products.filter(p => checkStockStatus(p.stock, p.threshold) === 'low').length, color: '#eab308' },
-    { name: 'Critical', value: products.filter(p => checkStockStatus(p.stock, p.threshold) === 'critical').length, color: '#ef4444' },
-    { name: 'Out of Stock', value: products.filter(p => p.stock === 0).length, color: '#6b7280' }
-  ].filter(item => item.value > 0);
+    { name: 'Healthy Stock', value: inventorySummary?.healthyStockCount ?? 0, color: '#22c55e' },
+    { name: 'Low Stock', value: inventorySummary?.lowStockStatusCount ?? 0, color: '#eab308' },
+    { name: 'Critical', value: inventorySummary?.criticalStockCount ?? 0, color: '#ef4444' },
+    { name: 'Out of Stock', value: inventorySummary?.outOfStockCount ?? 0, color: '#6b7280' },
+  ].filter((item) => item.value > 0);
 
-  // Rule-based stock alerts derived from current product levels and thresholds.
   const stockAlerts = useMemo(() => {
-    const recs: Array<{ id: string; priority: 'high' | 'medium' | 'low'; type: string; title: string; description: string }> = [];
-    const activeProducts = products.filter((product) => product.status === 'active');
-    const outOfStockProds = activeProducts.filter((p) => p.stock <= 0);
-    const criticalProds = activeProducts.filter((p) => checkStockStatus(p.stock, p.threshold) === 'critical');
-    const lowProds = activeProducts.filter((p) => checkStockStatus(p.stock, p.threshold) === 'low');
-
-    if (outOfStockProds.length > 0) {
-      const product = outOfStockProds[0];
+    const alerts = inventorySummary?.stockAlertProducts;
+    const recs: Array<{ id: string; priority: 'high' | 'medium'; type: string; title: string; description: string }> = [];
+    if (alerts?.outOfStock) {
+      const product = alerts.outOfStock;
       recs.push({
         id: `rec-out-${product.id}`,
         priority: 'high',
@@ -292,26 +293,28 @@ export const Analytics: React.FC = () => {
         description: `Current stock is ${product.stock} ${product.unit}; review replenishment for this active product.`,
       });
     }
-    if (criticalProds.length > 0) {
+    if (alerts?.critical) {
+      const product = alerts.critical;
       recs.push({
         id: 'rec-crit',
         priority: 'high',
         type: 'Reorder Alert',
-        title: `Immediate restock needed for ${criticalProds[0].name}`,
-        description: `Current stock (${criticalProds[0].stock} ${criticalProds[0].unit}) is critically below the configured threshold (${criticalProds[0].threshold}).`,
+        title: `Immediate restock needed for ${product.name}`,
+        description: `Current stock (${product.stock} ${product.unit}) is critically below the configured threshold (${product.threshold}).`,
       });
     }
-    if (lowProds.length > 0) {
+    if (alerts?.low) {
+      const product = alerts.low;
       recs.push({
         id: 'rec-low',
         priority: 'medium',
         type: 'Inventory Buffer',
-        title: `Plan procurement for ${lowProds[0].name}`,
-        description: `Stock level has reached the configured reorder threshold (${lowProds[0].stock} / ${lowProds[0].threshold} ${lowProds[0].unit}).`,
+        title: `Plan procurement for ${product.name}`,
+        description: `Stock level has reached the configured reorder threshold (${product.stock} / ${product.threshold} ${product.unit}).`,
       });
     }
     return recs;
-  }, [products]);
+  }, [inventorySummary]);
 
   const inventoryMovements = useMemo(() => snapshotProducts.map((product) => ({
     productId: product.id,
@@ -328,17 +331,20 @@ export const Analytics: React.FC = () => {
   const salesTrendData = orderSummary?.salesTrendData ?? [];
   const chartSalesData = salesTrendData;
 
-  if (productsLoading || orderSummaryLoading) {
+  if (inventorySummaryLoading || orderSummaryLoading) {
     return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading analytics data from backend…</div>;
   }
-  const sourceError = [productsError && `Products: ${productsError}`, orderSummaryError && `Order summary: ${orderSummaryError}`].filter(Boolean).join('; ');
+  const sourceError = [inventorySummaryError && `Inventory summary: ${inventorySummaryError}`, orderSummaryError && `Order summary: ${orderSummaryError}`].filter(Boolean).join('; ');
   if (sourceError) {
     return (
       <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
         <p className="font-semibold text-rose-700">Could not load analytics source data: {sourceError}</p>
         <button
           type="button"
-          onClick={() => { void refreshProducts(); setOrderSummaryRetry((current) => current + 1); }}
+          onClick={() => {
+            setSnapshotRetry((current) => current + 1);
+            setOrderSummaryRetry((current) => current + 1);
+          }}
           className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
         >
           Retry
@@ -755,7 +761,7 @@ export const Analytics: React.FC = () => {
             <div className="mt-6 pt-4 border-t border-[#f1f5f9]">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500 font-medium">Total Products</span>
-                <span className="font-bold text-slate-900">{products.length}</span>
+                <span className="font-bold text-slate-900">{inventorySummary?.totalProducts ?? 0}</span>
               </div>
             </div>
           </div>

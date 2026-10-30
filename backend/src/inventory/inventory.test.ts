@@ -93,10 +93,25 @@ describe('product inventory routes', () => {
     const firstBody = await first.json() as {
       items: Array<{ id: string; name: string }>;
       page: { totalCount: number; hasMore: boolean; nextCursor: string | null };
-      summary: { totalProducts: number; glassCount: number; aluminumCount: number; lowStockCount: number; outOfStockCount: number; totalInventoryValue: number; glassInventoryValue: number; aluminumInventoryValue: number; activeProductCount: number; activeGlassCount: number; activeAluminumCount: number; activeLowStockCount: number };
+      summary: {
+        totalProducts: number; glassCount: number; aluminumCount: number; lowStockCount: number; outOfStockCount: number;
+        totalInventoryValue: number; glassInventoryValue: number; aluminumInventoryValue: number; activeProductCount: number;
+        activeGlassCount: number; activeAluminumCount: number; activeLowStockCount: number; healthyStockCount: number;
+        lowStockStatusCount: number; criticalStockCount: number; stockAlertProducts: { outOfStock: { id: string; name: string; stock: number; unit: string; threshold: number } | null; critical: { id: string; name: string; stock: number; unit: string; threshold: number } | null; low: { id: string; name: string; stock: number; unit: string; threshold: number } | null };
+      };
     };
     expect(firstBody.page).toMatchObject({ totalCount: 3, hasMore: true });
-    expect(firstBody.summary).toEqual({ totalProducts: 3, glassCount: 2, aluminumCount: 1, lowStockCount: 2, outOfStockCount: 1, totalInventoryValue: 36300, glassInventoryValue: 30000, aluminumInventoryValue: 6300, activeProductCount: 3, activeGlassCount: 2, activeAluminumCount: 1, activeLowStockCount: 2 });
+    expect(firstBody.summary).toEqual({
+      totalProducts: 3, glassCount: 2, aluminumCount: 1, lowStockCount: 2, outOfStockCount: 1,
+      totalInventoryValue: 36300, glassInventoryValue: 30000, aluminumInventoryValue: 6300,
+      activeProductCount: 3, activeGlassCount: 2, activeAluminumCount: 1, activeLowStockCount: 2,
+      healthyStockCount: 1, lowStockStatusCount: 1, criticalStockCount: 0,
+      stockAlertProducts: {
+        outOfStock: { id: 'PRD-003', name: 'Tempered Glass 10mm', stock: 0, unit: 'sheet', threshold: 6 },
+        critical: null,
+        low: { id: 'PRD-002', name: 'Black Aluminum Frame', stock: 7, unit: 'length', threshold: 10 },
+      },
+    });
     expect(firstBody.items).toHaveLength(1);
 
     const second = await app.request(`/products?mode=page&limit=1&cursor=${encodeURIComponent(firstBody.page.nextCursor!)}`, { headers });

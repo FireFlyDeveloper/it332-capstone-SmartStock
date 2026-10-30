@@ -77,7 +77,7 @@ function toProductPayload(form: ProductFormData): Omit<Product, 'id'> {
 
 const PRODUCT_BATCH_SIZES = [10, 25, 50, 100] as const;
 
-const EMPTY_PRODUCT_SUMMARY = { totalProducts: 0, glassCount: 0, aluminumCount: 0, lowStockCount: 0, outOfStockCount: 0, totalInventoryValue: 0, glassInventoryValue: 0, aluminumInventoryValue: 0, activeProductCount: 0, activeGlassCount: 0, activeAluminumCount: 0, activeLowStockCount: 0 };
+const EMPTY_PRODUCT_SUMMARY = { totalProducts: 0, glassCount: 0, aluminumCount: 0, lowStockCount: 0, outOfStockCount: 0, totalInventoryValue: 0, glassInventoryValue: 0, aluminumInventoryValue: 0, activeProductCount: 0, activeGlassCount: 0, activeAluminumCount: 0, activeLowStockCount: 0, healthyStockCount: 0, lowStockStatusCount: 0, criticalStockCount: 0, stockAlertProducts: { outOfStock: null, critical: null, low: null } };
 
 export const Inventory: React.FC = () => {
   const { addProduct, updateProduct, deleteProduct, restockProduct } = useData();

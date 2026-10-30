@@ -505,6 +505,14 @@ export interface ProductsPageResponse {
     activeGlassCount: number
     activeAluminumCount: number
     activeLowStockCount: number
+    healthyStockCount: number
+    lowStockStatusCount: number
+    criticalStockCount: number
+    stockAlertProducts: {
+      outOfStock: { id: string; name: string; stock: number; unit: string; threshold: number } | null
+      critical: { id: string; name: string; stock: number; unit: string; threshold: number } | null
+      low: { id: string; name: string; stock: number; unit: string; threshold: number } | null
+    }
   }
 }
 

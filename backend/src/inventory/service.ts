@@ -281,6 +281,19 @@ export async function listProductPageRecords(input: ProductPageInput) {
     activeGlassCount: products.filter((product) => product.status === 'active' && product.category === 'glass').length,
     activeAluminumCount: products.filter((product) => product.status === 'active' && product.category === 'aluminum').length,
     activeLowStockCount: products.filter((product) => product.status === 'active' && product.stock <= product.threshold).length,
+    healthyStockCount: products.filter((product) => product.stock > product.threshold).length,
+    lowStockStatusCount: products.filter((product) => product.stock > 0 && product.stock > product.threshold * 0.5 && product.stock <= product.threshold).length,
+    criticalStockCount: products.filter((product) => product.stock > 0 && product.stock <= product.threshold * 0.5).length,
+    stockAlertProducts: (() => {
+      const orderedProducts = [...products].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+      const summarize = (product: Product | undefined) => product ? ({ id: product.id, name: product.name, stock: product.stock, unit: product.unit, threshold: product.threshold }) : null;
+      const activeProducts = orderedProducts.filter((product) => product.status === 'active');
+      return {
+        outOfStock: summarize(activeProducts.find((product) => product.stock <= 0)),
+        critical: summarize(activeProducts.find((product) => product.stock > 0 && product.stock <= product.threshold * 0.5)),
+        low: summarize(activeProducts.find((product) => product.stock > product.threshold * 0.5 && product.stock <= product.threshold)),
+      };
+    })(),
     hasMore,
     nextCursor: hasMore && lastVisible ? { name: lastVisible.name, id: lastVisible.id } : null,
   };

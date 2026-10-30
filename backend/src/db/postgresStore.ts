@@ -124,6 +124,14 @@ export interface ProductsDbPage {
   activeGlassCount: number;
   activeAluminumCount: number;
   activeLowStockCount: number;
+  healthyStockCount: number;
+  lowStockStatusCount: number;
+  criticalStockCount: number;
+  stockAlertProducts: {
+    outOfStock: { id: string; name: string; stock: number; unit: string; threshold: number } | null;
+    critical: { id: string; name: string; stock: number; unit: string; threshold: number } | null;
+    low: { id: string; name: string; stock: number; unit: string; threshold: number } | null;
+  };
   hasMore: boolean;
   nextCursor: { name: string; id: string } | null;
 }
@@ -160,8 +168,22 @@ export async function listProductsPageDb(input: {
         COUNT(*) FILTER (WHERE status = 'active')::int AS active_product_count,
         COUNT(*) FILTER (WHERE status = 'active' AND category = 'glass')::int AS active_glass_count,
         COUNT(*) FILTER (WHERE status = 'active' AND category = 'aluminum')::int AS active_aluminum_count,
-        COUNT(*) FILTER (WHERE status = 'active' AND stock <= threshold)::int AS active_low_stock_count
+        COUNT(*) FILTER (WHERE status = 'active' AND stock <= threshold)::int AS active_low_stock_count,
+        COUNT(*) FILTER (WHERE stock > threshold)::int AS healthy_stock_count,
+        COUNT(*) FILTER (WHERE stock > 0 AND stock > threshold * 0.5 AND stock <= threshold)::int AS low_stock_status_count,
+        COUNT(*) FILTER (WHERE stock > 0 AND stock <= threshold * 0.5)::int AS critical_stock_count
       FROM products WHERE deleted_at IS NULL
+    ), stock_alerts AS (
+      SELECT
+        (SELECT jsonb_build_object('id', p.id, 'name', p.name, 'stock', p.stock, 'unit', p.unit, 'threshold', p.threshold)
+         FROM products p WHERE p.deleted_at IS NULL AND p.status = 'active' AND p.stock <= 0
+         ORDER BY p.name COLLATE "C", p.id::text COLLATE "C" LIMIT 1) AS out_of_stock,
+        (SELECT jsonb_build_object('id', p.id, 'name', p.name, 'stock', p.stock, 'unit', p.unit, 'threshold', p.threshold)
+         FROM products p WHERE p.deleted_at IS NULL AND p.status = 'active' AND p.stock > 0 AND p.stock <= p.threshold * 0.5
+         ORDER BY p.name COLLATE "C", p.id::text COLLATE "C" LIMIT 1) AS critical,
+        (SELECT jsonb_build_object('id', p.id, 'name', p.name, 'stock', p.stock, 'unit', p.unit, 'threshold', p.threshold)
+         FROM products p WHERE p.deleted_at IS NULL AND p.status = 'active' AND p.stock > p.threshold * 0.5 AND p.stock <= p.threshold
+         ORDER BY p.name COLLATE "C", p.id::text COLLATE "C" LIMIT 1) AS low
     ), page_rows AS (
       SELECT * FROM filtered
       WHERE $4::text IS NULL
@@ -174,8 +196,12 @@ export async function listProductsPageDb(input: {
       summary.total_products, summary.glass_count, summary.aluminum_count, summary.low_stock_count, summary.out_of_stock_count,
       summary.total_inventory_value, summary.glass_inventory_value, summary.aluminum_inventory_value,
       summary.active_product_count, summary.active_glass_count, summary.active_aluminum_count, summary.active_low_stock_count,
+      summary.healthy_stock_count, summary.low_stock_status_count, summary.critical_stock_count,
+      stock_alerts.out_of_stock AS stock_alert_out_of_stock,
+      stock_alerts.critical AS stock_alert_critical,
+      stock_alerts.low AS stock_alert_low,
       COALESCE((SELECT jsonb_agg(to_jsonb(page_rows) ORDER BY page_rows.name COLLATE "C" ASC, page_rows.id::text COLLATE "C" ASC) FROM page_rows), '[]'::jsonb) AS page_items
-    FROM summary
+    FROM summary CROSS JOIN stock_alerts
   `, [input.category, input.stock, input.searchTokens, input.cursorName, input.cursorId, input.limit + 1]);
   const row = rows[0];
   if (!row) return null;
@@ -183,6 +209,12 @@ export async function listProductsPageDb(input: {
   const visibleRows = rawItems.slice(0, input.limit);
   const hasMore = rawItems.length > input.limit;
   const lastVisible = visibleRows[visibleRows.length - 1];
+  const parseAlertProduct = (value: unknown) => {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const alert = parsed as Record<string, unknown>;
+    return { id: String(alert.id), name: String(alert.name), stock: Number(alert.stock), unit: String(alert.unit), threshold: Number(alert.threshold) };
+  };
   return {
     items: visibleRows.map(rowToProduct),
     totalCount: Number(row.filtered_count ?? 0),
@@ -198,6 +230,14 @@ export async function listProductsPageDb(input: {
     activeGlassCount: Number(row.active_glass_count ?? 0),
     activeAluminumCount: Number(row.active_aluminum_count ?? 0),
     activeLowStockCount: Number(row.active_low_stock_count ?? 0),
+    healthyStockCount: Number(row.healthy_stock_count ?? 0),
+    lowStockStatusCount: Number(row.low_stock_status_count ?? 0),
+    criticalStockCount: Number(row.critical_stock_count ?? 0),
+    stockAlertProducts: {
+      outOfStock: parseAlertProduct(row.stock_alert_out_of_stock),
+      critical: parseAlertProduct(row.stock_alert_critical),
+      low: parseAlertProduct(row.stock_alert_low),
+    },
     hasMore,
     nextCursor: hasMore && lastVisible ? { name: String(lastVisible.name), id: String(lastVisible.id) } : null,
   };

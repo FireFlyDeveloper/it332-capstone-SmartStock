@@ -42,6 +42,12 @@ describe('PostgreSQL product cursor query', () => {
       active_glass_count: 2,
       active_aluminum_count: 1,
       active_low_stock_count: 1,
+      healthy_stock_count: 2,
+      low_stock_status_count: 1,
+      critical_stock_count: 0,
+      stock_alert_out_of_stock: { id: 'p-03', name: 'Empty', stock: 0, unit: 'sheet', threshold: 5 },
+      stock_alert_critical: null,
+      stock_alert_low: { id: 'p-02', name: 'Low', stock: 3, unit: 'sheet', threshold: 5 },
       page_items: [product('p-01', 'Aluminum?'), product('p-02', 'Clear Glass')],
     }] });
 
@@ -68,6 +74,14 @@ describe('PostgreSQL product cursor query', () => {
       activeGlassCount: 2,
       activeAluminumCount: 1,
       activeLowStockCount: 1,
+      healthyStockCount: 2,
+      lowStockStatusCount: 1,
+      criticalStockCount: 0,
+      stockAlertProducts: {
+        outOfStock: { id: 'p-03', name: 'Empty', stock: 0, unit: 'sheet', threshold: 5 },
+        critical: null,
+        low: { id: 'p-02', name: 'Low', stock: 3, unit: 'sheet', threshold: 5 },
+      },
       hasMore: true,
       nextCursor: { name: 'Aluminum?', id: 'p-01' },
       items: [{ id: 'p-01', name: 'Aluminum?', price: 125, threshold: 5 }],
