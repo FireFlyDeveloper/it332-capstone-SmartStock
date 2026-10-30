@@ -9,6 +9,7 @@ import { trackingRoutes } from './tracking/routes.js'
 import { analyticsRoutes } from './analytics/routes.js'
 import { reportsRoutes } from './reports/routes.js'
 import { dailySalesRoutes } from './dailySales/routes.js'
+import { notificationRoutes } from './notifications/routes.js'
 import { getDatabaseHealth } from './db/health.js'
 import { initDatabase } from './db/postgresStore.js'
 import { assertAuthConfig } from './auth/config.js'
@@ -42,6 +43,7 @@ app.route('/tracking', trackingRoutes)
 app.route('/analytics', analyticsRoutes)
 app.route('/reports', reportsRoutes)
 app.route('/daily-sales', dailySalesRoutes)
+app.route('/notifications', notificationRoutes)
 
 async function startServer(): Promise<void> {
   try {

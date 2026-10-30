@@ -212,6 +212,20 @@ export interface AnalyticsSalesTrend {
 }
 
 export type DashboardSalesRange = '6M' | '1Y' | 'ALL'
+export interface NotificationFeedItem {
+  id: string
+  type: 'stock' | 'order' | 'delivery'
+  severity: 'critical' | 'warning' | 'info' | 'success'
+  title: string
+  message: string
+  contextLabel: string
+  link: string
+}
+
+export function getNotificationFeed(): Promise<NotificationFeedItem[]> {
+  return apiFetch<NotificationFeedItem[]>('/notifications')
+}
+
 export interface AnalyticsOrderSummary {
   totalOrderCount: number
   averageOrderValue: number

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -13,19 +13,10 @@ import {
   Package,
   RefreshCw,
 } from 'lucide-react';
-import { useData } from './DataContext';
-import { formatCurrency, formatDate, checkStockStatus } from '../utils/helpers';
+import { getNotificationFeed, type NotificationFeedItem } from '../api';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 
-export interface NotificationItem {
-  id: string;
-  type: 'stock' | 'order' | 'delivery';
-  severity: 'critical' | 'warning' | 'info' | 'success';
-  title: string;
-  message: string;
-  contextLabel: string;
-  link: string;
-}
+export type NotificationItem = NotificationFeedItem;
 
 const READ_STORAGE_KEY = 'smartstock_read_notifications';
 const DISMISSED_STORAGE_KEY = 'smartstock_dismissed_notifications';
@@ -54,15 +45,6 @@ const readBrowserNotificationPreferences = (): BrowserNotificationPreferences =>
 };
 
 export const NotificationDropdown: React.FC = () => {
-  const {
-    products,
-    orders,
-    productsLoading,
-    productsError,
-    ordersLoading,
-    ordersError,
-    refresh,
-  } = useData();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
@@ -70,9 +52,33 @@ export const NotificationDropdown: React.FC = () => {
   const knownNotificationIdsRef = useRef<Set<string>>(new Set());
   const initializedNotificationsRef = useRef(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const sourcesLoading = productsLoading || ordersLoading;
-  const sourcesError = productsError || ordersError;
+  const [allNotifications, setAllNotifications] = useState<NotificationItem[]>([]);
+  const [sourcesLoading, setSourcesLoading] = useState(true);
+  const [sourcesError, setSourcesError] = useState<string | null>(null);
   const sourcesReady = !sourcesLoading && !sourcesError;
+
+  const refreshSources = useCallback(async () => {
+    setSourcesLoading(true);
+    setSourcesError(null);
+    try {
+      setAllNotifications(await getNotificationFeed());
+    } catch (error) {
+      setSourcesError(error instanceof Error ? error.message : 'Could not load current notifications.');
+    } finally {
+      setSourcesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void refreshSources(); }, [refreshSources]);
+
+  useEffect(() => {
+    window.addEventListener('smartstock-notifications-refresh', refreshSources);
+    return () => window.removeEventListener('smartstock-notifications-refresh', refreshSources);
+  }, [refreshSources]);
+
+  useEffect(() => {
+    if (isOpen) void refreshSources();
+  }, [isOpen, refreshSources]);
 
   useEffect(() => {
     const reloadPreferences = () => setNotificationPreferences(readBrowserNotificationPreferences());
@@ -85,7 +91,7 @@ export const NotificationDropdown: React.FC = () => {
   }, []);
 
   const retrySources = () => {
-    void refresh();
+    void refreshSources();
   };
 
   // Read / Dismissed IDs in localStorage
@@ -148,79 +154,6 @@ export const NotificationDropdown: React.FC = () => {
     };
   }, [isOpen]);
 
-  // Generate dynamic notifications from real products and orders
-  const allNotifications = useMemo<NotificationItem[]>(() => {
-    const list: NotificationItem[] = [];
-
-    // 1. Stock Alerts
-    products.forEach((p) => {
-      const status = checkStockStatus(p.stock, p.threshold);
-      if (status === 'critical' || p.stock === 0) {
-        list.push({
-          id: `stock-${p.id}`,
-          type: 'stock',
-          severity: 'critical',
-          title: `Critical Stock: ${p.name}`,
-          message: p.stock === 0 
-            ? 'Item is completely out of stock! Restock urgently.'
-            : `Only ${p.stock} remaining (min safety threshold is ${p.threshold}).`,
-          contextLabel: 'Urgent',
-          link: '/inventory',
-        });
-      } else if (status === 'low') {
-        list.push({
-          id: `stock-${p.id}`,
-          type: 'stock',
-          severity: 'warning',
-          title: `Low Stock: ${p.name}`,
-          message: `${p.stock} units remaining. Reorder suggested soon.`,
-          contextLabel: 'Action needed',
-          link: '/inventory',
-        });
-      }
-    });
-
-    // 2. Orders Alerts
-    orders.forEach((o) => {
-      if (o.orderStatus === 'pending' || o.orderStatus === 'packed') {
-        list.push({
-          id: `order-pending-${o.id}`,
-          type: 'order',
-          severity: 'info',
-          title: `Processing Order: ${o.referenceNumber}`,
-          message: `Order for ${o.customerName} (${formatCurrency(o.total)}) is being processed.`,
-          contextLabel: `Created ${formatDate(o.createdAt)}`,
-          link: '/orders',
-        });
-      } else if (o.paymentStatus === 'pending' || o.paymentStatus === 'partial') {
-        list.push({
-          id: `order-payment-${o.id}`,
-          type: 'order',
-          severity: 'warning',
-          title: `Payment ${o.paymentStatus === 'partial' ? 'Partial' : 'Pending'}: ${o.referenceNumber}`,
-          message: `${o.customerName} has ${formatCurrency(o.total - (o.paidAmount || 0))} balance remaining.`,
-          contextLabel: `Created ${formatDate(o.createdAt)}`,
-          link: '/orders',
-        });
-      }
-
-      // 3. Deliveries in transit
-      if (o.orderStatus === 'out_for_delivery' || o.deliveryStatus === 'in_transit') {
-        list.push({
-          id: `delivery-transit-${o.id}`,
-          type: 'delivery',
-          severity: 'info',
-          title: `Out for Delivery: ${o.referenceNumber}`,
-          message: `En route to ${o.customerName} (${o.address || 'Destination'}).`,
-          contextLabel: 'En route',
-          link: '/delivery',
-        });
-      }
-    });
-
-    return list;
-  }, [products, orders]);
-
   // Filter out dismissed
   const visibleNotifications = useMemo(() => {
     return allNotifications.filter((n) => !dismissedIds.has(n.id));
@@ -274,10 +207,10 @@ export const NotificationDropdown: React.FC = () => {
   useEffect(() => {
     if (!sourcesReady || !notificationPreferences.browserPush || !('Notification' in window) || Notification.permission !== 'granted') return;
     const timer = window.setInterval(() => {
-      if (document.visibilityState !== 'hidden') void refresh();
+      if (document.visibilityState !== 'hidden') void refreshSources();
     }, 60_000);
     return () => window.clearInterval(timer);
-  }, [notificationPreferences.browserPush, refresh, sourcesReady]);
+  }, [notificationPreferences.browserPush, refreshSources, sourcesReady]);
 
   const markAllAsRead = () => {
     const newSet = new Set(readIds);
