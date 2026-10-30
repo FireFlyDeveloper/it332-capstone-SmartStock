@@ -72,7 +72,7 @@ const emptyForm = {
 
 // ── Component ──────────────────────────────────────────────────────
 export const Orders: React.FC = () => {
-  const { products, orders, addOrder, updateOrder, cancelOrder, processPayment, processRefund, productsLoading, productsError, ordersLoading, ordersError, refreshProducts, refreshOrders } = useData();
+  const { products, addOrder, updateOrder, cancelOrder, processPayment, processRefund, productsLoading, productsError, refreshProducts } = useData();
 
   // ── Filter / search / modal state ────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
@@ -120,11 +120,7 @@ export const Orders: React.FC = () => {
   const loadingMoreRef = useRef(false);
   const ordersSentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const latestOrderDate = useMemo(() => {
-    if (!orders || orders.length === 0) return new Date();
-    const timestamps = orders.map(o => new Date(o.date).getTime()).filter(t => !isNaN(t));
-    return timestamps.length > 0 ? new Date(Math.max(...timestamps)) : new Date();
-  }, [orders]);
+  const dateRangeAnchor = new Date();
 
   const handleDatePreset = (preset: '7d' | '30d' | 'all') => {
     setDatePreset(preset);
@@ -133,8 +129,8 @@ export const Orders: React.FC = () => {
       setToDate('');
       toast.info('Showing all-time orders.');
     } else {
-      const end = new Date(latestOrderDate);
-      const start = new Date(latestOrderDate);
+      const end = new Date(dateRangeAnchor);
+      const start = new Date(dateRangeAnchor);
       const days = preset === '7d' ? 7 : 30;
       start.setDate(start.getDate() - days);
       const startStr = formatDateInput(start);
@@ -196,7 +192,7 @@ export const Orders: React.FC = () => {
     }
   }, [searchTerm, statusFilter, fromDate, toDate]);
 
-  useEffect(() => { void loadFirstOrderPage() }, [loadFirstOrderPage, orders]);
+  useEffect(() => { void loadFirstOrderPage() }, [loadFirstOrderPage]);
 
   const loadMoreOrders = useCallback(async () => {
     if (!pageHasMore || !pageNextCursor || loadingMoreRef.current) return;
@@ -264,6 +260,7 @@ export const Orders: React.FC = () => {
   const advanceOrder = async (orderId: string, newStatus: Order['orderStatus']) => {
     try {
       await updateOrder(orderId, { orderStatus: newStatus });
+      await loadFirstOrderPage();
       toast.success(`Order → ${newStatus.replace(/_/g, ' ')}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not update order status.');
@@ -404,6 +401,7 @@ export const Orders: React.FC = () => {
         });
         toast.success('Order created!');
       }
+      await loadFirstOrderPage();
       closeModal();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save order.');
@@ -416,6 +414,7 @@ export const Orders: React.FC = () => {
   const handleDelete = async (orderId: string) => {
     try {
       await cancelOrder(orderId);
+      await loadFirstOrderPage();
       toast.success('Order cancelled; remaining payment refund recorded and inventory restored.');
       setConfirmCancel(null);
       closeViewModal();
@@ -429,6 +428,7 @@ export const Orders: React.FC = () => {
     setSavingFinanceAction(true);
     try {
       await processPayment(payModal.id, payAmount);
+      await loadFirstOrderPage();
       closeViewModal();
       setPayModal(null);
       toast.success(`Payment of ${formatCurrency(payAmount)} recorded`);
@@ -444,6 +444,7 @@ export const Orders: React.FC = () => {
     setSavingFinanceAction(true);
     try {
       await processRefund(refundModal.id, refundAmount, refundReason || 'No reason specified', refundType);
+      await loadFirstOrderPage();
       closeViewModal();
       setRefundModal(null);
       toast.success(`Refund of ${formatCurrency(refundAmount)} processed`);
@@ -521,10 +522,10 @@ export const Orders: React.FC = () => {
     return products.filter(p => p.status === 'active' && p.name.toLowerCase().includes(q));
   }, [products, productSearch]);
 
-  if (productsLoading || ordersLoading || pageLoading) {
+  if (productsLoading || pageLoading) {
     return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading orders and product data from backend…</div>;
   }
-  const sourceError = [productsError && `Products: ${productsError}`, ordersError && `Orders: ${ordersError}`, pageError && `Order page: ${pageError}`].filter(Boolean).join('; ');
+  const sourceError = [productsError && `Products: ${productsError}`, pageError && `Order page: ${pageError}`].filter(Boolean).join('; ');
   if (sourceError) {
     return (
       <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
@@ -533,7 +534,7 @@ export const Orders: React.FC = () => {
           type="button"
           onClick={() => {
             void loadFirstOrderPage();
-            void Promise.allSettled([refreshProducts(), refreshOrders()]);
+            void refreshProducts();
           }}
           className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
         >
