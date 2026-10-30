@@ -48,6 +48,7 @@ interface NavGroup {
     label: string;
     path: string;
     badge?: string;
+    adminOnly?: boolean;
   }[];
 }
 
@@ -63,13 +64,13 @@ const navGroups: NavGroup[] = [
   },
   {
     label: 'ADMINISTRATION',
-    items: [{ icon: Users, label: 'Staff Management', path: '/admin/staff' }],
+    items: [{ icon: Users, label: 'Staff Management', path: '/admin/staff', adminOnly: true }],
   },
   {
     label: 'FINANCES & ANALYTICS',
     items: [
-      { icon: BarChart3, label: 'Analytics', path: '/analytics' },
-      { icon: FileText, label: 'Reports & Sales', path: '/reports' },
+      { icon: BarChart3, label: 'Analytics', path: '/analytics', adminOnly: true },
+      { icon: FileText, label: 'Reports & Sales', path: '/reports', adminOnly: true },
       { icon: Banknote, label: 'Daily Sales', path: '/daily-sales' },
       { icon: Sliders, label: 'Settings', path: '/profile' },
     ],
@@ -149,7 +150,7 @@ export function Layout({ children }: LayoutProps) {
                   {group.label}
                 </p>
 
-                {group.items.map((item) => {
+                {group.items.filter((item) => !item.adminOnly || isAdmin).map((item) => {
                   const isActive =
                     item.path === '/'
                       ? location.pathname === '/'

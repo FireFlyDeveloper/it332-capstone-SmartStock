@@ -90,7 +90,7 @@ async function seedReportInventory() {
   await recordOutboundStock(aluminum.id, { quantity: 2, referenceNo: 'SO-RP-002', occurredAt: '2026-02-03T00:00:00.000Z' });
 }
 
-async function authedRequest(app: Hono, path: string, email = STAFF) {
+async function authedRequest(app: Hono, path: string, email = ADMIN) {
   const token = await login(app, email);
   return app.request(path, { headers: { authorization: 'Bearer ' + token } });
 }
@@ -109,13 +109,23 @@ describe('reports routes', () => {
     await seedUser(STAFF, 'staff');
   });
 
-  it('blocks anonymous report access and allows staff view-only JSON summaries', async () => {
-    const anonymous = await app.request('/reports/sales/monthly');
-    expect(anonymous.status).toBe(401);
+  it('blocks anonymous and staff access to report data and exports', async () => {
+    expect((await app.request('/reports/sales/monthly')).status).toBe(401);
 
-    const staff = await authedRequest(app, '/reports/sales/monthly');
-    expect(staff.status).toBe(200);
-    expect(staff.headers.get('content-type')).toContain('application/json');
+    const staffPaths = [
+      '/reports/orders/summary',
+      '/reports/sales/monthly',
+      '/reports/purchases/annual?year=2026',
+      '/reports/inventory/evaluation',
+      '/reports/policy-performance',
+      '/reports/policy-performance/page',
+      '/reports/spending?year=2026',
+      '/reports/export?type=sales&format=pdf',
+    ];
+    for (const path of staffPaths) {
+      const staff = await authedRequest(app, path, STAFF);
+      expect(staff.status, `GET ${path}`).toBe(403);
+    }
   });
 
   it('serves backend order summary metrics with date filters', async () => {

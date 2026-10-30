@@ -309,8 +309,9 @@ describe('order routes', () => {
       orders: [{ paidAmount: 0, refundedAmount: 1000, paymentStatus: 'refunded', orderStatus: 'cancelled' }],
     });
 
+    const reportToken = await login(app, ADMIN);
     const reportResponse = await app.request('/reports/sales/monthly', {
-      headers: { authorization: 'Bearer ' + token },
+      headers: { authorization: 'Bearer ' + reportToken },
     });
     expect(reportResponse.status).toBe(200);
     const report = await reportResponse.json() as { totals: { transactionCount: number; grossSales: number } };

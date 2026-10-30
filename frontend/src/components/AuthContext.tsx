@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = state.user?.role === 'admin'
   const isStaff = state.user?.role === 'staff'
   const canExportReports = isAdmin
-  const canViewAnalytics = isAdmin || isStaff
+  const canViewAnalytics = isAdmin
 
   return (
     <AuthContext.Provider

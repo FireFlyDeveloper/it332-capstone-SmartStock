@@ -25,6 +25,7 @@ import { exportReportXlsx } from './exporters/xlsx.js';
 export const reportsRoutes = new Hono();
 
 reportsRoutes.use('*', requireAuth);
+reportsRoutes.use('*', requireRole('admin'));
 
 function isDateOnly(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -71,7 +72,7 @@ function buildReportForType(type: ExportType): ReportDto | Promise<ReportDto> {
   }
 }
 
-reportsRoutes.get('/export', requireRole('admin'), async (c) => {
+reportsRoutes.get('/export', async (c) => {
   const type = c.req.query('type');
   const format = c.req.query('format');
   if (type !== 'sales' && type !== 'purchases' && type !== 'inventory' && type !== 'spending' && type !== 'forecast' && type !== 'policy-performance') {

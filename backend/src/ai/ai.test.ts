@@ -57,6 +57,7 @@ async function seedAiAnalyticsData() {
 
 const ORIGINAL_ENV = { ...process.env };
 const AT = String.fromCharCode(64);
+const ADMIN = 'ai-admin' + AT + 'smartstock.local';
 const STAFF = 'ai-staff' + AT + 'smartstock.local';
 
 describe('AI insight fallback layer', () => {
@@ -147,18 +148,24 @@ describe('AI insight fallback layer', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('exposes authenticated GET /analytics/insights using deterministic fallback without an API key', async () => {
+  it('restricts GET /analytics/insights to admins and returns deterministic fallback', async () => {
     const app = buildApp();
     await seedUser(STAFF, 'staff');
+    await seedUser(ADMIN, 'admin');
 
     const anonymous = await app.request('/analytics/insights?year=2026&threshold=5');
     expect(anonymous.status).toBe(401);
 
-    const token = await login(app, STAFF);
-    const res = await app.request('/analytics/insights?year=2026&threshold=5', {
-      headers: { authorization: 'Bearer ' + token },
+    const staffToken = await login(app, STAFF);
+    const staff = await app.request('/analytics/insights?year=2026&threshold=5', {
+      headers: { authorization: 'Bearer ' + staffToken },
     });
+    expect(staff.status).toBe(403);
 
+    const adminToken = await login(app, ADMIN);
+    const res = await app.request('/analytics/insights?year=2026&threshold=5', {
+      headers: { authorization: 'Bearer ' + adminToken },
+    });
     expect(res.status).toBe(200);
     const json = await res.json() as ReturnType<typeof generateFallbackInsight> & { source: string };
     expect(json.source).toBe('fallback');

@@ -279,22 +279,44 @@ describe('analytics routes', () => {
     await seedUser(STAFF, 'staff');
   });
 
-  it('blocks anonymous access and lets authenticated staff read analytics', async () => {
-    const anonymous = await app.request('/analytics/sales-trends');
-    expect(anonymous.status).toBe(401);
+  it('restricts Analytics page endpoints to admins while preserving staff Dashboard access', async () => {
+    expect((await app.request('/analytics/orders/summary')).status).toBe(401);
 
-    const token = await login(app, STAFF);
-    const staff = await app.request('/analytics/sales-trends', {
-      headers: { authorization: 'Bearer ' + token },
+    const staffToken = await login(app, STAFF);
+    const staffHeaders = { authorization: 'Bearer ' + staffToken };
+    const adminToken = await login(app, ADMIN);
+    const adminOnlyEndpoints: Array<{ path: string; method?: string }> = [
+      { path: '/analytics/orders/summary' },
+      { path: '/analytics/demand-forecast/page' },
+      { path: '/analytics/demand-forecast' },
+      { path: '/analytics/purchases/page' },
+      { path: '/analytics/purchases' },
+      { path: '/analytics/movement' },
+      { path: '/analytics/insights' },
+      { path: '/analytics/forecast', method: 'POST' },
+    ];
+    for (const endpoint of adminOnlyEndpoints) {
+      const response = await app.request(endpoint.path, { method: endpoint.method, headers: staffHeaders });
+      expect(response.status, `${endpoint.method ?? 'GET'} ${endpoint.path}`).toBe(403);
+    }
+
+    const admin = await app.request('/analytics/orders/summary', {
+      headers: { authorization: 'Bearer ' + adminToken },
     });
-    expect(staff.status).toBe(200);
+    expect(admin.status).toBe(200);
+
+    const dashboardEndpoints = ['/analytics/dashboard-order-summary', '/analytics/sales-trends', '/analytics/recent-activity'];
+    for (const path of dashboardEndpoints) {
+      const response = await app.request(path, { headers: staffHeaders });
+      expect(response.status, `staff Dashboard GET ${path}`).toBe(200);
+    }
   });
 
   it('serves compact, date-filtered Analytics metrics from the authenticated endpoint', async () => {
     const anonymous = await app.request('/analytics/orders/summary');
     expect(anonymous.status).toBe(401);
 
-    const token = await login(app, STAFF);
+    const token = await login(app, ADMIN);
     const headers = { authorization: 'Bearer ' + token };
     const res = await app.request('/analytics/orders/summary?fromDate=2026-01-20&toDate=2026-01-20', { headers });
     expect(res.status).toBe(200);
@@ -313,7 +335,7 @@ describe('analytics routes', () => {
     const anonymous = await app.request('/analytics/dashboard-order-summary');
     expect(anonymous.status).toBe(401);
 
-    const token = await login(app, STAFF);
+    const token = await login(app, ADMIN);
     const res = await app.request('/analytics/dashboard-order-summary', {
       headers: { authorization: 'Bearer ' + token },
     });
@@ -332,7 +354,7 @@ describe('analytics routes', () => {
   });
 
   it('returns deterministic sales trends from in-memory orders', async () => {
-    const token = await login(app, STAFF);
+    const token = await login(app, ADMIN);
     const res = await app.request('/analytics/sales-trends', {
       headers: { authorization: 'Bearer ' + token },
     });
@@ -344,7 +366,7 @@ describe('analytics routes', () => {
   });
 
   it('serves recent activity from real order and stock-movement records', async () => {
-    const token = await login(app, STAFF);
+    const token = await login(app, ADMIN);
     const res = await app.request('/analytics/recent-activity?limit=20', {
       headers: { authorization: 'Bearer ' + token },
     });
@@ -364,7 +386,7 @@ describe('analytics routes', () => {
   });
 
   it('validates sales-trend range filters', async () => {
-    const token = await login(app, STAFF);
+    const token = await login(app, ADMIN);
     const invalid = await app.request('/analytics/sales-trends?range=5Y', {
       headers: { authorization: 'Bearer ' + token },
     });
@@ -377,7 +399,7 @@ describe('analytics routes', () => {
   });
 
   it('returns annual purchase totals grouped by material and supplier', async () => {
-    const token = await login(app, STAFF);
+    const token = await login(app, ADMIN);
     const res = await app.request('/analytics/purchases?year=2026', {
       headers: { authorization: 'Bearer ' + token },
     });
@@ -390,7 +412,7 @@ describe('analytics routes', () => {
   });
 
   it('returns cursor-paginated annual purchase groups with full-year totals', async () => {
-    const token = await login(app, STAFF);
+    const token = await login(app, ADMIN);
     const first = await app.request('/analytics/purchases/page?year=2026&limit=2', { headers: { authorization: 'Bearer ' + token } });
     expect(first.status).toBe(200);
     const firstPage = await first.json() as { year: number; groups: Array<{ materialType: string; supplier: string }>; totalSpend: number; pricedReceiptCount: number; page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null } };
@@ -412,7 +434,7 @@ describe('analytics routes', () => {
   });
 
   it('returns stable fast and slow movement classification', async () => {
-    const token = await login(app, STAFF);
+    const token = await login(app, ADMIN);
     const res = await app.request('/analytics/movement?threshold=5', {
       headers: { authorization: 'Bearer ' + token },
     });
@@ -423,7 +445,7 @@ describe('analytics routes', () => {
   });
 
   it('returns authenticated demand forecasts with complete response metadata', async () => {
-    const token = await login(app, STAFF);
+    const token = await login(app, ADMIN);
     const res = await app.request('/analytics/demand-forecast?historyMonths=3', { headers: { authorization: 'Bearer ' + token } });
     expect(res.status).toBe(200);
     const body = await res.json() as { method: string; historyMonths: number; products: Array<{ history: unknown[]; status: string }> };
@@ -441,7 +463,7 @@ describe('analytics routes', () => {
   });
 
   it('returns SES forecast for a known series', async () => {
-    const token = await login(app, STAFF);
+    const token = await login(app, ADMIN);
     const res = await app.request('/analytics/forecast', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },

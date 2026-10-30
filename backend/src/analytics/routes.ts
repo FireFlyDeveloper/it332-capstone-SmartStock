@@ -6,7 +6,7 @@
  */
 
 import { Hono } from 'hono';
-import { requireAuth } from '../auth/middleware.js';
+import { requireAuth, requireRole } from '../auth/middleware.js';
 import { getAnalyticsInsight } from '../ai/insights.js';
 import {
   getAnnualPurchases,
@@ -26,7 +26,7 @@ export const analyticsRoutes = new Hono();
 
 analyticsRoutes.use('*', requireAuth);
 
-analyticsRoutes.get('/demand-forecast/page', async (c) => {
+analyticsRoutes.get('/demand-forecast/page', requireRole('admin'), async (c) => {
   const rawHistoryMonths = c.req.query('historyMonths');
   const historyMonths = rawHistoryMonths === undefined ? 12 : Number(rawHistoryMonths);
   if (!Number.isInteger(historyMonths) || historyMonths < 1 || historyMonths > 60) {
@@ -61,7 +61,7 @@ analyticsRoutes.get('/demand-forecast/page', async (c) => {
   return c.json({ ...result, page: { ...result.page, nextCursor } });
 });
 
-analyticsRoutes.get('/demand-forecast', (c) => {
+analyticsRoutes.get('/demand-forecast', requireRole('admin'), (c) => {
   const raw = c.req.query('historyMonths');
   const historyMonths = raw === undefined ? 12 : Number(raw);
   if (!Number.isInteger(historyMonths) || historyMonths < 1 || historyMonths > 60) {
@@ -76,7 +76,7 @@ function isDateOnly(value: string): boolean {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
-analyticsRoutes.get('/orders/summary', async (c) => {
+analyticsRoutes.get('/orders/summary', requireRole('admin'), async (c) => {
   const fromDate = c.req.query('fromDate') || undefined;
   const toDate = c.req.query('toDate') || undefined;
   if ((fromDate && !isDateOnly(fromDate)) || (toDate && !isDateOnly(toDate))) {
@@ -106,7 +106,7 @@ analyticsRoutes.get('/recent-activity', async (c) => {
   return c.json(await getRecentActivity(limit));
 });
 
-analyticsRoutes.get('/purchases/page', async (c) => {
+analyticsRoutes.get('/purchases/page', requireRole('admin'), async (c) => {
   const rawYear = c.req.query('year');
   const year = rawYear === undefined ? new Date().getUTCFullYear() : Number(rawYear);
   if (!Number.isInteger(year) || year < 1900 || year > 3000) {
@@ -139,7 +139,7 @@ analyticsRoutes.get('/purchases/page', async (c) => {
   return c.json({ ...result, page: { ...result.page, nextCursor } });
 });
 
-analyticsRoutes.get('/purchases', (c) => {
+analyticsRoutes.get('/purchases', requireRole('admin'), (c) => {
   const rawYear = c.req.query('year');
   const year = rawYear === undefined ? undefined : Number(rawYear);
   if (year !== undefined && (!Number.isInteger(year) || year < 1900 || year > 3000)) {
@@ -148,7 +148,7 @@ analyticsRoutes.get('/purchases', (c) => {
   return c.json(getAnnualPurchases(year));
 });
 
-analyticsRoutes.get('/movement', (c) => {
+analyticsRoutes.get('/movement', requireRole('admin'), (c) => {
   const rawThreshold = c.req.query('threshold');
   const threshold = rawThreshold === undefined ? undefined : Number(rawThreshold);
   if (threshold !== undefined && (!Number.isFinite(threshold) || threshold < 0)) {
@@ -157,7 +157,7 @@ analyticsRoutes.get('/movement', (c) => {
   return c.json(getMovementClassification(threshold));
 });
 
-analyticsRoutes.get('/insights', async (c) => {
+analyticsRoutes.get('/insights', requireRole('admin'), async (c) => {
   const rawYear = c.req.query('year');
   const rawThreshold = c.req.query('threshold');
   const year = rawYear === undefined ? undefined : Number(rawYear);
@@ -171,7 +171,7 @@ analyticsRoutes.get('/insights', async (c) => {
   return c.json(await getAnalyticsInsight({ year, threshold }));
 });
 
-analyticsRoutes.post('/forecast', async (c) => {
+analyticsRoutes.post('/forecast', requireRole('admin'), async (c) => {
   const body = await c.req.json().catch(() => null) as { quantities?: unknown; alpha?: unknown } | null;
   if (!body || !Array.isArray(body.quantities)) {
     return c.json({ error: 'quantities must be an array of numbers' }, 400);

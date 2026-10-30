@@ -125,7 +125,7 @@ function AppRoutes() {
       <Route
         path="/analytics"
         element={
-          <ProtectedRoute allowedRoles={['admin', 'staff']}>
+          <ProtectedRoute allowedRoles={['admin']}>
             <DataProvider>
               <Layout>
                 <Analytics />
@@ -137,7 +137,7 @@ function AppRoutes() {
       <Route
         path="/reports"
         element={
-          <ProtectedRoute allowedRoles={['admin', 'staff']}>
+          <ProtectedRoute allowedRoles={['admin']}>
             <DataProvider>
               <Layout>
                 <Reports />
