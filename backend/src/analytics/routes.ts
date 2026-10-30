@@ -88,13 +88,13 @@ analyticsRoutes.get('/orders/summary', (c) => {
 
 analyticsRoutes.get('/dashboard-order-summary', async (c) => c.json(await getDashboardOrderSummary()));
 
-analyticsRoutes.get('/sales-trends', (c) => {
+analyticsRoutes.get('/sales-trends', async (c) => {
   const rawRange = c.req.query('range');
   const validRanges: DashboardSalesRange[] = ['6M', '1Y', 'ALL'];
   if (rawRange !== undefined && !validRanges.includes(rawRange as DashboardSalesRange)) {
     return c.json({ error: 'range must be 6M, 1Y, or ALL' }, 400);
   }
-  return c.json(getSalesTrends(rawRange as DashboardSalesRange | undefined));
+  return c.json(await getSalesTrends(rawRange as DashboardSalesRange | undefined));
 });
 
 analyticsRoutes.get('/recent-activity', (c) => {

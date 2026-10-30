@@ -14,7 +14,7 @@ function stableGeneratedAt(year: number): string {
   return `${year}-01-01T00:00:00.000Z`;
 }
 
-export function buildSafeInsightPayload(options: InsightRequestOptions = {}): SafeInsightPayload {
+export async function buildSafeInsightPayload(options: InsightRequestOptions = {}): Promise<SafeInsightPayload> {
   const year = options.year ?? new Date().getUTCFullYear();
   const threshold = options.threshold ?? 10;
   const quantities = options.forecastQuantities ?? getMovementClassification(threshold).map((item) => item.quantity);
@@ -22,7 +22,7 @@ export function buildSafeInsightPayload(options: InsightRequestOptions = {}): Sa
     generatedAt: stableGeneratedAt(year),
     year,
     threshold,
-    salesTrends: getSalesTrends(),
+    salesTrends: await getSalesTrends(),
     annualPurchases: getAnnualPurchases(year),
     movement: getMovementClassification(threshold),
     forecast: quantities.length > 0 ? getForecast(quantities) : { alpha: 0.3, forecast: 0 },
@@ -54,7 +54,7 @@ export function generateFallbackInsight(payload: SafeInsightPayload): AiInsightC
 }
 
 export async function getAnalyticsInsight(options: InsightRequestOptions = {}): Promise<AiInsight> {
-  const payload = buildSafeInsightPayload(options);
+  const payload = await buildSafeInsightPayload(options);
   const fallback = (): AiInsight => ({ ...generateFallbackInsight(payload), source: 'fallback' });
   const config = getDeepSeekConfig();
   if (!config.apiKey) return fallback();

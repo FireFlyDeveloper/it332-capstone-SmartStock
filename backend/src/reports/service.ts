@@ -58,8 +58,8 @@ export async function buildOrderSummaryReport(fromDate?: string, toDate?: string
   };
 }
 
-export function buildMonthlySalesReport() {
-  const rows = getSalesTrends();
+export async function buildMonthlySalesReport() {
+  const rows = await getSalesTrends();
   return {
     report: 'monthly_sales' as const,
     totals: {
@@ -292,7 +292,7 @@ export async function buildPolicyPerformancePage(now: Date, limit: number, curso
 }
 
 export type ReportDto =
-  | ReturnType<typeof buildMonthlySalesReport>
+  | Awaited<ReturnType<typeof buildMonthlySalesReport>>
   | ReturnType<typeof buildAnnualPurchasesReport>
   | ReturnType<typeof buildInventoryEvaluationReport>
   | ReturnType<typeof buildSpendingReport>

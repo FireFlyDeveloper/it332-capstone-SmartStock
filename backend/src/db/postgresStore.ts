@@ -937,6 +937,60 @@ export async function listDemandForecastPageDb(input: {
   };
 }
 
+export interface MonthlySalesTrendDbRow {
+  month: string;
+  transactionCount: number;
+  grossSales: number;
+}
+
+export async function listMonthlySalesTrendDb(range: '6M' | '1Y' | 'ALL' | undefined, now: Date): Promise<MonthlySalesTrendDbRow[] | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH params AS (
+      SELECT $1::text AS range,
+        date_trunc('month', ($2::timestamptz AT TIME ZONE 'UTC'))::date AS current_month
+    ), bounds AS (
+      SELECT range, current_month,
+        CASE range WHEN '6M' THEN current_month - INTERVAL '5 months'
+          WHEN '1Y' THEN current_month - INTERVAL '11 months' END::date AS first_month
+      FROM params
+    ), monthly_sales AS (
+      SELECT date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))::date AS month,
+        COUNT(*)::int AS transaction_count,
+        ROUND(SUM(o.total_amount)::numeric, 2)::double precision AS gross_sales
+      FROM orders o CROSS JOIN bounds b
+      WHERE o.deleted_at IS NULL AND o.order_status <> 'cancelled'
+        AND (b.range IS NULL OR (
+          o.created_at < ((b.current_month + INTERVAL '1 month')::timestamp AT TIME ZONE 'UTC')
+          AND (b.range = 'ALL' OR o.created_at >= (b.first_month::timestamp AT TIME ZONE 'UTC'))
+        ))
+      GROUP BY date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))::date
+    ), calendar AS (
+      SELECT generate_series(
+        CASE WHEN b.range = 'ALL' THEN (SELECT MIN(month) FROM monthly_sales) ELSE b.first_month END,
+        b.current_month,
+        INTERVAL '1 month'
+      )::date AS month
+      FROM bounds b
+      WHERE b.range IS NOT NULL AND (b.range <> 'ALL' OR EXISTS (SELECT 1 FROM monthly_sales))
+    ), result AS (
+      SELECT m.month, m.transaction_count, m.gross_sales
+      FROM monthly_sales m CROSS JOIN bounds b WHERE b.range IS NULL
+      UNION ALL
+      SELECT c.month, COALESCE(m.transaction_count, 0)::int, COALESCE(m.gross_sales, 0)::double precision
+      FROM calendar c LEFT JOIN monthly_sales m ON m.month = c.month
+    )
+    SELECT to_char(month, 'YYYY-MM') AS month, transaction_count, gross_sales
+    FROM result ORDER BY month ASC
+  `, [range ?? null, now]);
+  return rows.map((row) => ({
+    month: String(row.month),
+    transactionCount: Number(row.transaction_count ?? 0),
+    grossSales: Number(row.gross_sales ?? 0),
+  }));
+}
+
 export interface OrderSummaryReportDb {
   totalOrders: number;
   totalSales: number;

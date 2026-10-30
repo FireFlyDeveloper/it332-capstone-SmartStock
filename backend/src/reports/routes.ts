@@ -93,7 +93,7 @@ reportsRoutes.get('/export', requireRole('admin'), async (c) => {
   });
 });
 
-reportsRoutes.get('/sales/monthly', (c) => c.json(buildMonthlySalesReport()));
+reportsRoutes.get('/sales/monthly', async (c) => c.json(await buildMonthlySalesReport()));
 
 reportsRoutes.get('/purchases/annual', (c) => {
   const parsed = parseYear(c.req.query('year'));

@@ -6,7 +6,7 @@
  */
 
 import { isDbSyncActive } from '../db/syncState.js';
-import { getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb } from '../db/postgresStore.js';
+import { getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlySalesTrendDb } from '../db/postgresStore.js';
 import { listProducts, listProductMovements } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import {
@@ -31,8 +31,13 @@ function listAllMovements() {
   return listProducts().flatMap((product) => listProductMovements(product.id) ?? []);
 }
 
-export function getSalesTrends(range?: DashboardSalesRange) {
-  return buildMonthlySalesTrend(listOrders(), range);
+export async function getSalesTrends(range?: DashboardSalesRange, now = new Date()) {
+  if (isDbSyncActive()) {
+    const rows = await listMonthlySalesTrendDb(range, now);
+    if (!rows) throw new Error('PostgreSQL is unavailable for monthly sales trends');
+    return rows;
+  }
+  return buildMonthlySalesTrend(listOrders(), range, now);
 }
 
 export async function getDashboardOrderSummary() {

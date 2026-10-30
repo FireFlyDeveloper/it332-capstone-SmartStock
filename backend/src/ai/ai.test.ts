@@ -104,8 +104,8 @@ describe('AI insight fallback layer', () => {
     });
   });
 
-  it('builds AI payloads from aggregate analytics without customer PII or secrets', () => {
-    const payload = buildSafeInsightPayload({ year: 2026, threshold: 5, forecastQuantities: [10, 20, 30] });
+  it('builds AI payloads from aggregate analytics without customer PII or secrets', async () => {
+    const payload = await buildSafeInsightPayload({ year: 2026, threshold: 5, forecastQuantities: [10, 20, 30] });
     const serialized = JSON.stringify(payload);
 
     expect(serialized).not.toContain('Private Customer');
