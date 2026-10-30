@@ -937,6 +937,65 @@ export async function listDemandForecastPageDb(input: {
   };
 }
 
+export interface DashboardOrderSummaryDb {
+  activeOrderCount: number;
+  orderStatusCounts: Array<{ status: string; count: number }>;
+  topItems: Array<{
+    productId: string;
+    name: string;
+    category: string | null;
+    unit: string | null;
+    quantity: number;
+  }>;
+}
+
+export async function getDashboardOrderSummaryDb(): Promise<DashboardOrderSummaryDb | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH status_counts AS (
+      SELECT order_status AS status, COUNT(*)::int AS count
+      FROM orders WHERE deleted_at IS NULL GROUP BY order_status
+    ), item_totals AS (
+      SELECT item.value->>'productId' AS product_id,
+        (ARRAY_AGG(item.value->>'name' ORDER BY o.order_no COLLATE "C"))[1] AS name,
+        SUM((item.value->>'quantity')::int)::int AS quantity
+      FROM orders o
+      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS item(value)
+      WHERE o.deleted_at IS NULL AND o.order_status <> 'cancelled'
+      GROUP BY item.value->>'productId'
+    ), top_items AS (
+      SELECT it.product_id, it.name, p.category, p.unit, it.quantity
+      FROM item_totals it
+      LEFT JOIN products p ON p.id::text = it.product_id AND p.deleted_at IS NULL
+      ORDER BY it.quantity DESC, it.product_id COLLATE "C" ASC
+      LIMIT 4
+    )
+    SELECT
+      (SELECT COUNT(*) FILTER (WHERE order_status NOT IN ('delivered', 'cancelled'))::int FROM orders WHERE deleted_at IS NULL) AS active_order_count,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('status', status, 'count', count) ORDER BY status COLLATE "C") FROM status_counts), '[]'::jsonb) AS order_status_counts,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('productId', product_id, 'name', name, 'category', category, 'unit', unit, 'quantity', quantity) ORDER BY quantity DESC, product_id COLLATE "C") FROM top_items), '[]'::jsonb) AS top_items
+  `);
+  const row = rows[0];
+  if (!row) return null;
+  const parseJsonArray = (value: unknown): Record<string, unknown>[] => {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    return Array.isArray(parsed) ? parsed as Record<string, unknown>[] : [];
+  };
+  return {
+    activeOrderCount: Number(row.active_order_count ?? 0),
+    orderStatusCounts: parseJsonArray(row.order_status_counts).map((status) => ({
+      status: String(status.status), count: Number(status.count ?? 0),
+    })),
+    topItems: parseJsonArray(row.top_items).map((item) => ({
+      productId: String(item.productId), name: String(item.name ?? ''),
+      category: item.category == null ? null : String(item.category),
+      unit: item.unit == null ? null : String(item.unit),
+      quantity: Number(item.quantity ?? 0),
+    })),
+  };
+}
+
 export async function listOrdersPageDb(input: {
   limit: number;
   status: string;

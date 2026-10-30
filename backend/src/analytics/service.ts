@@ -6,7 +6,7 @@
  */
 
 import { isDbSyncActive } from '../db/syncState.js';
-import { listAnnualPurchasesPageDb, listDemandForecastPageDb } from '../db/postgresStore.js';
+import { getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb } from '../db/postgresStore.js';
 import { listProducts, listProductMovements } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import {
@@ -35,7 +35,12 @@ export function getSalesTrends(range?: DashboardSalesRange) {
   return buildMonthlySalesTrend(listOrders(), range);
 }
 
-export function getDashboardOrderSummary() {
+export async function getDashboardOrderSummary() {
+  if (isDbSyncActive()) {
+    const summary = await getDashboardOrderSummaryDb();
+    if (!summary) throw new Error('PostgreSQL is unavailable for dashboard order summary');
+    return summary;
+  }
   return buildDashboardOrderSummary(listOrders(), listProducts());
 }
 

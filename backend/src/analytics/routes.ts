@@ -86,7 +86,7 @@ analyticsRoutes.get('/orders/summary', (c) => {
   return c.json(getAnalyticsOrderSummary(fromDate, toDate));
 });
 
-analyticsRoutes.get('/dashboard-order-summary', (c) => c.json(getDashboardOrderSummary()));
+analyticsRoutes.get('/dashboard-order-summary', async (c) => c.json(await getDashboardOrderSummary()));
 
 analyticsRoutes.get('/sales-trends', (c) => {
   const rawRange = c.req.query('range');
