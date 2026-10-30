@@ -18,12 +18,11 @@ import {
   Banknote
 } from 'lucide-react';
 
-import { useData } from '../components/DataContext';
 import type { Order } from '../types';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
-import { apiFetchBlob, getAnalyticsPurchasesPage, getDemandForecastPage, getPolicyPerformancePage, getOrdersPage, getReportOrdersSummary, type ApiError, type ReportOrdersSummary, type PurchaseAnalyticsPageResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
+import { getProductsPage, apiFetchBlob, getAnalyticsPurchasesPage, getDemandForecastPage, getPolicyPerformancePage, getOrdersPage, getReportOrdersSummary, type ProductsPageResponse, type ApiError, type ReportOrdersSummary, type PurchaseAnalyticsPageResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
 import { toFrontendOrder } from '../components/orderMapper';
 import { useAuth } from '../components/AuthContext';
 
@@ -96,7 +95,6 @@ const ReportCard: React.FC<ReportCardProps> = ({
 
 export const Reports: React.FC = () => {
   const navigate = useNavigate();
-  const { products, productsLoading, productsError, refreshProducts } = useData();
   const { canExportReports } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Order['orderStatus']>('all');
@@ -145,6 +143,32 @@ export const Reports: React.FC = () => {
   const [orderSummary, setOrderSummary] = useState<ReportOrdersSummary | null>(null);
   const [orderSummaryLoading, setOrderSummaryLoading] = useState(true);
   const [orderSummaryError, setOrderSummaryError] = useState('');
+  const [inventorySummary, setInventorySummary] = useState<ProductsPageResponse['summary'] | null>(null);
+  const [inventorySummaryLoading, setInventorySummaryLoading] = useState(true);
+  const [inventorySummaryError, setInventorySummaryError] = useState('');
+  const [inventorySummaryRetry, setInventorySummaryRetry] = useState(0);
+  const inventorySummaryRequestRef = useRef(0);
+
+  useEffect(() => {
+    const requestId = ++inventorySummaryRequestRef.current;
+    setInventorySummaryLoading(true);
+    setInventorySummaryError('');
+    getProductsPage({ limit: 1 })
+      .then((response) => {
+        if (requestId === inventorySummaryRequestRef.current) setInventorySummary(response.summary);
+      })
+      .catch((error: unknown) => {
+        if (requestId === inventorySummaryRequestRef.current) {
+          setInventorySummaryError(error instanceof Error ? error.message : 'Could not load inventory summary.');
+        }
+      })
+      .finally(() => {
+        if (requestId === inventorySummaryRequestRef.current) setInventorySummaryLoading(false);
+      });
+    return () => {
+      if (requestId === inventorySummaryRequestRef.current) inventorySummaryRequestRef.current += 1;
+    };
+  }, [inventorySummaryRetry]);
 
   useEffect(() => {
     let active = true;
@@ -444,8 +468,8 @@ export const Reports: React.FC = () => {
   const pendingOrders = orderSummary?.pendingOrders ?? 0;
   const statusCounts = orderSummary?.statusCounts ?? { completed: 0, inProgress: 0, pending: 0, cancelled: 0 };
   const paymentCounts = orderSummary?.paymentCounts ?? { paid: 0, pending: 0, partial: 0, refunded: 0 };
-  const totalProducts = products.length;
-  const totalInventoryValue = products.reduce((sum, p) => sum + (p.stock * p.price), 0);
+  const totalProducts = inventorySummary?.totalProducts ?? 0;
+  const totalInventoryValue = inventorySummary?.totalInventoryValue ?? 0;
 
   const handlePrint = () => {
     toast.info('Opening browser print dialog...');
@@ -576,10 +600,10 @@ export const Reports: React.FC = () => {
     }
   };
 
-  if (productsLoading || orderSummaryLoading) {
+  if (inventorySummaryLoading || orderSummaryLoading) {
     return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading report source data from backend…</div>;
   }
-  const sourceError = [productsError && `Products: ${productsError}`, orderSummaryError && `Order summary: ${orderSummaryError}`].filter(Boolean).join('; ');
+  const sourceError = [inventorySummaryError && `Inventory summary: ${inventorySummaryError}`, orderSummaryError && `Order summary: ${orderSummaryError}`].filter(Boolean).join('; ');
   if (sourceError) {
     return (
       <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
@@ -588,7 +612,7 @@ export const Reports: React.FC = () => {
           type="button"
           onClick={() => {
             setHistoryRetry((current) => current + 1);
-            void refreshProducts();
+            setInventorySummaryRetry((current) => current + 1);
           }}
           className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
         >
