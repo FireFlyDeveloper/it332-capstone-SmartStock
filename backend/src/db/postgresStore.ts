@@ -939,6 +939,30 @@ export async function listDemandForecastPageDb(input: {
   };
 }
 
+const NOTIFICATION_FEED_CTE = `WITH notification_feed AS MATERIALIZED (
+  SELECT 'stock-' || p.id AS id, 'stock'::text AS type, 0::int AS type_rank,
+    CASE WHEN p.stock = 0 OR (p.stock > 0 AND p.stock <= p.threshold * 0.5) THEN 'critical' ELSE 'warning' END AS severity,
+    jsonb_build_object('name', p.name, 'stock', p.stock, 'threshold', p.threshold) AS source
+  FROM products p
+  WHERE p.deleted_at IS NULL AND (p.stock = 0 OR (p.stock > 0 AND p.stock <= p.threshold))
+  UNION ALL
+  SELECT 'order-pending-' || o.id, 'order', 1, 'info',
+    jsonb_build_object('reference', o.order_no, 'customer', COALESCE(o.customer_name, ''), 'total', o.total_amount, 'createdAt', o.created_at)
+  FROM orders o
+  WHERE o.deleted_at IS NULL AND o.order_status = 'processing'
+  UNION ALL
+  SELECT 'order-payment-' || o.id, 'order', 1, 'warning',
+    jsonb_build_object('reference', o.order_no, 'customer', COALESCE(o.customer_name, ''), 'total', o.total_amount,
+      'paidAmount', o.paid_amount, 'paymentStatus', o.payment_status, 'createdAt', o.created_at)
+  FROM orders o
+  WHERE o.deleted_at IS NULL AND o.order_status <> 'processing' AND o.payment_status IN ('unpaid', 'partial')
+  UNION ALL
+  SELECT 'delivery-transit-' || o.id, 'delivery', 2, 'info',
+    jsonb_build_object('reference', o.order_no, 'customer', COALESCE(o.customer_name, ''), 'deliveryAddress', o.delivery_address)
+  FROM orders o
+  WHERE o.deleted_at IS NULL AND o.order_status = 'in_transit'
+)`;
+
 function notificationItemFromDbRow(row: Record<string, unknown>): NotificationFeedItem {
   const sourceValue = typeof row.source === 'string' ? JSON.parse(row.source) : row.source;
   const source = sourceValue && typeof sourceValue === 'object' ? sourceValue as Record<string, unknown> : {};
@@ -991,6 +1015,31 @@ function notificationItemFromDbRow(row: Record<string, unknown>): NotificationFe
   };
 }
 
+export async function getNotificationChangesDb(knownIds: string[] = [], dismissedIds: string[] = []): Promise<NotificationFeedItem[] | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    ${NOTIFICATION_FEED_CTE}
+    SELECT id, type, severity, source
+    FROM notification_feed
+    WHERE NOT (id = ANY($1::text[])) AND NOT (id = ANY($2::text[]))
+    ORDER BY type_rank ASC, id COLLATE "C" ASC
+  `, [knownIds, dismissedIds]);
+  return rows.map(notificationItemFromDbRow);
+}
+
+export async function getNotificationIdsDb(dismissedIds: string[] = []): Promise<string[] | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    ${NOTIFICATION_FEED_CTE}
+    SELECT id FROM notification_feed
+    WHERE NOT (id = ANY($1::text[]))
+    ORDER BY type_rank ASC, id COLLATE "C" ASC
+  `, [dismissedIds]);
+  return rows.map((row) => String(row.id));
+}
+
 export async function getNotificationPageDb(input: NotificationPageInput = {}): Promise<NotificationPageResult | null> {
   const pool = getPool();
   if (!pool) return null;
@@ -1000,29 +1049,7 @@ export async function getNotificationPageDb(input: NotificationPageInput = {}): 
   if (input.cursor && !cursor) throw new Error('cursor is invalid');
   const cursorType = cursor ? notificationTypeRank(cursor.type) : null;
   const { rows } = await pool.query(`
-    WITH notification_feed AS MATERIALIZED (
-      SELECT 'stock-' || p.id AS id, 'stock'::text AS type, 0::int AS type_rank,
-        CASE WHEN p.stock = 0 OR (p.stock > 0 AND p.stock <= p.threshold * 0.5) THEN 'critical' ELSE 'warning' END AS severity,
-        jsonb_build_object('name', p.name, 'stock', p.stock, 'threshold', p.threshold) AS source
-      FROM products p
-      WHERE p.deleted_at IS NULL AND (p.stock = 0 OR (p.stock > 0 AND p.stock <= p.threshold))
-      UNION ALL
-      SELECT 'order-pending-' || o.id, 'order', 1, 'info',
-        jsonb_build_object('reference', o.order_no, 'customer', COALESCE(o.customer_name, ''), 'total', o.total_amount, 'createdAt', o.created_at)
-      FROM orders o
-      WHERE o.deleted_at IS NULL AND o.order_status = 'processing'
-      UNION ALL
-      SELECT 'order-payment-' || o.id, 'order', 1, 'warning',
-        jsonb_build_object('reference', o.order_no, 'customer', COALESCE(o.customer_name, ''), 'total', o.total_amount,
-          'paidAmount', o.paid_amount, 'paymentStatus', o.payment_status, 'createdAt', o.created_at)
-      FROM orders o
-      WHERE o.deleted_at IS NULL AND o.order_status <> 'processing' AND o.payment_status IN ('unpaid', 'partial')
-      UNION ALL
-      SELECT 'delivery-transit-' || o.id, 'delivery', 2, 'info',
-        jsonb_build_object('reference', o.order_no, 'customer', COALESCE(o.customer_name, ''), 'deliveryAddress', o.delivery_address)
-      FROM orders o
-      WHERE o.deleted_at IS NULL AND o.order_status = 'in_transit'
-    ), visible AS MATERIALIZED (
+    ${NOTIFICATION_FEED_CTE}, visible AS MATERIALIZED (
       SELECT * FROM notification_feed WHERE NOT (id = ANY($2::text[]))
     ), filtered AS MATERIALIZED (
       SELECT * FROM visible WHERE NOT $3::boolean OR NOT (id = ANY($1::text[]))

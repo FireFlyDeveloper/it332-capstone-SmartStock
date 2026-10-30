@@ -7,7 +7,7 @@ vi.mock('./client.js', () => ({
 }));
 
 import { decodeNotificationCursor } from '../notifications/feed.js';
-import { getNotificationPageDb } from './postgresStore.js';
+import { getNotificationChangesDb, getNotificationIdsDb, getNotificationPageDb } from './postgresStore.js';
 
 describe('PostgreSQL Notifications cursor page', () => {
   beforeEach(() => {
@@ -54,6 +54,28 @@ describe('PostgreSQL Notifications cursor page', () => {
     const [sql, parameters] = database.query.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain('type_rank > $4::int');
     expect(parameters.slice(3)).toEqual([1, 'order-pending-o1', 26]);
+  });
+
+  it('queries notification deltas and ID baselines without hydrating complete stores', async () => {
+    database.query.mockResolvedValueOnce({ rows: [
+      { id: 'delivery-transit-o1', type: 'delivery', severity: 'info', source: { reference: 'SS-1', customer: 'Customer', deliveryAddress: null } },
+    ] }).mockResolvedValueOnce({ rows: [{ id: 'order-pending-o2' }, { id: 'stock-p3' }] });
+
+    const changes = await getNotificationChangesDb(['order-known'], ['stock-dismissed']);
+    expect(changes).toEqual([{
+      id: 'delivery-transit-o1', type: 'delivery', severity: 'info',
+      title: 'Out for Delivery: SS-1', message: 'En route to Customer (Destination).',
+      contextLabel: 'En route', link: '/delivery',
+    }]);
+    const [changesSql, changesParameters] = database.query.mock.calls[0] as [string, unknown[]];
+    expect(changesSql).toContain('FROM notification_feed');
+    expect(changesSql).toContain('NOT (id = ANY($1::text[])) AND NOT (id = ANY($2::text[]))');
+    expect(changesParameters).toEqual([['order-known'], ['stock-dismissed']]);
+
+    await expect(getNotificationIdsDb(['stock-dismissed'])).resolves.toEqual(['order-pending-o2', 'stock-p3']);
+    const [idsSql, idsParameters] = database.query.mock.calls[1] as [string, unknown[]];
+    expect(idsSql).toContain('SELECT id FROM notification_feed');
+    expect(idsParameters).toEqual([['stock-dismissed']]);
   });
 
   it('rejects invalid cursors before querying and handles an unavailable pool', async () => {

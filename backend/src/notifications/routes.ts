@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { requireAuth } from '../auth/middleware.js';
 import { isDbSyncActive } from '../db/syncState.js';
-import { getNotificationPageDb } from '../db/postgresStore.js';
+import { getNotificationChangesDb, getNotificationIdsDb, getNotificationPageDb } from '../db/postgresStore.js';
 import { listProducts } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import { buildNotificationFeed, listActiveNotificationIds, listNewNotificationItems, paginateNotificationFeed } from './feed.js';
@@ -15,7 +15,18 @@ function stringArray(value: unknown): string[] | null {
   return value as string[];
 }
 
-notificationRoutes.get('/', async (c) => c.json(buildNotificationFeed(listProducts(), listOrders())));
+notificationRoutes.get('/', async (c) => {
+  if (isDbSyncActive()) {
+    try {
+      const items = await getNotificationChangesDb();
+      if (!items) return c.json({ error: 'PostgreSQL is unavailable for notifications' }, 503);
+      return c.json(items);
+    } catch {
+      return c.json({ error: 'Could not load notifications from PostgreSQL' }, 503);
+    }
+  }
+  return c.json(buildNotificationFeed(listProducts(), listOrders()));
+});
 
 notificationRoutes.post('/page', async (c) => {
   let body: Record<string, unknown>;
@@ -70,6 +81,15 @@ notificationRoutes.post('/changes', async (c) => {
   const knownIds = stringArray(body.knownIds);
   const dismissedIds = stringArray(body.dismissedIds);
   if (!knownIds || !dismissedIds) return c.json({ error: 'knownIds and dismissedIds must be arrays of at most 10000 strings' }, 400);
+  if (isDbSyncActive()) {
+    try {
+      const items = await getNotificationChangesDb(knownIds, dismissedIds);
+      if (!items) return c.json({ error: 'PostgreSQL is unavailable for notifications' }, 503);
+      return c.json({ items });
+    } catch {
+      return c.json({ error: 'Could not load notification changes from PostgreSQL' }, 503);
+    }
+  }
   const dismissed = new Set(dismissedIds);
   const items = listNewNotificationItems(buildNotificationFeed(listProducts(), listOrders()), knownIds)
     .filter((item) => !dismissed.has(item.id));
@@ -85,6 +105,15 @@ notificationRoutes.post('/ids', async (c) => {
   }
   const dismissedIds = stringArray(body.dismissedIds);
   if (!dismissedIds) return c.json({ error: 'dismissedIds must be an array of at most 10000 strings' }, 400);
+  if (isDbSyncActive()) {
+    try {
+      const ids = await getNotificationIdsDb(dismissedIds);
+      if (!ids) return c.json({ error: 'PostgreSQL is unavailable for notifications' }, 503);
+      return c.json({ ids });
+    } catch {
+      return c.json({ error: 'Could not load notification IDs from PostgreSQL' }, 503);
+    }
+  }
   const feed = buildNotificationFeed(listProducts(), listOrders());
   return c.json({ ids: listActiveNotificationIds(feed, dismissedIds) });
 });
