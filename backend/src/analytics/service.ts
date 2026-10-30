@@ -6,7 +6,7 @@
  */
 
 import { isDbSyncActive } from '../db/syncState.js';
-import { getAnalyticsOrderSummaryDb, getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlySalesTrendDb, listRecentActivityDb } from '../db/postgresStore.js';
+import { getAnalyticsOrderSummaryDb, getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlySalesTrendDb, listOutboundMovementByUnitDb, listRecentActivityDb } from '../db/postgresStore.js';
 import { listProducts, listProductMovements } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import {
@@ -14,6 +14,7 @@ import {
   buildAnalyticsOrderSummary,
   buildDashboardOrderSummary,
   buildMonthlyOutboundQuantities,
+  buildOutboundMovementByUnit,
   buildMonthlySalesTrend,
   buildRecentActivity,
   classifyMovement,
@@ -96,6 +97,15 @@ export async function getAnnualPurchasesPage(year: number, limit: number, cursor
 
 export function getMovementClassification(threshold = 10) {
   return classifyMovement(buildMonthlyOutboundQuantities(listAllMovements()), threshold);
+}
+
+export async function getOutboundMovementByUnit(startAt: Date, endAt: Date) {
+  if (isDbSyncActive()) {
+    const rows = await listOutboundMovementByUnitDb(startAt, endAt);
+    if (!rows) throw new Error('PostgreSQL is unavailable for unit-separated outbound movement summary');
+    return rows;
+  }
+  return buildOutboundMovementByUnit(listAllMovements(), listProducts(), startAt, endAt);
 }
 
 export function getMonthlyItemMovementPage(

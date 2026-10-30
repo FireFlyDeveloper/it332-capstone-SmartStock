@@ -48,6 +48,9 @@ async function seedAiAnalyticsData() {
   const glass = await createProduct({ sku: 'AI-GLASS', name: 'AI Glass', category: 'glass', unit: 'sheet', stock: 3, price: 100, threshold: 5 });
   await recordInboundStock(glass.id, { quantity: 20, referenceNo: 'AI-PO-001', supplier: 'Supplier A', occurredAt: '2026-01-10T00:00:00.000Z' });
   await recordOutboundStock(glass.id, { quantity: 8, referenceNo: 'AI-SO-001', occurredAt: '2026-02-10T00:00:00.000Z' });
+  await createProduct({ sku: 'AI-GLASS-NO-HISTORY', name: 'AI Glass Without History', category: 'glass', unit: 'sheet', stock: 2, price: 100, threshold: 5 });
+  const aluminum = await createProduct({ sku: 'AI-ALUMINUM', name: 'AI Aluminum', category: 'aluminum', unit: 'pcs', stock: 10, price: 100, threshold: 5 });
+  await recordOutboundStock(aluminum.id, { quantity: 5, referenceNo: 'AI-SO-002', occurredAt: '2026-03-10T00:00:00.000Z' });
   const order = createOrder({
     referenceNumber: 'SS-2026-99001',
     customerName: 'Private Customer',
@@ -104,13 +107,17 @@ describe('AI insight fallback layer', () => {
 
     expect(first).toEqual(second);
     expect(first.source).toBe('fallback');
-    expect(first.summary).toContain('completed orders');
+    expect(first.summary).toContain('No sales were recorded in the earlier six-month period');
+    expect(first.summary).toContain('Rough next-month estimates');
     expect(first.recommendations).toHaveLength(3);
     expect(first.risks).toHaveLength(2);
-    expect(first.confidence).toBe('high');
+    expect(first.risks[1]).toContain('exclude 1 receipt');
+    expect(first.risks[1]).toContain('5 pcs');
+    expect(first.risks[1]).toContain('8 sheets');
+    expect(first.confidence).toBe('medium');
     const output = [first.summary, ...first.recommendations, ...first.risks].join(' ');
     expect(output).not.toMatch(/simple_exponential_smoothing|alpha|horizon|coverage|category\/unit groups|fast-moving threshold/i);
-    expect(output).toContain('pieces and square meters');
+    expect(output).toContain('different units');
   });
 
   it('rejects incomplete AI responses with missing required fields', () => {
@@ -128,20 +135,28 @@ describe('AI insight fallback layer', () => {
     });
   });
 
-  it('builds AI payloads from aggregate analytics without customer PII or secrets', async () => {
+  it('sends only final aggregate computations with explicit coverage, costs, and units', async () => {
     const payload = await buildSafeInsightPayload({ year: 2026, threshold: 5 });
     const serialized = JSON.stringify(payload);
 
+    expect(payload).toHaveProperty('sales.comparison.changePercent');
+    expect(payload.sales.orderCount).toBe(3);
+    expect(payload.sales.grossSales).toBe(900);
+    expect(payload.sales.monthsWithSales).toBe(3);
+    expect(payload.sales.comparison.direction).toBe('new_activity');
+    expect(payload.sales.comparison.recentGrossSales).toBe(900);
+    expect(payload.sales.comparison.changePercent).toBeNull();
+    expect(payload.sales.period.months).toBe(12);
     expect(payload.forecast).toMatchObject({
-      method: 'simple_exponential_smoothing', alpha: 0.3, horizonMonths: 1,
-      coverage: { coveredProducts: 1, totalProducts: 1, coveredGroups: 1, totalGroups: 1 },
-      groups: [{ category: 'glass', unit: 'sheet', history: expect.arrayContaining([
-        { month: expect.any(String), quantity: 2 }, { month: expect.any(String), quantity: 4 }, { month: expect.any(String), quantity: 3 },
-      ]), forecastQuantity: expect.any(Number), coveredProducts: 1, totalProducts: 1 }],
+      targetPeriod: 'next month', productsWithEstimate: 1, totalProducts: 3, productsWithoutEstimate: 2,
+      estimatesByUnit: [{ unit: 'sheet', quantity: expect.any(Number) }],
     });
-    const historyQuantities = payload.forecast.groups[0].history.map((row) => row.quantity);
-    const expectedForecast = historyQuantities.slice(1).reduce((forecast, quantity) => 0.3 * quantity + 0.7 * forecast, historyQuantities[0]);
-    expect(payload.forecast.groups[0].forecastQuantity).toBe(Math.round(expectedForecast * 100) / 100);
+    expect(payload.purchases).toMatchObject({ recordedCost: 0, pricedReceipts: 0, unpricedReceipts: 1 });
+    expect(payload.movement.outboundByUnit).toEqual([
+      { unit: 'pcs', quantity: 5, movementCount: 1 },
+      { unit: 'sheet', quantity: 8, movementCount: 1 },
+    ]);
+
     expect(serialized).not.toContain('Private Customer');
     expect(serialized).not.toContain('secret-phone');
     expect(serialized).not.toContain('secret-address');
@@ -152,8 +167,12 @@ describe('AI insight fallback layer', () => {
     expect(serialized).not.toContain('Barangay Hidden');
     expect(serialized).not.toContain('Bearer ');
     expect(serialized).not.toContain('HERMES_API_KEY');
-    expect(serialized).toContain('salesTrends');
-    expect(serialized).toContain('movement');
+    expect(serialized).not.toContain('"history":');
+    expect(serialized).not.toContain('"supplier":');
+    expect(serialized).not.toContain('"productId":');
+    expect(serialized).not.toContain('"sku":');
+    expect(serialized).not.toContain('"category":');
+    expect(serialized).not.toContain('"month":');
   });
 
   it('calls the configured Hermes profile with only aggregate JSON and validates its response', async () => {
@@ -161,10 +180,10 @@ describe('AI insight fallback layer', () => {
     process.env.HERMES_API_BASE_URL = 'http://172.29.0.1:8643/v1';
     process.env.HERMES_MODEL = 'smartstockanalytics';
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
-      summary: 'Sales are recorded in one month, so there is not enough information to see a pattern.',
-      recommendations: ['Check stock for each product before placing another order.'],
-      risks: ['There is not enough sales history for a reliable estimate.'],
-      confidence: 'low',
+      summary: 'Gross sales are higher in the latest six months, with a rough estimate for one of three products.',
+      recommendations: ['Check each product’s current stock before ordering.'],
+      risks: ['Some products lack enough recent sales history for estimates.'],
+      confidence: 'medium',
     }) } }] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -181,12 +200,17 @@ describe('AI insight fallback layer', () => {
     expect(requestBody.tool_choice).toBe('none');
     expect(requestBody.messages[0].content).toContain('Speak plainly to a shop owner');
     expect(requestBody.messages[1].content).toContain('ordinary person can understand');
+    expect(requestBody.messages[1].content).toContain('Use the supplied sales direction');
+    expect(requestBody.messages[1].content).toContain('cost total is incomplete and excludes those receipts');
+    expect(requestBody.messages[1].content).toContain('unit-specific movement');
     expect(requestBody.messages[1].content).not.toContain('Report its method, alpha, horizon, and coverage accurately');
+    expect(requestBody.messages[1].content).not.toContain('"history":');
+    expect(requestBody.messages[1].content).not.toContain('"productId":');
     expect(requestBody.messages[1].content).not.toContain('Private Customer');
     expect(requestBody.messages[1].content).not.toContain('secret-phone');
     expect(requestBody.messages[1].content).not.toContain('secret-address');
     expect(result.source).toBe('hermes');
-    expect(result.summary).toContain('not enough information');
+    expect(result.summary).toContain('higher in the latest six months');
   });
 
   it('falls back after an Hermes request or response validation failure', async () => {
@@ -199,7 +223,7 @@ describe('AI insight fallback layer', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.source).toBe('fallback');
-    expect(result.summary).toContain('completed orders');
+    expect(result.summary).toContain('No sales were recorded in the earlier six-month period');
   });
 
   it('rejects public plain-HTTP Hermes endpoints before making a network call', async () => {

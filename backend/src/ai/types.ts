@@ -24,30 +24,47 @@ export interface InsightRequestOptions {
   threshold?: number;
 }
 
-export interface SafeDemandForecastGroup {
-  category: string;
-  unit: string;
-  history: Array<{ month: string; quantity: number }>;
-  forecastQuantity: number | null;
-  coveredProducts: number;
-  totalProducts: number;
+export type SalesDirection = 'rising' | 'falling' | 'steady' | 'new_activity' | 'no_sales' | 'insufficient_data';
+
+export interface SafeSalesSummary {
+  period: { startMonth: string | null; endMonth: string | null; months: number };
+  orderCount: number;
+  grossSales: number;
+  monthsWithSales: number;
+  comparison: {
+    previousMonths: number;
+    recentMonths: number;
+    previousGrossSales: number;
+    recentGrossSales: number;
+    changePercent: number | null;
+    direction: SalesDirection;
+  };
+}
+
+export interface SafePurchaseSummary {
+  year: number;
+  recordedCost: number;
+  pricedReceipts: number;
+  unpricedReceipts: number;
+}
+
+export interface SafeMovementSummary {
+  period: { startDate: string; endDate: string; months: number };
+  outboundByUnit: Array<{ unit: string; quantity: number; movementCount: number }>;
 }
 
 export interface SafeDemandForecast {
-  method: 'simple_exponential_smoothing';
-  alpha: number;
-  horizonMonths: number;
-  historyMonths: number;
-  coverage: { coveredProducts: number; totalProducts: number; coveredGroups: number; totalGroups: number };
-  groups: SafeDemandForecastGroup[];
+  targetPeriod: 'next month';
+  productsWithEstimate: number;
+  totalProducts: number;
+  productsWithoutEstimate: number;
+  estimatesByUnit: Array<{ unit: string; quantity: number }>;
 }
 
 export interface SafeInsightPayload {
-  generatedAt: string;
   year: number;
-  threshold: number;
-  salesTrends: unknown;
-  annualPurchases: unknown;
-  movement: unknown;
+  sales: SafeSalesSummary;
+  purchases: SafePurchaseSummary;
+  movement: SafeMovementSummary;
   forecast: SafeDemandForecast;
 }

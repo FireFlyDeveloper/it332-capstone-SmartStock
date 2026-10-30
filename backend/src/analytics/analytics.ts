@@ -481,6 +481,37 @@ export function buildMonthlyOutboundQuantities(movements: StockMovement[]): Mont
   return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
 }
 
+export interface OutboundMovementByUnit {
+  unit: string;
+  quantity: number;
+  movementCount: number;
+}
+
+export function buildOutboundMovementByUnit(
+  movements: StockMovement[],
+  products: Product[],
+  startAt: Date,
+  endAt: Date,
+): OutboundMovementByUnit[] {
+  if (!Number.isFinite(startAt.getTime()) || !Number.isFinite(endAt.getTime()) || startAt >= endAt) {
+    throw new Error('movement summary requires a valid increasing date range');
+  }
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const byUnit = new Map<string, OutboundMovementByUnit>();
+  for (const movement of movements) {
+    if (movement.type !== 'outbound') continue;
+    const occurredAt = Date.parse(movement.occurredAt);
+    if (!Number.isFinite(occurredAt) || occurredAt < startAt.getTime() || occurredAt >= endAt.getTime()) continue;
+    const rawUnit = productById.get(movement.productId)?.unit?.trim();
+    const unit = rawUnit || 'unknown';
+    const current = byUnit.get(unit) ?? { unit, quantity: 0, movementCount: 0 };
+    current.quantity += movement.quantity;
+    current.movementCount += 1;
+    byUnit.set(unit, current);
+  }
+  return [...byUnit.values()].sort((left, right) => left.unit.localeCompare(right.unit));
+}
+
 export function classifyMovement(monthlyMovements: MonthlyQuantity[], threshold = 10): MovementClassificationRow[] {
   if (!Number.isFinite(threshold) || threshold < 0) throw new Error('threshold must be a non-negative number');
   return [...monthlyMovements]

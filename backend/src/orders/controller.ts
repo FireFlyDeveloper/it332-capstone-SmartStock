@@ -38,8 +38,7 @@ function parseOrdersCursor(value: string | undefined): { createdAt: string; id: 
     if (typeof parsed !== 'object' || parsed === null) return false;
     const cursor = parsed as Record<string, unknown>;
     if (typeof cursor.createdAt !== 'string' || !Number.isFinite(Date.parse(cursor.createdAt))
-      || typeof cursor.id !== 'string'
-      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cursor.id)) return false;
+      || typeof cursor.id !== 'string' || cursor.id.length === 0 || Array.from(cursor.id).length > 64) return false;
     return { createdAt: cursor.createdAt, id: cursor.id };
   } catch {
     return false;

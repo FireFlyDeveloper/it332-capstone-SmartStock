@@ -15,7 +15,7 @@ import { dailySalesRoutes } from '../dailySales/routes.js';
 import { inventoryRoutes } from '../inventory/routes.js';
 import { analyticsRoutes } from '../analytics/routes.js';
 import { reportsRoutes } from '../reports/routes.js';
-import { _resetOrderStore, listOrders } from './store.js';
+import { _hydrateOrders, _resetOrderStore, listOrders } from './store.js';
 import { _resetInventoryStore, findProductById } from '../inventory/store.js';
 
 function buildApp() {
@@ -112,6 +112,30 @@ describe('order routes', () => {
     expect((await app.request('/orders/page?from=2026-02-30', { headers })).status).toBe(400);
     expect((await app.request('/orders/page?from=2026-11-01&to=2026-10-01', { headers })).status).toBe(400);
     expect((await app.request('/orders/page?cursor=not-a-cursor', { headers })).status).toBe(400);
+    const oversizedIdCursor = Buffer.from(JSON.stringify({ createdAt: '2026-01-01T00:00:00.000Z', id: 'x'.repeat(65) })).toString('base64url');
+    expect((await app.request(`/orders/page?cursor=${oversizedIdCursor}`, { headers })).status).toBe(400);
+  });
+
+  it('accepts application-generated varchar IDs in pagination cursors', async () => {
+    const token = await login(app, STAFF);
+    const headers = { authorization: 'Bearer ' + token };
+    _hydrateOrders(listOrders().map((order, index) => ({
+      ...order,
+      id: `ORD-TEST-${String(index + 1).padStart(4, '0')}`,
+    })));
+
+    const first = await app.request('/orders/page?limit=1&status=all', { headers });
+    expect(first.status).toBe(200);
+    const firstBody = await first.json();
+    expect(firstBody.page.hasMore).toBe(true);
+    const cursor = JSON.parse(Buffer.from(firstBody.page.nextCursor, 'base64url').toString('utf8'));
+    expect(cursor.id).toMatch(/^ORD-TEST-/);
+
+    const second = await app.request(`/orders/page?limit=1&status=all&cursor=${encodeURIComponent(firstBody.page.nextCursor)}`, { headers });
+    expect(second.status).toBe(200);
+    const secondBody = await second.json();
+    expect(secondBody.orders).toHaveLength(1);
+    expect(secondBody.orders[0].id).not.toBe(firstBody.orders[0].id);
   });
 
   it('gets an order by id and reference number for authenticated staff', async () => {

@@ -9,7 +9,7 @@ import { getPool } from './client.js';
 import { hasDatabaseUrl } from './config.js';
 import { setDbSyncActive } from './syncState.js';
 
-import type { AnalyticsOrderSummary, RecentActivityRecord } from '../analytics/analytics.js';
+import type { AnalyticsOrderSummary, OutboundMovementByUnit, RecentActivityRecord } from '../analytics/analytics.js';
 import { decodeNotificationCursor, encodeNotificationCursor, notificationTypeRank, type NotificationFeedItem, type NotificationPageInput, type NotificationPageResult } from '../notifications/feed.js';
 import type { InventoryPolicyEvent, Product, ProductCreateInput, ProductUpdateInput, StockMovement, StockMovementInput } from '../inventory/store.js';
 import type { Order, OrderCreateInput, OrderUpdateInput, PaymentStatus, RefundType } from '../orders/store.js';
@@ -592,6 +592,26 @@ export async function listAllMovementsDb(): Promise<StockMovement[]> {
     occurredAt: new Date(r.occurredAt as string | Date).toISOString(),
     createdBy: String(r.createdBy),
     unitCost: r.unit_cost === null || r.unit_cost === undefined ? undefined : Number(r.unit_cost),
+  }));
+}
+
+export async function listOutboundMovementByUnitDb(startAt: Date, endAt: Date): Promise<OutboundMovementByUnit[] | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    SELECT COALESCE(NULLIF(BTRIM(p.unit), ''), 'unknown') AS unit,
+      COALESCE(SUM(m.quantity), 0)::numeric AS quantity,
+      COUNT(*)::int AS movement_count
+    FROM stock_movements m
+    LEFT JOIN products p ON p.id = m.product_id AND p.deleted_at IS NULL
+    WHERE m.type = 'outbound' AND m.occurred_at >= $1 AND m.occurred_at < $2
+    GROUP BY 1
+    ORDER BY COALESCE(NULLIF(BTRIM(p.unit), ''), 'unknown') COLLATE "C"
+  `, [startAt, endAt]);
+  return rows.map((row) => ({
+    unit: String(row.unit),
+    quantity: Number(row.quantity ?? 0),
+    movementCount: Number(row.movement_count ?? 0),
   }));
 }
 
