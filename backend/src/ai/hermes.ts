@@ -53,13 +53,12 @@ export async function callHermesInsight(
 ): Promise<AiInsightContent> {
   const baseUrl = assertSafeBaseUrl(config.baseUrl);
   const endpoint = new URL('chat/completions', `${baseUrl.toString().replace(/\/+$/, '')}/`).toString();
-  const idempotencyKey = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
   const body = {
     model: config.model,
     messages: [
       {
         role: 'system',
-        content: 'Interpret only the aggregate SmartStock analytics supplied by the user. Do not call tools or request identifying records. Return only valid JSON with summary, recommendations, risks, and confidence.',
+        content: 'Interpret only the aggregate SmartStock analytics supplied in the request. Speak plainly to a shop owner: use everyday words, short sentences, and practical advice. Avoid technical terms and internal calculation details. Do not invent facts, combine quantities with different units, call an unclear quantity “units,” or make product-level claims from a monthly total. Do not call tools or request identifying records. Return only valid JSON with summary, recommendations, risks, and confidence.',
       },
       { role: 'user', content: buildInsightPrompt(payload as SafeInsightPayload) },
     ],
@@ -68,6 +67,7 @@ export async function callHermesInsight(
     tools: [],
     tool_choice: 'none',
   };
+  const idempotencyKey = createHash('sha256').update(JSON.stringify(body)).digest('hex');
 
   const response = await fetchImpl(endpoint, {
     method: 'POST',

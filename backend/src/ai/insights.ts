@@ -90,26 +90,42 @@ export async function buildSafeInsightPayload(options: InsightRequestOptions = {
 
 export function generateFallbackInsight(payload: SafeInsightPayload): AiInsightContent {
   const salesTrends = payload.salesTrends as Array<{ month: string; grossSales: number; transactionCount: number }>;
-  const movement = payload.movement as Array<{ month: string; quantity: number; classification: string }>;
-  const purchases = payload.annualPurchases as Array<{ materialType: string; supplier: string; totalQuantity: number }>;
-  const totalSales = salesTrends.reduce((sum, item) => sum + item.grossSales, 0);
   const totalTransactions = salesTrends.reduce((sum, item) => sum + item.transactionCount, 0);
-  const fastMonths = movement.filter((item) => item.classification === 'fast_moving');
-  const topPurchase = [...purchases].sort((a, b) => b.totalQuantity - a.totalQuantity)[0];
+  const salesMonths = salesTrends.length;
+  const { coveredProducts, totalProducts } = payload.forecast.coverage;
+  const insufficientProducts = Math.max(0, totalProducts - coveredProducts);
+
+  const orderWord = totalTransactions === 1 ? 'order' : 'orders';
+  const summary = salesMonths === 0
+    ? `No completed sales are recorded for ${payload.year}, so there is not enough information to spot a sales pattern.`
+    : salesMonths === 1
+      ? `The report includes ${totalTransactions} completed ${orderWord}, but sales are recorded in only one month. That is not enough to tell whether sales are rising or falling.`
+      : `The report includes ${totalTransactions} completed ${orderWord} across ${salesMonths} months. Check later sales before assuming this pattern will continue.`;
+
+  const insufficientHistoryRisk = insufficientProducts === 1
+    ? 'One product does not have enough past sales for an estimate yet.'
+    : `${insufficientProducts} products do not have enough past sales for estimates yet.`;
 
   return {
-    summary: `SmartStock analytics for ${payload.year} show ${totalTransactions} completed sales transactions with gross sales of ${totalSales}. ${fastMonths.length} month(s) met the fast-moving threshold of ${payload.threshold}.`,
+    summary,
     recommendations: [
-      fastMonths.length > 0 ? 'Prioritize replenishment planning for fast-moving inventory months.' : 'Continue monitoring movement because no month exceeded the fast-moving threshold.',
-      topPurchase ? `Review purchasing plans for ${topPurchase.materialType} from ${topPurchase.supplier}.` : 'Add purchase history before making supplier recommendations.',
-      `Forecast: ${payload.forecast.method} (alpha ${payload.forecast.alpha}, ${payload.forecast.horizonMonths}-month horizon) covers ${payload.forecast.coverage.coveredProducts} of ${payload.forecast.coverage.totalProducts} products and ${payload.forecast.coverage.coveredGroups} of ${payload.forecast.coverage.totalGroups} category/unit groups.`,
-      'Interpret the statistical forecast as a planning signal; do not describe it as an AI-generated prediction.',
+      'Check each product’s current stock before placing another order.',
+      'Keep recording completed sales over more months so the sales estimates have better information.',
+      'Keep pieces and square meters separate when comparing amounts.',
     ],
     risks: [
-      'Low stock on fast-moving materials can delay fulfillment.',
-      'Sparse historical data can reduce forecast reliability.',
+      salesMonths < 3
+        ? 'There are not enough months of sales records to show a reliable pattern.'
+        : 'Past sales may not match what customers need next, so check current stock before ordering.',
+      insufficientProducts > 0
+        ? insufficientHistoryRisk
+        : 'Sales estimates are based on past orders and may not match future demand.',
     ],
-    confidence: salesTrends.length > 0 && movement.length > 0 ? 'medium' : 'low',
+    confidence: salesMonths < 3 || coveredProducts === 0
+      ? 'low'
+      : coveredProducts < totalProducts
+        ? 'medium'
+        : 'high',
   };
 }
 

@@ -45,11 +45,12 @@ function formatStockCheck(value: DemandForecastProduct['policyAssessment']): str
 
 function simplifyInsightText(text: string): string {
   return text
+    .replace(/\bsimple exponential smoothing\s*(?:\(\s*SES\s*\))?\s*(?:demand\s+)?forecast\b/gi, 'sales estimate based on past orders')
+    .replace(/\bsimple exponential smoothing\b/gi, 'sales estimate method')
     .replace(/\baggregated\b/gi, 'combined')
     .replace(/\baggregates\b/gi, 'overall totals')
     .replace(/\baggregate\b/gi, 'overall')
-    .replace(/\bsimple exponential smoothing\b/gi, 'a method based on recent sales')
-    .replace(/\bSES\b/g, 'sales estimate')
+    .replace(/\bSES\b/gi, 'sales estimate')
     .replace(/\breorder points\b/gi, 'restock levels')
     .replace(/\breorder point\b/gi, 'restock level')
     .replace(/\breorder thresholds\b/gi, 'restock levels')

@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { Hono } from 'hono';
 import { authRoutes } from '../auth/routes.js';
 import { createUser, _resetUserStore, type Role } from '../auth/users.js';
@@ -103,12 +104,13 @@ describe('AI insight fallback layer', () => {
 
     expect(first).toEqual(second);
     expect(first.source).toBe('fallback');
-    expect(first.summary).toContain('SmartStock analytics');
-    expect(first.recommendations.length).toBeGreaterThan(0);
-    expect(first.risks.length).toBeGreaterThan(0);
-    expect(first.confidence).toBe('medium');
-    expect(first.recommendations.some((item) => item.includes('simple_exponential_smoothing (alpha 0.3, 1-month horizon) covers 1 of 1 products and 1 of 1 category/unit groups.'))).toBe(true);
-    expect(first.recommendations).toContain('Interpret the statistical forecast as a planning signal; do not describe it as an AI-generated prediction.');
+    expect(first.summary).toContain('completed orders');
+    expect(first.recommendations).toHaveLength(3);
+    expect(first.risks).toHaveLength(2);
+    expect(first.confidence).toBe('high');
+    const output = [first.summary, ...first.recommendations, ...first.risks].join(' ');
+    expect(output).not.toMatch(/simple_exponential_smoothing|alpha|horizon|coverage|category\/unit groups|fast-moving threshold/i);
+    expect(output).toContain('pieces and square meters');
   });
 
   it('rejects incomplete AI responses with missing required fields', () => {
@@ -159,10 +161,10 @@ describe('AI insight fallback layer', () => {
     process.env.HERMES_API_BASE_URL = 'http://172.29.0.1:8643/v1';
     process.env.HERMES_MODEL = 'smartstockanalytics';
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
-      summary: 'Aggregate sales increased over the sampled months.',
-      recommendations: ['Review replenishment timing for fast-moving categories.'],
-      risks: ['Sparse history limits confidence in the SES estimate.'],
-      confidence: 'medium',
+      summary: 'Sales are recorded in one month, so there is not enough information to see a pattern.',
+      recommendations: ['Check stock for each product before placing another order.'],
+      risks: ['There is not enough sales history for a reliable estimate.'],
+      confidence: 'low',
     }) } }] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -172,16 +174,19 @@ describe('AI insight fallback layer', () => {
     const [endpoint, init] = fetchMock.mock.calls[0];
     expect(endpoint).toBe('http://172.29.0.1:8643/v1/chat/completions');
     expect(init.headers.authorization).toBe('Bearer test-hermes-api-key');
-    expect(init.headers['idempotency-key']).toMatch(/^smartstock-[a-f0-9]{64}$/);
     const requestBody = JSON.parse(init.body);
+    expect(init.headers['idempotency-key']).toBe(`smartstock-${createHash('sha256').update(JSON.stringify(requestBody)).digest('hex')}`);
     expect(requestBody.model).toBe('smartstockanalytics');
     expect(requestBody.tools).toEqual([]);
     expect(requestBody.tool_choice).toBe('none');
+    expect(requestBody.messages[0].content).toContain('Speak plainly to a shop owner');
+    expect(requestBody.messages[1].content).toContain('ordinary person can understand');
+    expect(requestBody.messages[1].content).not.toContain('Report its method, alpha, horizon, and coverage accurately');
     expect(requestBody.messages[1].content).not.toContain('Private Customer');
     expect(requestBody.messages[1].content).not.toContain('secret-phone');
     expect(requestBody.messages[1].content).not.toContain('secret-address');
     expect(result.source).toBe('hermes');
-    expect(result.summary).toContain('Aggregate sales increased');
+    expect(result.summary).toContain('not enough information');
   });
 
   it('falls back after an Hermes request or response validation failure', async () => {
@@ -194,7 +199,7 @@ describe('AI insight fallback layer', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.source).toBe('fallback');
-    expect(result.summary).toContain('SmartStock analytics');
+    expect(result.summary).toContain('completed orders');
   });
 
   it('rejects public plain-HTTP Hermes endpoints before making a network call', async () => {
