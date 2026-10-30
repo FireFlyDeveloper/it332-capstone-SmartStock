@@ -22,7 +22,24 @@ export interface AiInsight extends AiInsightContent {
 export interface InsightRequestOptions {
   year?: number;
   threshold?: number;
-  forecastQuantities?: number[];
+}
+
+export interface SafeDemandForecastGroup {
+  category: string;
+  unit: string;
+  history: Array<{ month: string; quantity: number }>;
+  forecastQuantity: number | null;
+  coveredProducts: number;
+  totalProducts: number;
+}
+
+export interface SafeDemandForecast {
+  method: 'simple_exponential_smoothing';
+  alpha: number;
+  horizonMonths: number;
+  historyMonths: number;
+  coverage: { coveredProducts: number; totalProducts: number; coveredGroups: number; totalGroups: number };
+  groups: SafeDemandForecastGroup[];
 }
 
 export interface SafeInsightPayload {
@@ -32,5 +49,5 @@ export interface SafeInsightPayload {
   salesTrends: unknown;
   annualPurchases: unknown;
   movement: unknown;
-  forecast: unknown;
+  forecast: SafeDemandForecast;
 }

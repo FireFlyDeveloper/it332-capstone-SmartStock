@@ -15,12 +15,13 @@ import {
   getDashboardOrderSummary,
   getForecast,
   getMovementClassification,
+  getMonthlyItemMovementPage,
   getRecentActivity,
   getSalesTrends,
   getDemandForecast,
   getDemandForecastPage,
 } from './service.js';
-import type { AnnualPurchaseCursor, DashboardSalesRange, DemandForecastCursor } from './analytics.js';
+import type { AnnualPurchaseCursor, DashboardSalesRange, DemandForecastCursor, MonthlyItemMovementCursor } from './analytics.js';
 
 export const analyticsRoutes = new Hono();
 
@@ -155,6 +156,44 @@ analyticsRoutes.get('/movement', requireRole('admin'), (c) => {
     return c.json({ error: 'threshold must be a non-negative number' }, 400);
   }
   return c.json(getMovementClassification(threshold));
+});
+
+analyticsRoutes.get('/movement/items', requireRole('admin'), (c) => {
+  const rawMonth = c.req.query('month');
+  const month = rawMonth ?? new Date().toISOString().slice(0, 7);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return c.json({ error: 'month must be YYYY-MM' }, 400);
+
+  const rawThreshold = c.req.query('threshold');
+  const threshold = rawThreshold === undefined ? 10 : Number(rawThreshold);
+  if (!Number.isFinite(threshold) || threshold < 0) return c.json({ error: 'threshold must be a non-negative number' }, 400);
+
+  const rawLimit = c.req.query('limit');
+  const limit = rawLimit === undefined ? 25 : Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) return c.json({ error: 'limit must be an integer between 1 and 100' }, 400);
+
+  let cursor: MonthlyItemMovementCursor | null = null;
+  const rawCursor = c.req.query('cursor');
+  if (rawCursor !== undefined) {
+    if (rawCursor.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(rawCursor)) return c.json({ error: 'cursor is invalid' }, 400);
+    try {
+      const decoded = Buffer.from(rawCursor, 'base64url').toString('utf8');
+      if (Buffer.from(decoded, 'utf8').toString('base64url') !== rawCursor) return c.json({ error: 'cursor is invalid' }, 400);
+      const parsed = JSON.parse(decoded) as Record<string, unknown>;
+      if (typeof parsed.name !== 'string' || parsed.name.length > 200
+        || typeof parsed.productId !== 'string' || parsed.productId.length < 1 || parsed.productId.length > 64) {
+        return c.json({ error: 'cursor is invalid' }, 400);
+      }
+      cursor = { name: parsed.name, productId: parsed.productId };
+    } catch {
+      return c.json({ error: 'cursor is invalid' }, 400);
+    }
+  }
+
+  const result = getMonthlyItemMovementPage(month, threshold, limit, cursor);
+  const nextCursor = result.page.nextCursor
+    ? Buffer.from(JSON.stringify(result.page.nextCursor)).toString('base64url')
+    : null;
+  return c.json({ ...result, page: { ...result.page, nextCursor } });
 });
 
 analyticsRoutes.get('/insights', requireRole('admin'), async (c) => {

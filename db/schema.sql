@@ -259,6 +259,8 @@ CREATE INDEX IF NOT EXISTS idx_stock_movements_branch   ON stock_movements (bran
 CREATE INDEX IF NOT EXISTS idx_stock_movements_product  ON stock_movements (product_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_type     ON stock_movements (movement_type);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_ref      ON stock_movements (reference_no);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_stock_movements_reference_normalized
+  ON stock_movements (UPPER(BTRIM(reference_no)));
 
 -- -----------------------------------------------------------------
 -- Materialized view: low-stock products (fast dashboard read)

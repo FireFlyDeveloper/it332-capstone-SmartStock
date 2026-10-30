@@ -79,6 +79,22 @@ describe('inventory PostgreSQL movement transactions', () => {
     expect(database.release).toHaveBeenCalledOnce();
   });
 
+  it('rolls back the stock update when the durable normalized-reference constraint rejects a duplicate', async () => {
+    const duplicateError = Object.assign(new Error('duplicate key'), { code: '23505' });
+    database.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ ...productRow, stock: '14' }] })
+      .mockRejectedValueOnce(duplicateError)
+      .mockResolvedValueOnce({ rows: [] });
+
+    await expect(recordInboundStockDb('product-1', { ...movementInput, id: 'movement-duplicate' }))
+      .rejects.toMatchObject({ code: '23505' });
+    expect(database.query.mock.calls.map(([sql]) => String(sql).trim().split(/\s+/)[0])).toEqual([
+      'BEGIN', 'UPDATE', 'INSERT', 'ROLLBACK',
+    ]);
+    expect(database.release).toHaveBeenCalledOnce();
+  });
+
   it('locks outbound stock before decrementing and records the movement in the same transaction', async () => {
     database.query
       .mockResolvedValueOnce({ rows: [] })

@@ -21,6 +21,8 @@ import {
   buildDemandForecast,
   paginateDemandForecast,
   classifyMovement,
+  buildMonthlyItemMovementClassification,
+  paginateMonthlyItemMovement,
   simpleExponentialSmoothingForecast,
 } from './analytics.js';
 
@@ -205,6 +207,41 @@ describe('analytics pure functions', () => {
     ]);
   });
 
+  it('classifies monthly movement by product, includes zero-activity items, and ignores inbound receipts', () => {
+    const products = [
+      { id: 'P1', sku: 'S-1', name: 'Glass', category: 'glass' as const, unit: 'sheet', stock: 10, price: 100, threshold: 2, status: 'active' as const },
+      { id: 'P2', sku: 'S-2', name: 'Aluminum', category: 'aluminum' as const, unit: 'length', stock: 10, price: 100, threshold: 2, status: 'active' as const },
+      { id: 'P3', sku: 'S-3', name: 'Unused', category: 'glass' as const, unit: 'sheet', stock: 10, price: 100, threshold: 2, status: 'discontinued' as const },
+    ];
+    const movements = [
+      { id: 'M1', productId: 'P1', type: 'outbound' as const, quantity: 6, referenceNo: 'SO-1', occurredAt: '2026-03-01T00:30:00+02:00', createdBy: 'test' },
+      { id: 'M2', productId: 'P1', type: 'outbound' as const, quantity: 1, referenceNo: 'SO-2', occurredAt: '2026-02-10T00:00:00.000Z', createdBy: 'test' },
+      { id: 'M3', productId: 'P1', type: 'inbound' as const, quantity: 99, referenceNo: 'PO-1', occurredAt: '2026-02-11T00:00:00.000Z', createdBy: 'test' },
+      { id: 'M4', productId: 'P2', type: 'outbound' as const, quantity: 4, referenceNo: 'SO-3', occurredAt: '2026-03-01T00:00:00.000Z', createdBy: 'test' },
+    ];
+
+    expect(buildMonthlyItemMovementClassification(movements, products, '2026-02', 5)).toEqual([
+      { month: '2026-02', productId: 'P2', name: 'Aluminum', sku: 'S-2', category: 'aluminum', unit: 'length', status: 'active', quantity: 0, threshold: 5, classification: 'slow_moving' },
+      { month: '2026-02', productId: 'P1', name: 'Glass', sku: 'S-1', category: 'glass', unit: 'sheet', status: 'active', quantity: 7, threshold: 5, classification: 'fast_moving' },
+      { month: '2026-02', productId: 'P3', name: 'Unused', sku: 'S-3', category: 'glass', unit: 'sheet', status: 'discontinued', quantity: 0, threshold: 5, classification: 'slow_moving' },
+    ]);
+  });
+
+  it('paginates monthly product movement with full-set classification totals', () => {
+    const rows = [
+      { month: '2026-02', productId: 'P1', name: 'Alpha', sku: 'A', category: 'glass' as const, unit: 'sheet', status: 'active' as const, quantity: 8, threshold: 5, classification: 'fast_moving' as const },
+      { month: '2026-02', productId: 'P2', name: 'Beta', sku: 'B', category: 'aluminum' as const, unit: 'length', status: 'active' as const, quantity: 0, threshold: 5, classification: 'slow_moving' as const },
+      { month: '2026-02', productId: 'P3', name: 'Gamma', sku: 'C', category: 'glass' as const, unit: 'sheet', status: 'active' as const, quantity: 2, threshold: 5, classification: 'slow_moving' as const },
+    ];
+    const first = paginateMonthlyItemMovement(rows, 2, null);
+    expect(first.rows.map((row) => row.productId)).toEqual(['P1', 'P2']);
+    expect(first.summary).toEqual({ productCount: 3, fastMovingCount: 1, slowMovingCount: 2, outboundByUnit: [{ unit: 'sheet', quantity: 10 }] });
+    expect(first.page).toMatchObject({ totalCount: 3, hasMore: true, nextCursor: { name: 'Beta', productId: 'P2' } });
+    const second = paginateMonthlyItemMovement(rows, 2, first.page.nextCursor);
+    expect(second.rows.map((row) => row.productId)).toEqual(['P3']);
+    expect(second.page).toMatchObject({ totalCount: 3, hasMore: false, nextCursor: null });
+  });
+
   it('builds UTC-complete-month demand, excludes non-delivered orders, and assesses current policy', () => {
     _resetOrderStore(false);
     const product = { id: 'P1', sku: 'S-1', name: 'Part', category: 'glass' as const, unit: 'sheet', stock: 4, price: 99, threshold: 5, status: 'active' as const };
@@ -292,6 +329,7 @@ describe('analytics routes', () => {
       { path: '/analytics/purchases/page' },
       { path: '/analytics/purchases' },
       { path: '/analytics/movement' },
+      { path: '/analytics/movement/items' },
       { path: '/analytics/insights' },
       { path: '/analytics/forecast', method: 'POST' },
     ];
@@ -442,6 +480,34 @@ describe('analytics routes', () => {
     expect(await res.json()).toEqual([
       { month: '2026-02', quantity: 9, classification: 'fast_moving' },
     ]);
+  });
+
+  it('returns paginated per-product movement classification for a selected month', async () => {
+    const token = await login(app, ADMIN);
+    const headers = { authorization: 'Bearer ' + token };
+    const first = await app.request('/analytics/movement/items?month=2026-02&threshold=5&limit=1', { headers });
+    expect(first.status).toBe(200);
+    const firstPage = await first.json() as {
+      rows: Array<{ name: string; productId: string; quantity: number; classification: string }>;
+      summary: { productCount: number; fastMovingCount: number; slowMovingCount: number; outboundByUnit: Array<{ unit: string; quantity: number }> };
+      page: { totalCount: number; hasMore: boolean; nextCursor: string | null };
+    };
+    expect(firstPage.rows).toMatchObject([{ name: 'Analytics Aluminum', quantity: 2, classification: 'slow_moving' }]);
+    expect(firstPage.summary).toEqual({ productCount: 2, fastMovingCount: 1, slowMovingCount: 1, outboundByUnit: [{ unit: 'length', quantity: 2 }, { unit: 'sheet', quantity: 7 }] });
+    expect(firstPage.page).toMatchObject({ totalCount: 2, hasMore: true });
+    expect(firstPage.page.nextCursor).toEqual(expect.any(String));
+
+    const second = await app.request(`/analytics/movement/items?month=2026-02&threshold=5&limit=1&cursor=${encodeURIComponent(firstPage.page.nextCursor!)}`, { headers });
+    expect(second.status).toBe(200);
+    const secondPage = await second.json() as typeof firstPage;
+    expect(secondPage.rows).toMatchObject([{ name: 'Analytics Glass', quantity: 7, classification: 'fast_moving' }]);
+    expect(secondPage.summary).toEqual(firstPage.summary);
+    expect(secondPage.page).toMatchObject({ totalCount: 2, hasMore: false, nextCursor: null });
+
+    expect((await app.request('/analytics/movement/items?month=2026-13', { headers })).status).toBe(400);
+    expect((await app.request('/analytics/movement/items?threshold=-1', { headers })).status).toBe(400);
+    expect((await app.request('/analytics/movement/items?limit=101', { headers })).status).toBe(400);
+    expect((await app.request('/analytics/movement/items?cursor=invalid!', { headers })).status).toBe(400);
   });
 
   it('returns authenticated demand forecasts with complete response metadata', async () => {

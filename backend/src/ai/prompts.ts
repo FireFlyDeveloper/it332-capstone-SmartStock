@@ -9,7 +9,7 @@ import type { SafeInsightPayload } from './types.js';
 
 export const TREND_INTERPRETATION_PROMPT = 'Interpret monthly sales trends using only aggregate SmartStock analytics.';
 export const MOVEMENT_INTERPRETATION_PROMPT = 'Interpret fast- and slow-moving inventory using only aggregate movement totals.';
-export const FORECAST_INTERPRETATION_PROMPT = 'Interpret forecast output and recommend inventory planning actions.';
+export const FORECAST_INTERPRETATION_PROMPT = 'Interpret the supplied statistical simple exponential smoothing demand forecast by category and unit. The forecast is computed from historical delivered sales, not by you. Report its method, alpha, horizon, and coverage accurately; do not invent a forecast when history is insufficient.';
 
 export function buildInsightPrompt(payload: SafeInsightPayload): string {
   return [

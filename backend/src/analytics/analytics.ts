@@ -189,6 +189,102 @@ export interface MovementClassificationRow extends MonthlyQuantity {
   classification: MovementClassification;
 }
 
+export interface MonthlyItemMovementRow {
+  month: string;
+  productId: string;
+  name: string;
+  sku: string;
+  category: Product['category'];
+  unit: string;
+  status: Product['status'];
+  quantity: number;
+  threshold: number;
+  classification: MovementClassification;
+}
+
+export interface MonthlyItemMovementCursor {
+  name: string;
+  productId: string;
+}
+
+function compareTextCodePoints(left: string, right: string): number {
+  const leftPoints = Array.from(left, (character) => character.codePointAt(0)!);
+  const rightPoints = Array.from(right, (character) => character.codePointAt(0)!);
+  const sharedLength = Math.min(leftPoints.length, rightPoints.length);
+  for (let index = 0; index < sharedLength; index += 1) {
+    if (leftPoints[index] !== rightPoints[index]) return leftPoints[index] - rightPoints[index];
+  }
+  return leftPoints.length - rightPoints.length;
+}
+
+export function buildMonthlyItemMovementClassification(
+  movements: StockMovement[],
+  products: Product[],
+  month: string,
+  threshold = 10,
+): MonthlyItemMovementRow[] {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('month must be YYYY-MM');
+  if (!Number.isFinite(threshold) || threshold < 0) throw new Error('threshold must be a non-negative number');
+
+  const quantities = new Map<string, number>();
+  for (const movement of movements) {
+    if (movement.type !== 'outbound') continue;
+    try {
+      if (monthKey(movement.occurredAt) !== month) continue;
+    } catch {
+      continue;
+    }
+    quantities.set(movement.productId, (quantities.get(movement.productId) ?? 0) + movement.quantity);
+  }
+
+  return products.map((product) => {
+    const quantity = quantities.get(product.id) ?? 0;
+    const classification: MovementClassification = quantity > 0 && quantity >= threshold ? 'fast_moving' : 'slow_moving';
+    return {
+      month,
+      productId: product.id,
+      name: product.name,
+      sku: product.sku,
+      category: product.category,
+      unit: product.unit,
+      status: product.status,
+      quantity,
+      threshold,
+      classification,
+    };
+  }).sort((left, right) => compareTextCodePoints(left.name, right.name) || compareTextCodePoints(left.productId, right.productId));
+}
+
+export function paginateMonthlyItemMovement(
+  rows: MonthlyItemMovementRow[],
+  limit: number,
+  cursor: MonthlyItemMovementCursor | null,
+) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('limit must be an integer between 1 and 100');
+  const afterCursor = cursor
+    ? rows.filter((row) => compareTextCodePoints(row.name, cursor.name) > 0 || (row.name === cursor.name && compareTextCodePoints(row.productId, cursor.productId) > 0))
+    : rows;
+  const lookahead = afterCursor.slice(0, limit + 1);
+  const pageRows = lookahead.slice(0, limit);
+  const last = pageRows.at(-1);
+  const outboundByUnit = new Map<string, number>();
+  for (const row of rows) {
+    if (row.quantity > 0) outboundByUnit.set(row.unit, (outboundByUnit.get(row.unit) ?? 0) + row.quantity);
+  }
+  const summary = {
+    productCount: rows.length,
+    fastMovingCount: rows.filter((row) => row.classification === 'fast_moving').length,
+    slowMovingCount: rows.filter((row) => row.classification === 'slow_moving').length,
+    outboundByUnit: [...outboundByUnit].map(([unit, quantity]) => ({ unit, quantity })).sort((left, right) => left.unit.localeCompare(right.unit)),
+  };
+  const hasMore = lookahead.length > limit;
+  return {
+    rows: pageRows,
+    summary,
+    page: { limit, totalCount: rows.length, hasMore, nextCursor: hasMore && last ? { name: last.name, productId: last.productId } : null },
+  };
+}
+
 export interface SesForecastResult {
   alpha: number;
   forecast: number;

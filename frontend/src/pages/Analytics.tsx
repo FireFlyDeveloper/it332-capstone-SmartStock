@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 import { formatCurrency, formatDateInput } from '../utils/helpers';
-import { getAnalyticsOrderSummary, getDemandForecastPage, getProductsPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse } from '../api';
+import { getAnalyticsInsights, getAnalyticsMonthlyItemMovementPage, getAnalyticsOrderSummary, getDemandForecastPage, getProductsPage, type AnalyticsInsightsResponse, type AnalyticsMonthlyItemMovementPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse } from '../api';
 import { toast } from 'sonner';
 import { 
   AreaChart, 
@@ -66,6 +66,24 @@ export const Analytics: React.FC = () => {
   const snapshotSentinelRef = useRef<HTMLDivElement | null>(null);
   const snapshotRequestRef = useRef(0);
   const snapshotLoadingMoreRef = useRef(false);
+  const [movementMonth, setMovementMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [movementThreshold, setMovementThreshold] = useState('10');
+  const [movementRetry, setMovementRetry] = useState(0);
+  const [movementRows, setMovementRows] = useState<AnalyticsMonthlyItemMovementPage['rows']>([]);
+  const [movementSummary, setMovementSummary] = useState<AnalyticsMonthlyItemMovementPage['summary'] | null>(null);
+  const [movementPage, setMovementPage] = useState<AnalyticsMonthlyItemMovementPage['page'] | null>(null);
+  const [movementLoading, setMovementLoading] = useState(true);
+  const [movementLoadingMore, setMovementLoadingMore] = useState(false);
+  const [movementError, setMovementError] = useState('');
+  const [movementLoadMoreError, setMovementLoadMoreError] = useState('');
+  const movementSentinelRef = useRef<HTMLDivElement | null>(null);
+  const movementRequestRef = useRef(0);
+  const movementLoadingMoreRef = useRef(false);
+  const [aiInsight, setAiInsight] = useState<AnalyticsInsightsResponse | null>(null);
+  const [aiInsightLoading, setAiInsightLoading] = useState(false);
+  const [aiInsightError, setAiInsightError] = useState('');
+  const [aiInsightCriteria, setAiInsightCriteria] = useState<{ year: number; threshold: number } | null>(null);
+  const aiInsightRequestRef = useRef(0);
 
   useEffect(() => {
     const requestId = ++orderSummaryRequestRef.current;
@@ -153,6 +171,100 @@ export const Analytics: React.FC = () => {
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [snapshotPage?.hasMore, snapshotLoading, snapshotLoadingMore, snapshotError, loadMoreSnapshot]);
+
+  useEffect(() => {
+    const requestId = ++movementRequestRef.current;
+    const threshold = Number(movementThreshold);
+    setMovementRows([]);
+    setMovementSummary(null);
+    setMovementPage(null);
+    setMovementError('');
+    setMovementLoadMoreError('');
+    setMovementLoading(true);
+    movementLoadingMoreRef.current = false;
+    setMovementLoadingMore(false);
+
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(movementMonth)
+      || movementThreshold.trim() === '' || !Number.isFinite(threshold) || threshold < 0) {
+      setMovementError('Choose a valid month and a non-negative movement threshold.');
+      setMovementLoading(false);
+      return () => {
+        if (requestId === movementRequestRef.current) movementRequestRef.current += 1;
+      };
+    }
+
+    getAnalyticsMonthlyItemMovementPage({ month: movementMonth, threshold, limit: 25 })
+      .then((response) => {
+        if (requestId !== movementRequestRef.current) return;
+        setMovementRows(response.rows);
+        setMovementSummary(response.summary);
+        setMovementPage(response.page);
+      })
+      .catch((error) => {
+        if (requestId === movementRequestRef.current) setMovementError(error instanceof Error ? error.message : 'Could not load monthly item movement.');
+      })
+      .finally(() => {
+        if (requestId === movementRequestRef.current) setMovementLoading(false);
+      });
+    return () => {
+      if (requestId === movementRequestRef.current) movementRequestRef.current += 1;
+    };
+  }, [movementMonth, movementThreshold, movementRetry]);
+
+  const loadMoreMovement = useCallback(async () => {
+    if (!movementPage?.hasMore || !movementPage.nextCursor || movementLoading || movementLoadingMoreRef.current) return;
+    const threshold = Number(movementThreshold);
+    const requestId = movementRequestRef.current;
+    movementLoadingMoreRef.current = true;
+    setMovementLoadingMore(true);
+    setMovementLoadMoreError('');
+    try {
+      const response = await getAnalyticsMonthlyItemMovementPage({ month: movementMonth, threshold, limit: 25, cursor: movementPage.nextCursor });
+      if (requestId !== movementRequestRef.current) return;
+      setMovementRows((current) => [...current, ...response.rows]);
+      setMovementSummary(response.summary);
+      setMovementPage(response.page);
+    } catch (error) {
+      if (requestId === movementRequestRef.current) setMovementLoadMoreError(error instanceof Error ? error.message : 'Could not load more movement rows.');
+    } finally {
+      if (requestId === movementRequestRef.current) {
+        movementLoadingMoreRef.current = false;
+        setMovementLoadingMore(false);
+      }
+    }
+  }, [movementPage, movementLoading, movementMonth, movementThreshold]);
+
+  useEffect(() => {
+    const sentinel = movementSentinelRef.current;
+    if (!sentinel || !movementPage?.hasMore || movementLoading || movementLoadingMore || movementLoadMoreError || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMoreMovement();
+    }, { rootMargin: '320px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [movementPage?.hasMore, movementLoading, movementLoadingMore, movementLoadMoreError, loadMoreMovement]);
+
+  const generateInsights = useCallback(async () => {
+    const threshold = Number(movementThreshold);
+    if (movementThreshold.trim() === '' || !Number.isFinite(threshold) || threshold < 0) {
+      setAiInsightError('Enter a non-negative movement threshold first.');
+      return;
+    }
+    const requestId = ++aiInsightRequestRef.current;
+    const year = new Date().getUTCFullYear();
+    setAiInsight(null);
+    setAiInsightCriteria({ year, threshold });
+    setAiInsightError('');
+    setAiInsightLoading(true);
+    try {
+      const result = await getAnalyticsInsights(year, threshold);
+      if (requestId === aiInsightRequestRef.current) setAiInsight(result);
+    } catch (error) {
+      if (requestId === aiInsightRequestRef.current) setAiInsightError(error instanceof Error ? error.message : 'Could not generate analytics insights.');
+    } finally {
+      if (requestId === aiInsightRequestRef.current) setAiInsightLoading(false);
+    }
+  }, [movementThreshold]);
 
   const handleDatePreset = (preset: '7d' | '30d' | 'all') => {
     setDatePreset(preset);
@@ -831,6 +943,76 @@ export const Analytics: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Aggregate AI interpretation — forecasts are computed separately by SES */}
+        <section className="space-y-4 rounded-[28px] border border-indigo-100 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">AI-Assisted Analytics Interpretation</h3>
+              <p className="mt-1 max-w-3xl text-xs text-slate-500">Interprets aggregate sales, purchase and stock-movement data alongside the historical-sales SES forecast. The forecast is statistical, not generated by AI; no customer details are sent.</p>
+            </div>
+            <button type="button" onClick={() => void generateInsights()} disabled={aiInsightLoading} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-60">
+              {aiInsightLoading ? 'Generating…' : aiInsight ? 'Refresh interpretation' : 'Generate interpretation'}
+            </button>
+          </div>
+          {aiInsightError && <p role="alert" className="text-sm text-rose-700">{aiInsightError}</p>}
+          {aiInsightLoading && <p role="status" className="text-sm text-slate-500">Preparing a privacy-safe aggregate interpretation…</p>}
+          {aiInsight && <div aria-live="polite" className="space-y-4 rounded-2xl bg-indigo-50/60 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">{aiInsight.source === 'deepseek' ? 'DeepSeek aggregate interpretation' : 'Local rule-based fallback'}</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold capitalize text-slate-600">Confidence: {aiInsight.confidence}</span>
+              {aiInsightCriteria && <span className="text-xs text-slate-500">{aiInsightCriteria.year} · movement threshold {aiInsightCriteria.threshold} units</span>}
+            </div>
+            <p className="text-sm leading-6 text-slate-800">{aiInsight.summary}</p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div><h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">Recommendations</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{aiInsight.recommendations.map((item, index) => <li key={`rec-${index}`}>{item}</li>)}</ul></div>
+              <div><h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">Risks</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{aiInsight.risks.map((item, index) => <li key={`risk-${index}`}>{item}</li>)}</ul></div>
+            </div>
+          </div>}
+        </section>
+
+        {/* Monthly item-level stock movement classification */}
+        <section className="space-y-4 rounded-[28px] border border-sky-100 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Monthly Item Movement Classification</h3>
+              <p className="mt-1 max-w-3xl text-xs text-slate-500">Outbound stock movements are totaled per product for the selected UTC month. Products with no recorded outbound movement are shown as slow-moving. Fast-moving means at least the selected number of units moved.</p>
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs font-semibold text-slate-600">Month
+                <input aria-label="Movement month" type="month" value={movementMonth} onChange={(event) => setMovementMonth(event.target.value)} className="input mt-1 block w-40" />
+              </label>
+              <label className="text-xs font-semibold text-slate-600">Fast-moving threshold (units)
+                <input aria-label="Fast-moving threshold" type="number" min="0" step="1" value={movementThreshold} onChange={(event) => setMovementThreshold(event.target.value)} className="input mt-1 block w-36" />
+              </label>
+            </div>
+          </div>
+
+          {movementSummary && <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl bg-emerald-50 p-4"><p className="text-xs uppercase text-emerald-700">Fast-moving items</p><p className="mt-1 text-xl font-black text-emerald-900">{movementSummary.fastMovingCount}</p></div>
+            <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-600">Slow-moving items</p><p className="mt-1 text-xl font-black text-slate-900">{movementSummary.slowMovingCount}</p></div>
+            <div className="rounded-2xl bg-sky-50 p-4"><p className="text-xs uppercase text-sky-700">Outbound quantity by unit · {movementMonth}</p><p className="mt-1 text-sm font-black text-sky-900">{movementSummary.outboundByUnit.length ? movementSummary.outboundByUnit.map((item) => `${item.quantity} ${item.unit}`).join(' · ') : 'No outbound movement'}</p></div>
+          </div>}
+
+          {movementLoading && <p role="status" className="py-6 text-center text-sm text-slate-500">Loading monthly item movements…</p>}
+          {movementError && <div role="alert" className="py-4 text-center text-sm text-rose-700"><p>{movementError}</p><button type="button" onClick={() => setMovementRetry((current) => current + 1)} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
+          {!movementLoading && !movementError && movementRows.length === 0 && <p className="py-6 text-center text-sm text-slate-500">No catalog items are available for classification.</p>}
+          {movementRows.length > 0 && <div className="overflow-x-auto"><table className="w-full text-left">
+            <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Catalog status</th><th className="px-4 py-3 text-right">Outbound quantity</th><th className="px-4 py-3">Classification</th></tr></thead>
+            <tbody className="divide-y divide-slate-100">{movementRows.map((row) => <tr key={row.productId}>
+              <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.name}<span className="block text-xs font-normal text-slate-500">{row.sku}</span></td>
+              <td className="px-4 py-3 text-sm capitalize">{row.category}</td>
+              <td className="px-4 py-3 text-sm capitalize">{row.status}</td>
+              <td className="px-4 py-3 text-right text-sm">{row.quantity} {row.unit}</td>
+              <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${row.classification === 'fast_moving' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>{row.classification.replaceAll('_', ' ')}</span></td>
+            </tr>)}</tbody>
+          </table></div>}
+          {movementPage && <p className="text-xs text-slate-500">Showing {movementRows.length} of {movementPage.totalCount} products for {movementMonth}; threshold {movementThreshold} units.</p>}
+          {movementPage?.hasMore && <div ref={movementSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more products…</div>}
+          {movementPage?.hasMore && typeof IntersectionObserver === 'undefined' && <div className="py-3 text-center"><button type="button" onClick={() => void loadMoreMovement()} disabled={movementLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">{movementLoadingMore ? 'Loading…' : 'Load more products'}</button></div>}
+          {movementLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more products…</p>}
+          {movementLoadMoreError && <div role="alert" className="text-center text-sm text-rose-700"><p>{movementLoadMoreError}</p><button type="button" onClick={() => void loadMoreMovement()} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
+        </section>
 
         {/* Inventory and order snapshot */}
         <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">

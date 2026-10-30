@@ -17,6 +17,8 @@ import {
   buildMonthlySalesTrend,
   buildRecentActivity,
   classifyMovement,
+  buildMonthlyItemMovementClassification,
+  paginateMonthlyItemMovement,
   simpleExponentialSmoothingForecast,
   buildDemandForecast,
   DEMAND_FORECAST_ASSUMPTION,
@@ -25,6 +27,7 @@ import {
   type AnnualPurchaseCursor,
   type DashboardSalesRange,
   type DemandForecastCursor,
+  type MonthlyItemMovementCursor,
 } from './analytics.js';
 
 function listAllMovements() {
@@ -93,6 +96,16 @@ export async function getAnnualPurchasesPage(year: number, limit: number, cursor
 
 export function getMovementClassification(threshold = 10) {
   return classifyMovement(buildMonthlyOutboundQuantities(listAllMovements()), threshold);
+}
+
+export function getMonthlyItemMovementPage(
+  month: string,
+  threshold: number,
+  limit: number,
+  cursor: MonthlyItemMovementCursor | null,
+) {
+  const rows = buildMonthlyItemMovementClassification(listAllMovements(), listProducts(), month, threshold);
+  return { month, threshold, ...paginateMonthlyItemMovement(rows, limit, cursor) };
 }
 
 export function getDemandForecast(historyMonths = 12, now = new Date()) {

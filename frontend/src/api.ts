@@ -314,6 +314,27 @@ export interface AnalyticsMovementMetric {
   classification: 'fast_moving' | 'slow_moving'
 }
 
+export interface AnalyticsMonthlyItemMovement {
+  month: string
+  productId: string
+  name: string
+  sku: string
+  category: Product['category']
+  unit: string
+  status: Product['status']
+  quantity: number
+  threshold: number
+  classification: 'fast_moving' | 'slow_moving'
+}
+
+export interface AnalyticsMonthlyItemMovementPage {
+  month: string
+  threshold: number
+  rows: AnalyticsMonthlyItemMovement[]
+  summary: { productCount: number; fastMovingCount: number; slowMovingCount: number; outboundByUnit: Array<{ unit: string; quantity: number }> }
+  page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null }
+}
+
 export interface AnalyticsForecastResponse {
   alpha: number
   forecast: number
@@ -543,6 +564,15 @@ export function getDailySales(date: string, options: DailySalesPageOptions = {})
 
 export function getAnalyticsMovement(threshold: number): Promise<AnalyticsMovementMetric[]> {
   return apiFetch<AnalyticsMovementMetric[]>(`/analytics/movement?threshold=${encodeURIComponent(String(threshold))}`)
+}
+
+export function getAnalyticsMonthlyItemMovementPage(options: { month?: string; threshold?: number; limit?: number; cursor?: string | null } = {}): Promise<AnalyticsMonthlyItemMovementPage> {
+  const params = new URLSearchParams()
+  if (options.month) params.set('month', options.month)
+  if (options.threshold !== undefined) params.set('threshold', String(options.threshold))
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.cursor) params.set('cursor', options.cursor)
+  return apiFetch<AnalyticsMonthlyItemMovementPage>(`/analytics/movement/items?${params.toString()}`)
 }
 
 export function getAnalyticsForecast(quantities: number[], alpha = 0.35): Promise<AnalyticsForecastResponse> {

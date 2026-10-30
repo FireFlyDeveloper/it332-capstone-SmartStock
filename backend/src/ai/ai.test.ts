@@ -40,6 +40,10 @@ async function login(app: Hono, email: string) {
 }
 
 async function seedAiAnalyticsData() {
+  const monthAt = (monthsAgo: number) => {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - monthsAgo, 15)).toISOString();
+  };
   const glass = await createProduct({ sku: 'AI-GLASS', name: 'AI Glass', category: 'glass', unit: 'sheet', stock: 3, price: 100, threshold: 5 });
   await recordInboundStock(glass.id, { quantity: 20, referenceNo: 'AI-PO-001', supplier: 'Supplier A', occurredAt: '2026-01-10T00:00:00.000Z' });
   await recordOutboundStock(glass.id, { quantity: 8, referenceNo: 'AI-SO-001', occurredAt: '2026-02-10T00:00:00.000Z' });
@@ -52,7 +56,22 @@ async function seedAiAnalyticsData() {
     paidAmount: 400,
     items: [{ productId: glass.id, name: 'AI Glass', quantity: 4, unitPrice: 100 }],
   });
-  order.createdAt = '2026-02-12T00:00:00.000Z';
+  order.createdAt = monthAt(2);
+  order.orderStatus = 'delivered';
+  const januaryOrder = createOrder({
+    referenceNumber: 'SS-2026-99002', customerName: 'Private Customer', customerPhone: 'secret-phone',
+    deliveryAddress: 'secret-address', deliveryDate: '2026-01-20', paidAmount: 100,
+    items: [{ productId: glass.id, name: 'AI Glass', quantity: 2, unitPrice: 100 }],
+  });
+  januaryOrder.createdAt = monthAt(3);
+  januaryOrder.orderStatus = 'delivered';
+  const marchOrder = createOrder({
+    referenceNumber: 'SS-2026-99003', customerName: 'Private Customer', customerPhone: 'secret-phone',
+    deliveryAddress: 'secret-address', deliveryDate: '2026-03-20', paidAmount: 300,
+    items: [{ productId: glass.id, name: 'AI Glass', quantity: 3, unitPrice: 100 }],
+  });
+  marchOrder.createdAt = monthAt(1);
+  marchOrder.orderStatus = 'delivered';
 }
 
 const ORIGINAL_ENV = { ...process.env };
@@ -79,8 +98,8 @@ describe('AI insight fallback layer', () => {
   });
 
   it('returns a deterministic local insight when DEEPSEEK_API_KEY is missing', async () => {
-    const first = await getAnalyticsInsight({ year: 2026, threshold: 5, forecastQuantities: [10, 20, 30] });
-    const second = await getAnalyticsInsight({ year: 2026, threshold: 5, forecastQuantities: [10, 20, 30] });
+    const first = await getAnalyticsInsight({ year: 2026, threshold: 5 });
+    const second = await getAnalyticsInsight({ year: 2026, threshold: 5 });
 
     expect(first).toEqual(second);
     expect(first.source).toBe('fallback');
@@ -88,6 +107,8 @@ describe('AI insight fallback layer', () => {
     expect(first.recommendations.length).toBeGreaterThan(0);
     expect(first.risks.length).toBeGreaterThan(0);
     expect(first.confidence).toBe('medium');
+    expect(first.recommendations.some((item) => item.includes('simple_exponential_smoothing (alpha 0.3, 1-month horizon) covers 1 of 1 products and 1 of 1 category/unit groups.'))).toBe(true);
+    expect(first.recommendations).toContain('Interpret the statistical forecast as a planning signal; do not describe it as an AI-generated prediction.');
   });
 
   it('rejects incomplete AI responses with missing required fields', () => {
@@ -106,11 +127,25 @@ describe('AI insight fallback layer', () => {
   });
 
   it('builds AI payloads from aggregate analytics without customer PII or secrets', async () => {
-    const payload = await buildSafeInsightPayload({ year: 2026, threshold: 5, forecastQuantities: [10, 20, 30] });
+    const payload = await buildSafeInsightPayload({ year: 2026, threshold: 5 });
     const serialized = JSON.stringify(payload);
 
+    expect(payload.forecast).toMatchObject({
+      method: 'simple_exponential_smoothing', alpha: 0.3, horizonMonths: 1,
+      coverage: { coveredProducts: 1, totalProducts: 1, coveredGroups: 1, totalGroups: 1 },
+      groups: [{ category: 'glass', unit: 'sheet', history: expect.arrayContaining([
+        { month: expect.any(String), quantity: 2 }, { month: expect.any(String), quantity: 4 }, { month: expect.any(String), quantity: 3 },
+      ]), forecastQuantity: expect.any(Number), coveredProducts: 1, totalProducts: 1 }],
+    });
+    const historyQuantities = payload.forecast.groups[0].history.map((row) => row.quantity);
+    const expectedForecast = historyQuantities.slice(1).reduce((forecast, quantity) => 0.3 * quantity + 0.7 * forecast, historyQuantities[0]);
+    expect(payload.forecast.groups[0].forecastQuantity).toBe(Math.round(expectedForecast * 100) / 100);
     expect(serialized).not.toContain('Private Customer');
-    expect(serialized).not.toContain('+639171234567');
+    expect(serialized).not.toContain('secret-phone');
+    expect(serialized).not.toContain('secret-address');
+    expect(serialized).not.toContain('AI Glass');
+    expect(serialized).not.toContain('SS-2026-990');
+    expect(serialized).not.toContain('+639****4567');
     expect(serialized).not.toContain('123 Full Secret Street');
     expect(serialized).not.toContain('Barangay Hidden');
     expect(serialized).not.toContain('Bearer ');
@@ -128,7 +163,7 @@ describe('AI insight fallback layer', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: '{"summary":"missing fields"}' } }] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await getAnalyticsInsight({ year: 2026, threshold: 5, forecastQuantities: [10, 20, 30] });
+    const result = await getAnalyticsInsight({ year: 2026, threshold: 5 });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const [endpoint, init] = fetchMock.mock.calls[0];
