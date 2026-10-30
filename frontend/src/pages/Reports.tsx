@@ -103,7 +103,9 @@ export const Reports: React.FC = () => {
   const [toDate, setToDate] = useState<string>('');
   const [exportType, setExportType] = useState<ExportType>('sales');
   const [generatedAt] = useState(() => new Date().toLocaleString());
-  const [purchaseYear, setPurchaseYear] = useState(new Date().getFullYear());
+  const [purchaseYear, setPurchaseYear] = useState(String(new Date().getFullYear()));
+  const numericPurchaseYear = /^\d{4}$/.test(purchaseYear) ? Number(purchaseYear) : null;
+  const purchaseYearIsValid = numericPurchaseYear !== null && numericPurchaseYear >= 2000 && numericPurchaseYear <= 2100;
   const [purchaseData, setPurchaseData] = useState<PurchaseAnalyticsPageResponse | null>(null);
   const [purchaseLoading, setPurchaseLoading] = useState(true);
   const [purchaseError, setPurchaseError] = useState('');
@@ -255,12 +257,19 @@ export const Reports: React.FC = () => {
   useEffect(() => {
     const requestId = ++purchaseRequestRef.current;
     setPurchaseData(null);
-    setPurchaseLoading(true);
-    setPurchaseError('');
     setPurchaseLoadMoreError('');
     purchaseLoadingMoreRef.current = false;
     setPurchaseLoadingMore(false);
-    getAnalyticsPurchasesPage({ year: purchaseYear, limit: 25 }).then(data => {
+    if (!purchaseYearIsValid || numericPurchaseYear === null) {
+      setPurchaseLoading(false);
+      setPurchaseError('Enter a year between 2000 and 2100.');
+      return () => {
+        if (requestId === purchaseRequestRef.current) purchaseRequestRef.current += 1;
+      };
+    }
+    setPurchaseLoading(true);
+    setPurchaseError('');
+    getAnalyticsPurchasesPage({ year: numericPurchaseYear, limit: 25 }).then(data => {
       if (requestId === purchaseRequestRef.current) setPurchaseData(data);
     }).catch(error => {
       if (requestId === purchaseRequestRef.current) setPurchaseError(error instanceof Error ? error.message : 'Could not load annual spending.');
@@ -270,16 +279,16 @@ export const Reports: React.FC = () => {
     return () => {
       if (requestId === purchaseRequestRef.current) purchaseRequestRef.current += 1;
     };
-  }, [purchaseYear]);
+  }, [purchaseYear, numericPurchaseYear, purchaseYearIsValid]);
 
   const loadMorePurchaseGroups = useCallback(async () => {
-    if (!purchaseData?.page.hasMore || !purchaseData.page.nextCursor || purchaseLoading || purchaseLoadingMoreRef.current) return;
+    if (!purchaseYearIsValid || numericPurchaseYear === null || !purchaseData?.page.hasMore || !purchaseData.page.nextCursor || purchaseLoading || purchaseLoadingMoreRef.current) return;
     const requestId = purchaseRequestRef.current;
     purchaseLoadingMoreRef.current = true;
     setPurchaseLoadingMore(true);
     setPurchaseLoadMoreError('');
     try {
-      const response = await getAnalyticsPurchasesPage({ year: purchaseYear, limit: 25, cursor: purchaseData.page.nextCursor });
+      const response = await getAnalyticsPurchasesPage({ year: numericPurchaseYear, limit: 25, cursor: purchaseData.page.nextCursor });
       if (requestId !== purchaseRequestRef.current) return;
       setPurchaseData(current => current ? { ...current, groups: [...current.groups, ...response.groups], page: response.page } : response);
     } catch (error) {
@@ -290,7 +299,7 @@ export const Reports: React.FC = () => {
         setPurchaseLoadingMore(false);
       }
     }
-  }, [purchaseData, purchaseLoading, purchaseYear]);
+  }, [purchaseData, purchaseLoading, numericPurchaseYear, purchaseYearIsValid]);
 
   useEffect(() => {
     const sentinel = purchaseSentinelRef.current;
@@ -874,7 +883,7 @@ export const Reports: React.FC = () => {
         </div>
 
         <section className="space-y-4 rounded-[28px] border border-[#f1f5f9] bg-white p-5 shadow-sm sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Annual procurement spending</h2><p className="text-xs text-slate-500">Recorded receipt acquisition costs only. Unknown costs are excluded, never estimated from selling prices.</p></div><label className="text-xs font-semibold text-slate-600">Year <input className="input ml-2 w-28" type="number" min="2000" max="2100" value={purchaseYear} onChange={e => setPurchaseYear(Number(e.target.value))}/></label></div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Annual procurement spending</h2><p className="text-xs text-slate-500">Recorded receipt acquisition costs only. Unknown costs are excluded, never estimated from selling prices.</p></div><label className="text-xs font-semibold text-slate-600">Year <input className="input ml-2 w-28" type="number" min="2000" max="2100" value={purchaseYear} onChange={e => setPurchaseYear(e.target.value)}/></label></div>
           {purchaseLoading ? <p className="py-6 text-sm text-slate-500">Loading purchase costs…</p> : purchaseError ? <p role="alert" className="py-6 text-sm text-rose-700">{purchaseError}</p> : purchaseData ? <><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-500">Priced spend · {purchaseYear}</p><p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(purchaseData.totalSpend)}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced receipts</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedReceiptCount}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced quantity</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedQuantity}</p></div></div><div className="mt-4 overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Material</th><th className="px-4 py-3">Supplier</th><th className="px-4 py-3 text-right">Priced receipts</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Recorded spend</th><th className="px-4 py-3 text-right">Unpriced qty</th></tr></thead><tbody className="divide-y divide-slate-100">{purchaseData.groups.map(row=><tr key={`${row.materialType}-${row.supplier}`}><td className="px-4 py-3 text-sm capitalize">{row.materialType}</td><td className="px-4 py-3 text-sm">{row.supplier || '—'}</td><td className="px-4 py-3 text-right text-sm">{Math.max(0, row.transactionCount - row.unpricedReceiptCount)}</td><td className="px-4 py-3 text-right text-sm">{row.totalQuantity}</td><td className="px-4 py-3 text-right text-sm font-semibold">{formatCurrency(row.totalCost)}</td><td className="px-4 py-3 text-right text-sm">{row.unpricedQuantity ?? 0}</td></tr>)}{purchaseData.groups.length===0&&<tr><td colSpan={6} className="p-6 text-center text-sm text-slate-500">No purchase receipts recorded for this year.</td></tr>}</tbody></table></div></> : null}
         </section>
         {purchaseData && <p className="px-1 text-xs text-slate-500">Showing {purchaseData.groups.length} of {purchaseData.page.totalCount} purchase groups.</p>}
