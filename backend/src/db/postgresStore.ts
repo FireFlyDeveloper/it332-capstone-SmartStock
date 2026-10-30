@@ -10,6 +10,7 @@ import { hasDatabaseUrl } from './config.js';
 import { setDbSyncActive } from './syncState.js';
 
 import type { AnalyticsOrderSummary, RecentActivityRecord } from '../analytics/analytics.js';
+import { decodeNotificationCursor, encodeNotificationCursor, notificationTypeRank, type NotificationFeedItem, type NotificationPageInput, type NotificationPageResult } from '../notifications/feed.js';
 import type { InventoryPolicyEvent, Product, ProductCreateInput, ProductUpdateInput, StockMovement, StockMovementInput } from '../inventory/store.js';
 import type { Order, OrderCreateInput, OrderUpdateInput, PaymentStatus, RefundType } from '../orders/store.js';
 import type { Delivery, DeliveryCreateInput, DeliveryUpdateInput } from '../delivery/store.js';
@@ -934,6 +935,131 @@ export async function listDemandForecastPageDb(input: {
       totalCount: Number(result.total_count ?? 0),
       hasMore,
       nextCursor: hasMore && last ? { name: last.name, productId: last.productId } : null,
+    },
+  };
+}
+
+function notificationItemFromDbRow(row: Record<string, unknown>): NotificationFeedItem {
+  const sourceValue = typeof row.source === 'string' ? JSON.parse(row.source) : row.source;
+  const source = sourceValue && typeof sourceValue === 'object' ? sourceValue as Record<string, unknown> : {};
+  const type = String(row.type) as NotificationFeedItem['type'];
+  const id = String(row.id);
+  const severity = String(row.severity) as NotificationFeedItem['severity'];
+  const currency = (amount: unknown) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(amount ?? 0));
+  const date = (value: unknown) => new Date(value as string | Date).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+
+  if (type === 'stock') {
+    const name = String(source.name ?? '');
+    const stock = Number(source.stock ?? 0);
+    const threshold = Number(source.threshold ?? 0);
+    const outOfStock = stock === 0;
+    return {
+      id, type, severity,
+      title: `${outOfStock ? 'Critical Stock' : severity === 'critical' ? 'Critical Stock' : 'Low Stock'}: ${name}`,
+      message: outOfStock
+        ? 'Item is completely out of stock! Restock urgently.'
+        : severity === 'critical'
+          ? `Only ${stock} remaining (min safety threshold is ${threshold}).`
+          : `${stock} units remaining. Reorder suggested soon.`,
+      contextLabel: severity === 'critical' ? 'Urgent' : 'Action needed',
+      link: '/inventory',
+    };
+  }
+
+  const reference = String(source.reference ?? '');
+  const customer = String(source.customer ?? '');
+  if (id.startsWith('order-pending-')) {
+    return {
+      id, type, severity, title: `Processing Order: ${reference}`,
+      message: `Order for ${customer} (${currency(source.total)}) is being processed.`,
+      contextLabel: `Created ${date(source.createdAt)}`, link: '/orders',
+    };
+  }
+  if (id.startsWith('order-payment-')) {
+    const paymentStatus = String(source.paymentStatus);
+    return {
+      id, type, severity,
+      title: `Payment ${paymentStatus === 'partial' ? 'Partial' : 'Pending'}: ${reference}`,
+      message: `${customer} has ${currency(Number(source.total ?? 0) - Number(source.paidAmount ?? 0))} balance remaining.`,
+      contextLabel: `Created ${date(source.createdAt)}`, link: '/orders',
+    };
+  }
+  return {
+    id, type, severity, title: `Out for Delivery: ${reference}`,
+    message: `En route to ${customer} (${String(source.deliveryAddress || 'Destination')}).`,
+    contextLabel: 'En route', link: '/delivery',
+  };
+}
+
+export async function getNotificationPageDb(input: NotificationPageInput = {}): Promise<NotificationPageResult | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const limit = input.limit ?? 25;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('limit must be an integer between 1 and 100');
+  const cursor = input.cursor ? decodeNotificationCursor(input.cursor) : null;
+  if (input.cursor && !cursor) throw new Error('cursor is invalid');
+  const cursorType = cursor ? notificationTypeRank(cursor.type) : null;
+  const { rows } = await pool.query(`
+    WITH notification_feed AS MATERIALIZED (
+      SELECT 'stock-' || p.id AS id, 'stock'::text AS type, 0::int AS type_rank,
+        CASE WHEN p.stock = 0 OR (p.stock > 0 AND p.stock <= p.threshold * 0.5) THEN 'critical' ELSE 'warning' END AS severity,
+        jsonb_build_object('name', p.name, 'stock', p.stock, 'threshold', p.threshold) AS source
+      FROM products p
+      WHERE p.deleted_at IS NULL AND (p.stock = 0 OR (p.stock > 0 AND p.stock <= p.threshold))
+      UNION ALL
+      SELECT 'order-pending-' || o.id, 'order', 1, 'info',
+        jsonb_build_object('reference', o.order_no, 'customer', COALESCE(o.customer_name, ''), 'total', o.total_amount, 'createdAt', o.created_at)
+      FROM orders o
+      WHERE o.deleted_at IS NULL AND o.order_status = 'processing'
+      UNION ALL
+      SELECT 'order-payment-' || o.id, 'order', 1, 'warning',
+        jsonb_build_object('reference', o.order_no, 'customer', COALESCE(o.customer_name, ''), 'total', o.total_amount,
+          'paidAmount', o.paid_amount, 'paymentStatus', o.payment_status, 'createdAt', o.created_at)
+      FROM orders o
+      WHERE o.deleted_at IS NULL AND o.order_status <> 'processing' AND o.payment_status IN ('unpaid', 'partial')
+      UNION ALL
+      SELECT 'delivery-transit-' || o.id, 'delivery', 2, 'info',
+        jsonb_build_object('reference', o.order_no, 'customer', COALESCE(o.customer_name, ''), 'deliveryAddress', o.delivery_address)
+      FROM orders o
+      WHERE o.deleted_at IS NULL AND o.order_status = 'in_transit'
+    ), visible AS MATERIALIZED (
+      SELECT * FROM notification_feed WHERE NOT (id = ANY($2::text[]))
+    ), filtered AS MATERIALIZED (
+      SELECT * FROM visible WHERE NOT $3::boolean OR NOT (id = ANY($1::text[]))
+    ), summary AS (
+      SELECT COUNT(*)::int AS total_count,
+        COUNT(*) FILTER (WHERE NOT (id = ANY($1::text[])))::int AS unread_count
+      FROM visible
+    ), page_rows AS (
+      SELECT * FROM filtered
+      WHERE $4::int IS NULL OR type_rank > $4::int
+        OR (type_rank = $4::int AND id COLLATE "C" > $5::text COLLATE "C")
+      ORDER BY type_rank ASC, id COLLATE "C" ASC
+      LIMIT $6::int
+    )
+    SELECT summary.total_count, summary.unread_count,
+      (SELECT COUNT(*)::int FROM filtered) AS filtered_count,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('id', page_rows.id, 'type', page_rows.type,
+        'severity', page_rows.severity, 'source', page_rows.source) ORDER BY page_rows.type_rank, page_rows.id COLLATE "C") FROM page_rows), '[]'::jsonb) AS page_items
+    FROM summary
+  `, [input.readIds ?? [], input.dismissedIds ?? [], input.unreadOnly ?? false, cursorType, cursor?.id ?? null, limit + 1]);
+  const result = rows[0];
+  if (!result) return null;
+  const rawItems = (typeof result.page_items === 'string' ? JSON.parse(result.page_items) : result.page_items ?? []) as Record<string, unknown>[];
+  const hasMore = rawItems.length > limit;
+  const items = rawItems.slice(0, limit).map(notificationItemFromDbRow);
+  const last = items.at(-1);
+  return {
+    items,
+    page: {
+      limit,
+      totalCount: Number(result.filtered_count ?? 0),
+      hasMore,
+      nextCursor: hasMore && last ? encodeNotificationCursor(last) : null,
+    },
+    summary: {
+      totalCount: Number(result.total_count ?? 0),
+      unreadCount: Number(result.unread_count ?? 0),
     },
   };
 }

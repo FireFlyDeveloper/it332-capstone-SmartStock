@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import { requireAuth } from '../auth/middleware.js';
+import { isDbSyncActive } from '../db/syncState.js';
+import { getNotificationPageDb } from '../db/postgresStore.js';
 import { listProducts } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import { buildNotificationFeed, listActiveNotificationIds, listNewNotificationItems, paginateNotificationFeed } from './feed.js';
@@ -31,15 +33,28 @@ notificationRoutes.post('/page', async (c) => {
   const limit = body.limit === undefined ? 25 : Number(body.limit);
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) return c.json({ error: 'limit must be an integer between 1 and 100' }, 400);
 
+  const input = {
+    limit,
+    cursor: body.cursor as string | null | undefined,
+    readIds,
+    dismissedIds,
+    unreadOnly: body.unreadOnly as boolean | undefined,
+  };
+  if (isDbSyncActive()) {
+    try {
+      const result = await getNotificationPageDb(input);
+      if (!result) return c.json({ error: 'PostgreSQL is unavailable for notifications' }, 503);
+      return c.json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not load notification page';
+      const status = message.startsWith('cursor') || message.startsWith('limit') ? 400 : 503;
+      return c.json({ error: message }, status);
+    }
+  }
+
   try {
     const feed = buildNotificationFeed(listProducts(), listOrders());
-    return c.json(paginateNotificationFeed(feed, {
-      limit,
-      cursor: body.cursor as string | null | undefined,
-      readIds,
-      dismissedIds,
-      unreadOnly: body.unreadOnly as boolean | undefined,
-    }));
+    return c.json(paginateNotificationFeed(feed, input));
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Invalid notification page request' }, 400);
   }

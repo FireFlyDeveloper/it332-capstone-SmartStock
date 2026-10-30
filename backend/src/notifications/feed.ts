@@ -46,11 +46,15 @@ function compareNotification(left: NotificationFeedItem, right: NotificationFeed
   return TYPE_ORDER[left.type] - TYPE_ORDER[right.type] || left.id.localeCompare(right.id);
 }
 
-function encodeNotificationCursor(item: NotificationFeedItem): string {
+export function notificationTypeRank(type: NotificationFeedItem['type']): number {
+  return TYPE_ORDER[type];
+}
+
+export function encodeNotificationCursor(item: NotificationFeedItem): string {
   return Buffer.from(JSON.stringify({ type: item.type, id: item.id })).toString('base64url');
 }
 
-function decodeNotificationCursor(cursor: string): Pick<NotificationFeedItem, 'type' | 'id'> | null {
+export function decodeNotificationCursor(cursor: string): Pick<NotificationFeedItem, 'type' | 'id'> | null {
   try {
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as { type?: unknown; id?: unknown };
     if (typeof parsed.id !== 'string' || !(parsed.type === 'stock' || parsed.type === 'order' || parsed.type === 'delivery')) return null;
