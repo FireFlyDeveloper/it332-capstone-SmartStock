@@ -5,6 +5,7 @@
  * Last touched: 2026-07-17
  */
 
+import { listOrders } from '../orders/store.js';
 import { getAnnualPurchases, getSalesTrends, getDemandForecast } from '../analytics/service.js';
 import { listProducts, readInventoryPolicyHistory, type InventoryPolicyEvent, type Product } from '../inventory/store.js';
 
@@ -14,6 +15,40 @@ function currentUtcYear() {
 
 function roundTwo(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export function buildOrderSummaryReport(fromDate?: string, toDate?: string) {
+  const orders = listOrders().filter((order) => (
+    (!fromDate || order.deliveryDate >= fromDate) && (!toDate || order.deliveryDate <= toDate)
+  ));
+  const count = (predicate: (order: (typeof orders)[number]) => boolean) => orders.filter(predicate).length;
+  const processingCount = count((order) => order.orderStatus === 'processing');
+  const inTransitCount = count((order) => order.orderStatus === 'in_transit');
+  const completedCount = count((order) => order.orderStatus === 'delivered');
+  const cancelledCount = count((order) => order.orderStatus === 'cancelled');
+  const pendingPaymentCount = count((order) => order.paymentStatus === 'unpaid');
+  const partialPaymentCount = count((order) => order.paymentStatus === 'partial');
+  const paidCount = count((order) => order.paymentStatus === 'paid');
+  const refundedCount = count((order) => order.paymentStatus === 'refunded');
+
+  return {
+    totalOrders: orders.length,
+    totalSales: roundTwo(orders.reduce((sum, order) => sum + (order.orderStatus === 'delivered' ? order.total : 0), 0)),
+    completedCount,
+    pendingOrders: processingCount + inTransitCount,
+    statusCounts: {
+      completed: completedCount,
+      inProgress: processingCount + inTransitCount,
+      pending: 0,
+      cancelled: cancelledCount,
+    },
+    paymentCounts: {
+      paid: paidCount,
+      pending: pendingPaymentCount,
+      partial: partialPaymentCount,
+      refunded: refundedCount,
+    },
+  };
 }
 
 export function buildMonthlySalesReport() {

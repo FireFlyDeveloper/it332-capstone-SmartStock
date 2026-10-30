@@ -23,7 +23,7 @@ import type { Order } from '../types';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
-import { apiFetchBlob, getAnalyticsPurchasesPage, getDemandForecastPage, getPolicyPerformancePage, getOrdersPage, type ApiError, type PurchaseAnalyticsPageResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
+import { apiFetchBlob, getAnalyticsPurchasesPage, getDemandForecastPage, getPolicyPerformancePage, getOrdersPage, getReportOrdersSummary, type ApiError, type ReportOrdersSummary, type PurchaseAnalyticsPageResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
 import { toFrontendOrder } from '../components/orderMapper';
 import { useAuth } from '../components/AuthContext';
 
@@ -96,7 +96,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
 
 export const Reports: React.FC = () => {
   const navigate = useNavigate();
-  const { products, orders, productsLoading, productsError, ordersLoading, ordersError, refreshProducts, refreshOrders } = useData();
+  const { products, productsLoading, productsError, refreshProducts } = useData();
   const { canExportReports } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Order['orderStatus']>('all');
@@ -142,6 +142,22 @@ export const Reports: React.FC = () => {
   const historySentinelRef = useRef<HTMLDivElement | null>(null);
   const historyRequestRef = useRef(0);
   const historyLoadingMoreRef = useRef(false);
+  const [orderSummary, setOrderSummary] = useState<ReportOrdersSummary | null>(null);
+  const [orderSummaryLoading, setOrderSummaryLoading] = useState(true);
+  const [orderSummaryError, setOrderSummaryError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setOrderSummaryLoading(true);
+    setOrderSummaryError('');
+    getReportOrdersSummary({ fromDate: fromDate || null, toDate: toDate || null })
+      .then((summary) => { if (active) setOrderSummary(summary); })
+      .catch((error) => {
+        if (active) setOrderSummaryError(error instanceof Error ? error.message : 'Could not load order summary.');
+      })
+      .finally(() => { if (active) setOrderSummaryLoading(false); });
+    return () => { active = false; };
+  }, [fromDate, toDate, historyRetry]);
 
   useEffect(() => {
     const requestId = ++historyRequestRef.current;
@@ -367,11 +383,7 @@ export const Reports: React.FC = () => {
     return () => observer.disconnect();
   }, [observedPolicy?.page.hasMore, observedPolicyLoading, observedPolicyLoadingMore, observedPolicyLoadMoreError, loadMoreObservedPolicy]);
 
-  const latestOrderDate = useMemo(() => {
-    if (!orders || orders.length === 0) return new Date();
-    const timestamps = orders.map(o => new Date(o.date).getTime()).filter(t => !isNaN(t));
-    return timestamps.length > 0 ? new Date(Math.max(...timestamps)) : new Date();
-  }, [orders]);
+  const dateRangeAnchor = new Date();
 
   const handleDatePreset = (preset: '7d' | '30d' | 'all') => {
     setDatePreset(preset);
@@ -380,8 +392,8 @@ export const Reports: React.FC = () => {
       setToDate('');
       toast.info('Showing all-time records.');
     } else {
-      const end = new Date(latestOrderDate);
-      const start = new Date(latestOrderDate);
+      const end = new Date(dateRangeAnchor);
+      const start = new Date(dateRangeAnchor);
       const days = preset === '7d' ? 7 : 30;
       start.setDate(start.getDate() - days);
       const startStr = formatDateInput(start);
@@ -409,13 +421,7 @@ export const Reports: React.FC = () => {
     toast.info('Date filters cleared.');
   };
 
-  const filteredOrders = useMemo(() => orders.filter((order) => {
-    if (fromDate && order.date < fromDate) return false;
-    if (toDate && order.date > toDate) return false;
-    return true;
-  }), [orders, fromDate, toDate]);
-
-  // The backend order-history endpoint applies these filters before cursor pagination.
+  // The backend order-history endpoint applies filters before cursor pagination.
   const transactionHistory = useMemo(() => {
     return historyOrders.map((order) => ({
       id: order.id,
@@ -430,12 +436,14 @@ export const Reports: React.FC = () => {
   const filteredTransactions = transactionHistory;
   const availablePolicyRows = policyRows;
 
-  // Calculate summary stats dynamically based on filtered orders
-  const totalSales = filteredOrders.filter(o => o.orderStatus === 'completed').reduce((sum, o) => sum + o.total, 0);
+  // Summary counts and totals are computed from the backend's full filtered dataset.
+  const totalSales = orderSummary?.totalSales ?? 0;
   const totalRevenue = totalSales;
-  const totalOrders = filteredOrders.length;
-  const completedOrders = filteredOrders.filter(o => o.orderStatus === 'completed').length;
-  const pendingOrders = filteredOrders.filter(o => ['pending', 'packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)).length;
+  const totalOrders = orderSummary?.totalOrders ?? 0;
+  const completedOrders = orderSummary?.completedCount ?? 0;
+  const pendingOrders = orderSummary?.pendingOrders ?? 0;
+  const statusCounts = orderSummary?.statusCounts ?? { completed: 0, inProgress: 0, pending: 0, cancelled: 0 };
+  const paymentCounts = orderSummary?.paymentCounts ?? { paid: 0, pending: 0, partial: 0, refunded: 0 };
   const totalProducts = products.length;
   const totalInventoryValue = products.reduce((sum, p) => sum + (p.stock * p.price), 0);
 
@@ -568,17 +576,20 @@ export const Reports: React.FC = () => {
     }
   };
 
-  if (productsLoading || ordersLoading) {
+  if (productsLoading || orderSummaryLoading) {
     return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading report source data from backend…</div>;
   }
-  const sourceError = [productsError && `Products: ${productsError}`, ordersError && `Orders: ${ordersError}`].filter(Boolean).join('; ');
+  const sourceError = [productsError && `Products: ${productsError}`, orderSummaryError && `Order summary: ${orderSummaryError}`].filter(Boolean).join('; ');
   if (sourceError) {
     return (
       <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
         <p className="font-semibold text-rose-700">Could not load report source data: {sourceError}</p>
         <button
           type="button"
-          onClick={() => void Promise.allSettled([refreshProducts(), refreshOrders()])}
+          onClick={() => {
+            setHistoryRetry((current) => current + 1);
+            void refreshProducts();
+          }}
           className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
         >
           Retry
@@ -930,10 +941,10 @@ export const Reports: React.FC = () => {
             <h3 className="text-lg font-bold text-slate-900 mb-4">Order Status Breakdown</h3>
             <div className="space-y-4">
               {[
-                { status: 'Completed', count: filteredOrders.filter(o => o.orderStatus === 'completed').length, color: 'bg-emerald-500', total: completedOrders },
-                { status: 'In Progress', count: filteredOrders.filter(o => ['packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)).length, color: 'bg-sky-500', total: filteredOrders.filter(o => ['packed', 'out_for_delivery', 'ready_for_pickup'].includes(o.orderStatus)).length },
-                { status: 'Pending', count: filteredOrders.filter(o => o.orderStatus === 'pending').length, color: 'bg-amber-500', total: filteredOrders.filter(o => o.orderStatus === 'pending').length },
-                { status: 'Cancelled', count: filteredOrders.filter(o => o.orderStatus === 'cancelled').length, color: 'bg-rose-500', total: filteredOrders.filter(o => o.orderStatus === 'cancelled').length },
+                { status: 'Completed', count: statusCounts.completed, color: 'bg-emerald-500' },
+                { status: 'In Progress', count: statusCounts.inProgress, color: 'bg-sky-500' },
+                { status: 'Pending', count: statusCounts.pending, color: 'bg-amber-500' },
+                { status: 'Cancelled', count: statusCounts.cancelled, color: 'bg-rose-500' },
               ].map((item) => (
                 <div key={item.status} className="space-y-2">
                   <div className="flex justify-between text-sm font-medium">
@@ -943,7 +954,7 @@ export const Reports: React.FC = () => {
                   <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                     <div 
                       className={`h-2 rounded-full ${item.color} transition-all duration-500`} 
-                      style={{ width: `${filteredOrders.length > 0 ? (item.count / filteredOrders.length) * 100 : 0}%` }}
+                      style={{ width: `${totalOrders > 0 ? (item.count / totalOrders) * 100 : 0}%` }}
                     />
                   </div>
                 </div>
@@ -956,10 +967,10 @@ export const Reports: React.FC = () => {
             <h3 className="text-lg font-bold text-slate-900 mb-4">Payment Status Breakdown</h3>
             <div className="space-y-4">
               {[
-                { status: 'Paid', count: filteredOrders.filter(o => o.paymentStatus === 'paid').length, color: 'bg-emerald-500' },
-                { status: 'Pending', count: filteredOrders.filter(o => o.paymentStatus === 'pending').length, color: 'bg-amber-500' },
-                { status: 'Partial', count: filteredOrders.filter(o => o.paymentStatus === 'partial').length, color: 'bg-orange-500' },
-                { status: 'Refunded', count: filteredOrders.filter(o => o.paymentStatus === 'refunded').length, color: 'bg-rose-500' },
+                { status: 'Paid', count: paymentCounts.paid, color: 'bg-emerald-500' },
+                { status: 'Pending', count: paymentCounts.pending, color: 'bg-amber-500' },
+                { status: 'Partial', count: paymentCounts.partial, color: 'bg-orange-500' },
+                { status: 'Refunded', count: paymentCounts.refunded, color: 'bg-rose-500' },
               ].map((item) => (
                 <div key={item.status} className="space-y-2">
                   <div className="flex justify-between text-sm font-medium">
@@ -969,7 +980,7 @@ export const Reports: React.FC = () => {
                   <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                     <div 
                       className={`h-2 rounded-full ${item.color} transition-all duration-500`} 
-                      style={{ width: `${filteredOrders.length > 0 ? (item.count / filteredOrders.length) * 100 : 0}%` }}
+                      style={{ width: `${totalOrders > 0 ? (item.count / totalOrders) * 100 : 0}%` }}
                     />
                   </div>
                 </div>

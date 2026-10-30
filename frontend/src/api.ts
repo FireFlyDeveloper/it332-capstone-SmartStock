@@ -279,6 +279,23 @@ export function getDashboardRecentActivity(limit = 6): Promise<DashboardActivity
   return apiFetch<DashboardActivityRecord[]>(`/analytics/recent-activity?limit=${encodeURIComponent(String(limit))}`)
 }
 
+export interface ReportOrdersSummary {
+  totalOrders: number
+  totalSales: number
+  completedCount: number
+  pendingOrders: number
+  statusCounts: { completed: number; inProgress: number; pending: number; cancelled: number }
+  paymentCounts: { paid: number; pending: number; partial: number; refunded: number }
+}
+
+export function getReportOrdersSummary(options: { fromDate?: string | null; toDate?: string | null } = {}): Promise<ReportOrdersSummary> {
+  const params = new URLSearchParams()
+  if (options.fromDate) params.set('fromDate', options.fromDate)
+  if (options.toDate) params.set('toDate', options.toDate)
+  const query = params.toString()
+  return apiFetch<ReportOrdersSummary>(`/reports/orders/summary${query ? `?${query}` : ''}`)
+}
+
 export interface PurchaseAnalyticsPageResponse extends PurchaseAnalyticsResponse {
   page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null }
 }

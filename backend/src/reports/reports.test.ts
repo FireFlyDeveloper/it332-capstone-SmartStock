@@ -118,6 +118,36 @@ describe('reports routes', () => {
     expect(staff.headers.get('content-type')).toContain('application/json');
   });
 
+  it('serves backend order summary metrics with date filters', async () => {
+    const delivered = createOrder({
+      referenceNumber: 'SS-2026-03001',
+      customerName: 'Delivered Customer',
+      customerPhone: '+639****3001',
+      deliveryAddress: 'Laguna',
+      deliveryDate: '2026-02-22',
+      paidAmount: 150,
+      items: [{ productId: 'GLS-1', name: 'Glass', quantity: 1, unitPrice: 150 }],
+    });
+    delivered.orderStatus = 'delivered';
+
+    const all = await authedRequest(buildApp(), '/reports/orders/summary');
+    expect(all.status).toBe(200);
+    expect(await all.json()).toEqual({
+      totalOrders: 4,
+      totalSales: 150,
+      completedCount: 1,
+      pendingOrders: 2,
+      statusCounts: { completed: 1, inProgress: 2, pending: 0, cancelled: 1 },
+      paymentCounts: { paid: 3, pending: 0, partial: 1, refunded: 0 },
+    });
+
+    const filtered = await authedRequest(buildApp(), '/reports/orders/summary?fromDate=2026-01-20&toDate=2026-01-20');
+    expect(filtered.status).toBe(200);
+    expect(await filtered.json()).toMatchObject({ totalOrders: 1, pendingOrders: 1, statusCounts: { inProgress: 1 } });
+    expect((await authedRequest(buildApp(), '/reports/orders/summary?fromDate=2026-02-30')).status).toBe(400);
+    expect((await authedRequest(buildApp(), '/reports/orders/summary?fromDate=2026-03-01&toDate=2026-02-01')).status).toBe(400);
+  });
+
   it('allows admin to access report JSON summaries', async () => {
     const admin = await authedRequest(app, '/reports/spending', ADMIN);
     expect(admin.status).toBe(200);

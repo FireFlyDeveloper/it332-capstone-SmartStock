@@ -11,6 +11,7 @@ import {
   buildAnnualPurchasesReport,
   buildInventoryEvaluationReport,
   buildMonthlySalesReport,
+  buildOrderSummaryReport,
   buildSpendingReport,
   buildDemandForecastReport,
   buildPolicyPerformanceReport,
@@ -24,6 +25,24 @@ import { exportReportXlsx } from './exporters/xlsx.js';
 export const reportsRoutes = new Hono();
 
 reportsRoutes.use('*', requireAuth);
+
+function isDateOnly(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+reportsRoutes.get('/orders/summary', (c) => {
+  const fromDate = c.req.query('fromDate') || undefined;
+  const toDate = c.req.query('toDate') || undefined;
+  if ((fromDate && !isDateOnly(fromDate)) || (toDate && !isDateOnly(toDate))) {
+    return c.json({ error: 'fromDate and toDate must be valid YYYY-MM-DD dates' }, 400);
+  }
+  if (fromDate && toDate && fromDate > toDate) {
+    return c.json({ error: 'fromDate must be on or before toDate' }, 400);
+  }
+  return c.json(buildOrderSummaryReport(fromDate, toDate));
+});
 
 function parseYear(rawYear: string | undefined): { ok: true; year: number | undefined } | { ok: false; error: string } {
   if (rawYear === undefined) return { ok: true, year: undefined };
