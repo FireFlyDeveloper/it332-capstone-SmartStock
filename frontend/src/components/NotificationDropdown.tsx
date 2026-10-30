@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -13,8 +13,7 @@ import {
   Package,
   RefreshCw,
 } from 'lucide-react';
-import { getNotificationFeed, type NotificationFeedItem } from '../api';
-import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
+import { getNotificationChanges, getNotificationIds, getNotificationsPage, type NotificationFeedItem, type NotificationsPageResponse } from '../api';
 
 export type NotificationItem = NotificationFeedItem;
 
@@ -52,29 +51,105 @@ export const NotificationDropdown: React.FC = () => {
   const knownNotificationIdsRef = useRef<Set<string>>(new Set());
   const initializedNotificationsRef = useRef(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(READ_STORAGE_KEY);
+      return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(DISMISSED_STORAGE_KEY);
+      return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
   const [allNotifications, setAllNotifications] = useState<NotificationItem[]>([]);
+  const [notificationsPage, setNotificationsPage] = useState<NotificationsPageResponse['page'] | null>(null);
+  const [notificationSummary, setNotificationSummary] = useState<NotificationsPageResponse['summary']>({ totalCount: 0, unreadCount: 0 });
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState('');
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourcesError, setSourcesError] = useState<string | null>(null);
   const sourcesReady = !sourcesLoading && !sourcesError;
+  const pageRequestRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const refreshSources = useCallback(async () => {
+    const requestId = ++pageRequestRef.current;
+    loadingMoreRef.current = false;
+    setLoadingMore(false);
+    setLoadMoreError('');
     setSourcesLoading(true);
     setSourcesError(null);
     try {
-      setAllNotifications(await getNotificationFeed());
+      const result = await getNotificationsPage({
+        limit: 25,
+        readIds: Array.from(readIds).slice(-10_000),
+        dismissedIds: Array.from(dismissedIds).slice(-10_000),
+        unreadOnly: activeTab === 'unread',
+      });
+      if (requestId !== pageRequestRef.current) return;
+      setAllNotifications(result.items);
+      setNotificationsPage(result.page);
+      setNotificationSummary(result.summary);
     } catch (error) {
-      setSourcesError(error instanceof Error ? error.message : 'Could not load current notifications.');
+      if (requestId === pageRequestRef.current) setSourcesError(error instanceof Error ? error.message : 'Could not load current notifications.');
     } finally {
-      setSourcesLoading(false);
+      if (requestId === pageRequestRef.current) setSourcesLoading(false);
     }
-  }, []);
+  }, [activeTab, dismissedIds, readIds]);
+
+  const notifyBrowserNotifications = useCallback((items: NotificationFeedItem[]) => {
+    if (!notificationPreferences.browserPush || !('Notification' in window) || Notification.permission !== 'granted') return;
+    items.forEach((item) => {
+      if (dismissedIds.has(item.id)) return;
+      const categoryEnabled = item.type === 'stock'
+        ? notificationPreferences.lowStockAlerts
+        : item.type === 'delivery'
+          ? notificationPreferences.deliveryDispatches
+          : notificationPreferences.orderStatusUpdates;
+      if (!categoryEnabled) return;
+      const browserNotification = new Notification(item.title, { body: item.message, tag: item.id });
+      browserNotification.onclick = () => {
+        window.focus();
+        setIsOpen(false);
+        navigate(item.link);
+        browserNotification.close();
+      };
+    });
+  }, [dismissedIds, navigate, notificationPreferences]);
+
+  const baselineStartedRef = useRef(false);
+  const baselineReadyRef = useRef(false);
+  const pollNewNotifications = useCallback(async () => {
+    if (!baselineReadyRef.current || !notificationPreferences.browserPush || !('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+      const knownIds = Array.from(knownNotificationIdsRef.current).slice(-10_000);
+      const { items } = await getNotificationChanges(knownIds, Array.from(dismissedIds).slice(-10_000));
+      const newItems = items.filter((item) => !knownNotificationIdsRef.current.has(item.id));
+      newItems.forEach((item) => knownNotificationIdsRef.current.add(item.id));
+      notifyBrowserNotifications(newItems);
+    } catch {
+      // Keep background polling quiet; the visible list has its own retry state.
+    }
+  }, [dismissedIds, notificationPreferences, notifyBrowserNotifications]);
 
   useEffect(() => { void refreshSources(); }, [refreshSources]);
 
   useEffect(() => {
-    window.addEventListener('smartstock-notifications-refresh', refreshSources);
-    return () => window.removeEventListener('smartstock-notifications-refresh', refreshSources);
-  }, [refreshSources]);
+    const refreshAndCheck = () => {
+      void refreshSources();
+      void pollNewNotifications();
+    };
+    window.addEventListener('smartstock-notifications-refresh', refreshAndCheck);
+    return () => window.removeEventListener('smartstock-notifications-refresh', refreshAndCheck);
+  }, [pollNewNotifications, refreshSources]);
 
   useEffect(() => {
     if (isOpen) void refreshSources();
@@ -93,25 +168,6 @@ export const NotificationDropdown: React.FC = () => {
   const retrySources = () => {
     void refreshSources();
   };
-
-  // Read / Dismissed IDs in localStorage
-  const [readIds, setReadIds] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem(READ_STORAGE_KEY);
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
-
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem(DISMISSED_STORAGE_KEY);
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
 
   // Save to localStorage when state changes
   useEffect(() => {
@@ -154,68 +210,97 @@ export const NotificationDropdown: React.FC = () => {
     };
   }, [isOpen]);
 
-  // Filter out dismissed
-  const visibleNotifications = useMemo(() => {
-    return allNotifications.filter((n) => !dismissedIds.has(n.id));
-  }, [allNotifications, dismissedIds]);
+  const unreadCount = notificationSummary.unreadCount;
+  const displayedNotifications = allNotifications;
+  const visibleDisplayedNotifications = displayedNotifications;
+  const hasMore = notificationsPage?.hasMore ?? false;
 
-  // Unread count
-  const unreadCount = useMemo(() => {
-    return visibleNotifications.filter((n) => !readIds.has(n.id)).length;
-  }, [visibleNotifications, readIds]);
-
-  // Filtered by tab
-  const displayedNotifications = useMemo(() => {
-    if (activeTab === 'unread') {
-      return visibleNotifications.filter((n) => !readIds.has(n.id));
+  const loadMore = useCallback(async () => {
+    if (!notificationsPage?.hasMore || !notificationsPage.nextCursor || sourcesLoading || loadingMoreRef.current) return;
+    const requestId = pageRequestRef.current;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    setLoadMoreError('');
+    try {
+      const result = await getNotificationsPage({
+        limit: notificationsPage.limit,
+        cursor: notificationsPage.nextCursor,
+        readIds: Array.from(readIds).slice(-10_000),
+        dismissedIds: Array.from(dismissedIds).slice(-10_000),
+        unreadOnly: activeTab === 'unread',
+      });
+      if (requestId !== pageRequestRef.current) return;
+      result.items.forEach((item) => knownNotificationIdsRef.current.add(item.id));
+      setAllNotifications((current) => {
+        const existing = new Set(current.map((item) => item.id));
+        return [...current, ...result.items.filter((item) => !existing.has(item.id))];
+      });
+      setNotificationsPage(result.page);
+      setNotificationSummary(result.summary);
+    } catch (error) {
+      if (requestId === pageRequestRef.current) setLoadMoreError(error instanceof Error ? error.message : 'Could not load more notifications.');
+    } finally {
+      if (requestId === pageRequestRef.current) {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      }
     }
-    return visibleNotifications;
-  }, [visibleNotifications, activeTab, readIds]);
-  const { visibleItems: visibleDisplayedNotifications, sentinelRef, hasMore } = useInfiniteScroll(displayedNotifications);
+  }, [activeTab, dismissedIds, notificationsPage, readIds, sourcesLoading]);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    const root = listRef.current;
+    if (!sentinel || !root || !hasMore || sourcesLoading || loadingMore || loadMoreError || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+    }, { root, rootMargin: '96px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore, loadMoreError, loadingMore, sourcesLoading]);
+
 
   useEffect(() => {
     if (!sourcesReady) return;
 
-    if (!initializedNotificationsRef.current) {
+    if (!baselineStartedRef.current) {
+      baselineStartedRef.current = true;
       allNotifications.forEach((item) => knownNotificationIdsRef.current.add(item.id));
       initializedNotificationsRef.current = true;
+      void getNotificationIds(Array.from(dismissedIds).slice(-10_000))
+        .then(({ ids }) => {
+          ids.forEach((id) => knownNotificationIdsRef.current.add(id));
+          baselineReadyRef.current = true;
+        })
+        .catch(() => {
+          baselineReadyRef.current = true;
+        });
       return;
     }
 
+    if (!initializedNotificationsRef.current) return;
     const newNotifications = allNotifications.filter((item) => !knownNotificationIdsRef.current.has(item.id));
     allNotifications.forEach((item) => knownNotificationIdsRef.current.add(item.id));
-    if (!notificationPreferences.browserPush || !('Notification' in window) || Notification.permission !== 'granted') return;
-
-    newNotifications.forEach((item) => {
-      if (dismissedIds.has(item.id)) return;
-      const categoryEnabled = item.type === 'stock'
-        ? notificationPreferences.lowStockAlerts
-        : item.type === 'delivery'
-          ? notificationPreferences.deliveryDispatches
-          : notificationPreferences.orderStatusUpdates;
-      if (!categoryEnabled) return;
-      const browserNotification = new Notification(item.title, { body: item.message, tag: item.id });
-      browserNotification.onclick = () => {
-        window.focus();
-        setIsOpen(false);
-        navigate(item.link);
-        browserNotification.close();
-      };
-    });
-  }, [allNotifications, dismissedIds, navigate, notificationPreferences, sourcesReady]);
+    notifyBrowserNotifications(newNotifications);
+  }, [allNotifications, dismissedIds, notifyBrowserNotifications, sourcesReady]);
 
   useEffect(() => {
     if (!sourcesReady || !notificationPreferences.browserPush || !('Notification' in window) || Notification.permission !== 'granted') return;
     const timer = window.setInterval(() => {
-      if (document.visibilityState !== 'hidden') void refreshSources();
+      if (document.visibilityState !== 'hidden') {
+        void refreshSources();
+        void pollNewNotifications();
+      }
     }, 60_000);
     return () => window.clearInterval(timer);
-  }, [notificationPreferences.browserPush, refreshSources, sourcesReady]);
+  }, [notificationPreferences.browserPush, pollNewNotifications, refreshSources, sourcesReady]);
 
-  const markAllAsRead = () => {
-    const newSet = new Set(readIds);
-    visibleNotifications.forEach((n) => newSet.add(n.id));
-    setReadIds(newSet);
+  const markAllAsRead = async () => {
+    try {
+      const { ids } = await getNotificationIds(Array.from(dismissedIds).slice(-10_000));
+      setReadIds((previous) => new Set([...previous, ...ids]));
+    } catch (error) {
+      setSourcesError(error instanceof Error ? error.message : 'Could not mark notifications as read.');
+    }
   };
 
   const handleNotificationClick = (item: NotificationItem) => {
@@ -229,8 +314,13 @@ export const NotificationDropdown: React.FC = () => {
     setDismissedIds((prev) => new Set(prev).add(id));
   };
 
-  const handleClearAll = () => {
-    setDismissedIds((previous) => new Set([...previous, ...visibleNotifications.map((item) => item.id)]));
+  const handleClearAll = async () => {
+    try {
+      const { ids } = await getNotificationIds(Array.from(dismissedIds).slice(-10_000));
+      setDismissedIds((previous) => new Set([...previous, ...ids]));
+    } catch (error) {
+      setSourcesError(error instanceof Error ? error.message : 'Could not clear notifications.');
+    }
   };
 
   const getIcon = (item: NotificationItem) => {
@@ -318,7 +408,7 @@ export const NotificationDropdown: React.FC = () => {
                   <span>Mark read</span>
                 </button>
               )}
-              {sourcesReady && visibleNotifications.length > 0 && (
+              {sourcesReady && notificationSummary.totalCount > 0 && (
                 <button
                   type="button"
                   onClick={handleClearAll}
@@ -337,7 +427,7 @@ export const NotificationDropdown: React.FC = () => {
               <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
                 Show
                 <select value={activeTab} onChange={(event) => setActiveTab(event.target.value as typeof activeTab)} className="input !w-auto !py-1">
-                  <option value="all">All ({visibleNotifications.length})</option>
+                  <option value="all">All ({notificationSummary.totalCount})</option>
                   <option value="unread">Unread ({unreadCount})</option>
                 </select>
               </label>
@@ -346,7 +436,7 @@ export const NotificationDropdown: React.FC = () => {
           )}
 
           {/* Notifications Scrollable List */}
-          <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-100">
+          <div ref={listRef} className="max-h-[360px] overflow-y-auto divide-y divide-slate-100">
             {sourcesLoading ? (
               <div role="status" className="p-8 text-center text-xs text-slate-500">
                 Loading alerts from current product and order records…
@@ -433,7 +523,13 @@ export const NotificationDropdown: React.FC = () => {
                 );
               })
             )}
-            {sourcesReady && hasMore && <div ref={sentinelRef} role="status" className="py-3 text-center text-[11px] text-slate-400">Scroll to load more notifications…</div>}
+            {sourcesReady && hasMore && (
+              <div ref={sentinelRef} role="status" className="py-3 text-center text-[11px] text-slate-400">
+                {loadingMore ? 'Loading more notifications…' : loadMoreError
+                  ? <button type="button" onClick={() => void loadMore()} className="font-semibold text-indigo-600 hover:underline">Could not load more. Retry</button>
+                  : 'Scroll to load more notifications…'}
+              </div>
+            )}
           </div>
 
           {/* Dropdown Footer */}

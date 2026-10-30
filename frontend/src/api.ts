@@ -222,8 +222,37 @@ export interface NotificationFeedItem {
   link: string
 }
 
-export function getNotificationFeed(): Promise<NotificationFeedItem[]> {
-  return apiFetch<NotificationFeedItem[]>('/notifications')
+export interface NotificationsPageResponse {
+  items: NotificationFeedItem[]
+  page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null }
+  summary: { totalCount: number; unreadCount: number }
+}
+
+export function getNotificationsPage(options: {
+  limit?: number
+  cursor?: string | null
+  readIds?: string[]
+  dismissedIds?: string[]
+  unreadOnly?: boolean
+} = {}): Promise<NotificationsPageResponse> {
+  return apiFetch<NotificationsPageResponse>('/notifications/page', {
+    method: 'POST',
+    body: JSON.stringify(options),
+  })
+}
+
+export function getNotificationChanges(knownIds: string[], dismissedIds: string[]): Promise<{ items: NotificationFeedItem[] }> {
+  return apiFetch<{ items: NotificationFeedItem[] }>('/notifications/changes', {
+    method: 'POST',
+    body: JSON.stringify({ knownIds, dismissedIds }),
+  })
+}
+
+export function getNotificationIds(dismissedIds: string[]): Promise<{ ids: string[] }> {
+  return apiFetch<{ ids: string[] }>('/notifications/ids', {
+    method: 'POST',
+    body: JSON.stringify({ dismissedIds }),
+  })
 }
 
 export interface AnalyticsOrderSummary {

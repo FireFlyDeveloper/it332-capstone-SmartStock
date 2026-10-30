@@ -59,4 +59,53 @@ describe('notification feed route', () => {
       expect.stringMatching(/^delivery-transit-/),
     ]);
   });
+
+  it('paginates notifications and reports global read and dismissal counts', async () => {
+    const token = await login();
+    const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
+    const requestPage = (body: object) => app.request('/notifications/page', { method: 'POST', headers, body: JSON.stringify(body) });
+    const firstResponse = await requestPage({ limit: 2 });
+    expect(firstResponse.status).toBe(200);
+    const first = await firstResponse.json() as {
+      items: Array<{ id: string; title: string }>;
+      page: { totalCount: number; hasMore: boolean; nextCursor: string | null };
+      summary: { totalCount: number; unreadCount: number };
+    };
+    expect(first.items.map(({ title }) => title)).toEqual([
+      'Critical Stock: Low Glass',
+      'Payment Partial: SS-NOTIF-2',
+    ]);
+    expect(first.page).toMatchObject({ totalCount: 4, hasMore: true });
+    expect(first.summary).toEqual({ totalCount: 4, unreadCount: 4 });
+
+    const secondResponse = await requestPage({ limit: 2, cursor: first.page.nextCursor });
+    const second = await secondResponse.json() as typeof first;
+    expect(second.items.map(({ title }) => title)).toEqual([
+      'Processing Order: SS-NOTIF-1',
+      'Out for Delivery: SS-NOTIF-2',
+    ]);
+    expect(second.page).toMatchObject({ totalCount: 4, hasMore: false, nextCursor: null });
+    expect(new Set([...first.items, ...second.items].map(({ id }) => id)).size).toBe(4);
+
+    const changesResponse = await app.request('/notifications/changes', {
+      method: 'POST', headers, body: JSON.stringify({ knownIds: first.items.map(({ id }) => id), dismissedIds: [] }),
+    });
+    expect(changesResponse.status).toBe(200);
+    expect((await changesResponse.json() as { items: Array<{ title: string }> }).items.map(({ title }) => title)).toEqual([
+      'Processing Order: SS-NOTIF-1',
+      'Out for Delivery: SS-NOTIF-2',
+    ]);
+
+    const unread = await requestPage({ limit: 10, readIds: [first.items[1].id], dismissedIds: [first.items[0].id], unreadOnly: true });
+    expect(unread.status).toBe(200);
+    expect(await unread.json()).toMatchObject({
+      page: { totalCount: 2, hasMore: false },
+      summary: { totalCount: 3, unreadCount: 2 },
+    });
+    const idsResponse = await app.request('/notifications/ids', {
+      method: 'POST', headers, body: JSON.stringify({ dismissedIds: [first.items[0].id] }),
+    });
+    expect((await idsResponse.json() as { ids: string[] }).ids).toHaveLength(3);
+    expect((await requestPage({ limit: 2, cursor: 'invalid' })).status).toBe(400);
+  });
 });

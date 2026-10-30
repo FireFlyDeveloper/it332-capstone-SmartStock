@@ -26,6 +26,75 @@ function stockStatus(stock: number, threshold: number): 'critical' | 'low' | 'he
   return 'healthy';
 }
 
+export interface NotificationPageInput {
+  limit?: number;
+  cursor?: string | null;
+  readIds?: string[];
+  dismissedIds?: string[];
+  unreadOnly?: boolean;
+}
+
+export interface NotificationPageResult {
+  items: NotificationFeedItem[];
+  page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null };
+  summary: { totalCount: number; unreadCount: number };
+}
+
+const TYPE_ORDER: Record<NotificationFeedItem['type'], number> = { stock: 0, order: 1, delivery: 2 };
+
+function compareNotification(left: NotificationFeedItem, right: NotificationFeedItem): number {
+  return TYPE_ORDER[left.type] - TYPE_ORDER[right.type] || left.id.localeCompare(right.id);
+}
+
+function encodeNotificationCursor(item: NotificationFeedItem): string {
+  return Buffer.from(JSON.stringify({ type: item.type, id: item.id })).toString('base64url');
+}
+
+function decodeNotificationCursor(cursor: string): Pick<NotificationFeedItem, 'type' | 'id'> | null {
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as { type?: unknown; id?: unknown };
+    if (typeof parsed.id !== 'string' || !(parsed.type === 'stock' || parsed.type === 'order' || parsed.type === 'delivery')) return null;
+    return { type: parsed.type, id: parsed.id };
+  } catch {
+    return null;
+  }
+}
+
+export function paginateNotificationFeed(feed: NotificationFeedItem[], input: NotificationPageInput = {}): NotificationPageResult {
+  const limit = input.limit ?? 25;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('limit must be an integer between 1 and 100');
+  const cursor = input.cursor ? decodeNotificationCursor(input.cursor) : null;
+  if (input.cursor && !cursor) throw new Error('cursor is invalid');
+
+  const readIds = new Set(input.readIds ?? []);
+  const dismissedIds = new Set(input.dismissedIds ?? []);
+  const visible = feed.filter((item) => !dismissedIds.has(item.id));
+  const unreadCount = visible.filter((item) => !readIds.has(item.id)).length;
+  const filtered = visible.filter((item) => !input.unreadOnly || !readIds.has(item.id)).sort(compareNotification);
+  const afterCursor = cursor
+    ? filtered.filter((item) => TYPE_ORDER[item.type] > TYPE_ORDER[cursor.type]
+      || (TYPE_ORDER[item.type] === TYPE_ORDER[cursor.type] && item.id.localeCompare(cursor.id) > 0))
+    : filtered;
+  const lookahead = afterCursor.slice(0, limit + 1);
+  const hasMore = lookahead.length > limit;
+  const items = lookahead.slice(0, limit);
+  return {
+    items,
+    page: { limit, totalCount: filtered.length, hasMore, nextCursor: hasMore && items.length ? encodeNotificationCursor(items[items.length - 1]) : null },
+    summary: { totalCount: visible.length, unreadCount },
+  };
+}
+
+export function listNewNotificationItems(feed: NotificationFeedItem[], knownIds: string[] = []): NotificationFeedItem[] {
+  const known = new Set(knownIds);
+  return feed.filter((item) => !known.has(item.id));
+}
+
+export function listActiveNotificationIds(feed: NotificationFeedItem[], dismissedIds: string[] = []): string[] {
+  const dismissed = new Set(dismissedIds);
+  return feed.filter((item) => !dismissed.has(item.id)).map((item) => item.id);
+}
+
 export function buildNotificationFeed(products: Product[], orders: Order[]): NotificationFeedItem[] {
   const list: NotificationFeedItem[] = [];
 
