@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
 import { toFrontendOrder } from '../components/orderMapper';
-import { getOrdersPage } from '../api';
+import { getOrdersPage, getProductsPage, type ProductsPageResponse } from '../api';
 import type { Order, OrderItem } from '../types';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
@@ -72,7 +72,7 @@ const emptyForm = {
 
 // ── Component ──────────────────────────────────────────────────────
 export const Orders: React.FC = () => {
-  const { products, addOrder, updateOrder, cancelOrder, processPayment, processRefund, productsLoading, productsError, refreshProducts } = useData();
+  const { addOrder, updateOrder, cancelOrder, processPayment, processRefund } = useData();
 
   // ── Filter / search / modal state ────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
@@ -86,6 +86,17 @@ export const Orders: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState('');
   const [quantity, setQuantity] = useState(0);
   const [productSearch, setProductSearch] = useState('');
+  const [productOptions, setProductOptions] = useState<ProductsPageResponse['items']>([]);
+  const [productPage, setProductPage] = useState<ProductsPageResponse['page'] | null>(null);
+  const [productOptionsLoading, setProductOptionsLoading] = useState(false);
+  const [productOptionsError, setProductOptionsError] = useState('');
+  const [productOptionsLoadingMore, setProductOptionsLoadingMore] = useState(false);
+  const [productOptionsLoadMoreError, setProductOptionsLoadMoreError] = useState('');
+  const [productOptionsRetry, setProductOptionsRetry] = useState(0);
+  const productOptionsRequestRef = useRef(0);
+  const productOptionsLoadingMoreRef = useRef(false);
+  const productOptionsScrollRef = useRef<HTMLDivElement | null>(null);
+  const productOptionsSentinelRef = useRef<HTMLDivElement | null>(null);
   const [savingOrder, setSavingOrder] = useState(false);
   const [savingFinanceAction, setSavingFinanceAction] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
@@ -193,6 +204,72 @@ export const Orders: React.FC = () => {
   }, [searchTerm, statusFilter, fromDate, toDate]);
 
   useEffect(() => { void loadFirstOrderPage() }, [loadFirstOrderPage]);
+
+  useEffect(() => {
+    if (!modalOpen || modalMode !== 'create') {
+      productOptionsRequestRef.current += 1;
+      setProductOptions([]);
+      setProductPage(null);
+      setProductOptionsLoading(false);
+      setProductOptionsError('');
+      return;
+    }
+    const requestId = ++productOptionsRequestRef.current;
+    setProductOptions([]);
+    setProductPage(null);
+    setProductOptionsLoading(true);
+    setProductOptionsError('');
+    setProductOptionsLoadMoreError('');
+    productOptionsLoadingMoreRef.current = false;
+    setProductOptionsLoadingMore(false);
+    getProductsPage({ limit: 25, search: productSearch })
+      .then((response) => {
+        if (requestId !== productOptionsRequestRef.current) return;
+        setProductOptions(response.items.filter((product) => product.status === 'active'));
+        setProductPage(response.page);
+      })
+      .catch((error: unknown) => {
+        if (requestId === productOptionsRequestRef.current) setProductOptionsError(error instanceof Error ? error.message : 'Could not load products.');
+      })
+      .finally(() => {
+        if (requestId === productOptionsRequestRef.current) setProductOptionsLoading(false);
+      });
+    return () => {
+      if (requestId === productOptionsRequestRef.current) productOptionsRequestRef.current += 1;
+    };
+  }, [modalOpen, modalMode, productSearch, productOptionsRetry]);
+
+  const loadMoreProductOptions = useCallback(async () => {
+    if (!modalOpen || modalMode !== 'create' || !productPage?.hasMore || !productPage.nextCursor || productOptionsLoading || productOptionsLoadingMoreRef.current) return;
+    const requestId = productOptionsRequestRef.current;
+    productOptionsLoadingMoreRef.current = true;
+    setProductOptionsLoadingMore(true);
+    setProductOptionsLoadMoreError('');
+    try {
+      const response = await getProductsPage({ limit: 25, cursor: productPage.nextCursor, search: productSearch });
+      if (requestId !== productOptionsRequestRef.current) return;
+      setProductOptions((current) => [...current, ...response.items.filter((product) => product.status === 'active')]);
+      setProductPage(response.page);
+    } catch (error) {
+      if (requestId === productOptionsRequestRef.current) setProductOptionsLoadMoreError(error instanceof Error ? error.message : 'Could not load more products.');
+    } finally {
+      if (requestId === productOptionsRequestRef.current) {
+        productOptionsLoadingMoreRef.current = false;
+        setProductOptionsLoadingMore(false);
+      }
+    }
+  }, [modalOpen, modalMode, productPage, productOptionsLoading, productSearch]);
+
+  useEffect(() => {
+    const sentinel = productOptionsSentinelRef.current;
+    const root = productOptionsScrollRef.current;
+    if (!sentinel || !root || !productPage?.hasMore || productOptionsLoading || productOptionsLoadingMore || productOptionsLoadMoreError || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMoreProductOptions();
+    }, { root, rootMargin: '80px 0px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [productPage?.hasMore, productOptionsLoading, productOptionsLoadingMore, productOptionsLoadMoreError, loadMoreProductOptions]);
 
   const loadMoreOrders = useCallback(async () => {
     if (!pageHasMore || !pageNextCursor || loadingMoreRef.current) return;
@@ -308,7 +385,7 @@ export const Orders: React.FC = () => {
   // ── Item management ──────────────────────────────────────────────
   const addItem = () => {
     if (!selectedProduct || quantity <= 0) return;
-    const product = products.find(p => p.id === selectedProduct);
+    const product = productOptions.find(p => p.id === selectedProduct);
     if (!product) return;
     if (product.stock < quantity) {
       toast.error(`Only ${product.stock} in stock`);
@@ -515,27 +592,16 @@ export const Orders: React.FC = () => {
     return viewOrder.items.filter(i => i.productName.toLowerCase().includes(q));
   }, [viewOrder, itemSearch]);
 
-  // ── Product search in create modal ───────────────────────────────
-  const filteredCreateProducts = useMemo(() => {
-    if (!productSearch.trim()) return products.filter(p => p.status === 'active');
-    const q = productSearch.toLowerCase();
-    return products.filter(p => p.status === 'active' && p.name.toLowerCase().includes(q));
-  }, [products, productSearch]);
-
-  if (productsLoading || pageLoading) {
-    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading orders and product data from backend…</div>;
+  if (pageLoading) {
+    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading orders from backend…</div>;
   }
-  const sourceError = [productsError && `Products: ${productsError}`, pageError && `Order page: ${pageError}`].filter(Boolean).join('; ');
-  if (sourceError) {
+  if (pageError) {
     return (
       <div role="alert" className="rounded-3xl border border-rose-200 bg-white p-8 text-center">
-        <p className="font-semibold text-rose-700">Could not load order source data: {sourceError}</p>
+        <p className="font-semibold text-rose-700">Could not load orders: {pageError}</p>
         <button
           type="button"
-          onClick={() => {
-            void loadFirstOrderPage();
-            void refreshProducts();
-          }}
+          onClick={() => { void loadFirstOrderPage(); }}
           className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
         >
           Retry
@@ -850,30 +916,47 @@ export const Orders: React.FC = () => {
                         type="text"
                         placeholder="Search products…"
                         value={productSearch}
-                        onChange={e => setProductSearch(e.target.value)}
+                        onChange={e => { setProductSearch(e.target.value); setSelectedProduct(''); }}
                         className="input !pl-10"
                       />
                     </div>
-                    <select
-                      value={selectedProduct}
-                      onChange={e => {
-                        setSelectedProduct(e.target.value);
-                        setProductSearch('');
-                      }}
-                      className="input mt-2"
-                      size={Math.min(filteredCreateProducts.length + 1, 6)}
-                    >
-                      <option value="">
-                        {filteredCreateProducts.length === 0
-                          ? 'No products found'
-                          : 'Select a product…'}
-                      </option>
-                      {filteredCreateProducts.map(p => (
-                        <option key={p.id} value={p.id} disabled={p.stock === 0}>
-                          {p.name} — {formatCurrency(p.price)} ({p.stock} avail.)
-                        </option>
+                    {productOptionsError && (
+                      <div role="alert" className="mt-2 text-xs text-rose-700">
+                        <p>{productOptionsError}</p>
+                        <button type="button" onClick={() => setProductOptionsRetry((current) => current + 1)} className="mt-1 font-semibold underline">Retry product search</button>
+                      </div>
+                    )}
+                    <div ref={productOptionsScrollRef} role="listbox" aria-label="Available products" className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+                      {productOptions.map((product) => (
+                        <button
+                          key={product.id}
+                          type="button"
+                          role="option"
+                          aria-selected={selectedProduct === product.id}
+                          onClick={() => setSelectedProduct(product.id)}
+                          disabled={product.stock <= 0}
+                          className={`flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left text-sm last:border-b-0 disabled:cursor-not-allowed disabled:opacity-50 ${selectedProduct === product.id ? 'bg-indigo-50 text-indigo-800' : 'text-slate-700 hover:bg-slate-50'}`}
+                        >
+                          <span className="font-medium">{product.name}</span>
+                          <span className="shrink-0 text-xs text-slate-500">{formatCurrency(product.price)} · {product.stock} avail.</span>
+                        </button>
                       ))}
-                    </select>
+                      {productOptionsLoading && <div role="status" className="px-3 py-3 text-center text-xs text-slate-500">Loading products…</div>}
+                      {!productOptionsLoading && !productOptionsError && productOptions.length === 0 && !productPage?.hasMore && <div className="px-3 py-3 text-center text-xs text-slate-500">No active products found.</div>}
+                      {productPage?.hasMore && <div ref={productOptionsSentinelRef} role="status" className="px-3 py-2 text-center text-xs text-slate-400">Scroll to load more products…</div>}
+                      {productOptionsLoadingMore && <div role="status" className="px-3 py-2 text-center text-xs text-slate-400">Loading more products…</div>}
+                      {productOptionsLoadMoreError && (
+                        <div role="alert" className="px-3 py-2 text-center text-xs text-rose-700">
+                          <p>{productOptionsLoadMoreError}</p>
+                          <button type="button" onClick={() => void loadMoreProductOptions()} className="mt-1 font-semibold underline">Retry</button>
+                        </div>
+                      )}
+                    </div>
+                    {productPage?.hasMore && typeof IntersectionObserver === 'undefined' && (
+                      <button type="button" onClick={() => void loadMoreProductOptions()} disabled={productOptionsLoadingMore} className="mt-2 text-xs font-semibold text-indigo-600 disabled:opacity-50">
+                        {productOptionsLoadingMore ? 'Loading…' : 'Load more products'}
+                      </button>
+                    )}
                   </div>
                   <div className="w-24">
                     <label className="label">Qty</label>
