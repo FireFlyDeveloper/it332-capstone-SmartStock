@@ -341,23 +341,16 @@ export const Dashboard: React.FC = () => {
                   </h3>
                 </div>
 
-                {/* Interactive Time Range Toggle */}
-                <div className="flex items-center gap-1 bg-[#f8fafc] p-1 rounded-2xl border border-slate-100 self-start">
-                  {(['6M', '1Y', 'ALL'] as const).map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setTimeRange(r)}
-                      className={`px-3 py-1 text-xs font-bold rounded-xl transition-all ${
-                        timeRange === r
-                          ? 'bg-white text-[#4f46e5] shadow-xs'
-                          : 'text-slate-400 hover:text-slate-700'
-                      }`}
-                    >
-                      {r}
-                    </button>
-                  ))}
-                </div>
+                <select
+                  aria-label="Monthly order value date range"
+                  value={timeRange}
+                  onChange={(event) => setTimeRange(event.target.value as DashboardSalesRange)}
+                  className="input w-auto self-start"
+                >
+                  <option value="6M">Last 6 months</option>
+                  <option value="1Y">Last year</option>
+                  <option value="ALL">All time</option>
+                </select>
               </div>
 
               {/* Chart with interactive nodes */}
