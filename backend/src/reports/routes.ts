@@ -15,7 +15,7 @@ import {
   buildSpendingReport,
   buildDemandForecastReport,
   buildPolicyPerformanceReport,
-  paginatePolicyPerformanceReport,
+  buildPolicyPerformancePage,
   type PolicyPerformanceCursor,
   type ReportDto,
 } from './service.js';
@@ -125,8 +125,7 @@ reportsRoutes.get('/policy-performance/page', async (c) => {
     }
   }
 
-  const report = await buildPolicyPerformanceReport();
-  return c.json(paginatePolicyPerformanceReport(report, limit, cursor));
+  return c.json(await buildPolicyPerformancePage(new Date(), limit, cursor));
 });
 
 reportsRoutes.get('/policy-performance', async (c) => c.json(await buildPolicyPerformanceReport()));

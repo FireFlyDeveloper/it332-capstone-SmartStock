@@ -6,6 +6,8 @@
  */
 
 import { listOrders } from '../orders/store.js';
+import { isDbSyncActive } from '../db/syncState.js';
+import { listPolicyPerformancePageDb } from '../db/postgresStore.js';
 import { getAnnualPurchases, getSalesTrends, getDemandForecast } from '../analytics/service.js';
 import { listProducts, readInventoryPolicyHistory, type InventoryPolicyEvent, type Product } from '../inventory/store.js';
 
@@ -158,6 +160,9 @@ function roundFour(value: number): number {
   return Math.round((value + Number.EPSILON) * 10_000) / 10_000;
 }
 
+const POLICY_PERFORMANCE_METHOD = 'Observed stock and reorder-point snapshots; intervals are time-weighted from each product baseline/event until the next event or report generation time.';
+const POLICY_PERFORMANCE_ASSUMPTION = 'History starts at baseline/migration activation. No pre-activation history is backfilled. This report does not infer causal effects, missed demand, lead-time effects, or holding-cost effects.';
+
 export async function buildPolicyPerformanceReport(now = new Date()) {
   const events = await readInventoryPolicyHistory();
   const products = listProducts();
@@ -209,8 +214,8 @@ export async function buildPolicyPerformanceReport(now = new Date()) {
     report: 'policy_performance' as const,
     trackingStart,
     generatedAt: now.toISOString(),
-    method: 'Observed stock and reorder-point snapshots; intervals are time-weighted from each product baseline/event until the next event or report generation time.',
-    assumption: 'History starts at baseline/migration activation. No pre-activation history is backfilled. This report does not infer causal effects, missed demand, lead-time effects, or holding-cost effects.',
+    method: POLICY_PERFORMANCE_METHOD,
+    assumption: POLICY_PERFORMANCE_ASSUMPTION,
     totals: {
       products: rows.length,
       productsWithHistory: populated.length,
@@ -227,12 +232,22 @@ export interface PolicyPerformanceCursor {
   productId: string;
 }
 
+function compareUnicodeCodePoints(left: string, right: string): number {
+  const leftPoints = Array.from(left, (character) => character.codePointAt(0)!);
+  const rightPoints = Array.from(right, (character) => character.codePointAt(0)!);
+  const sharedLength = Math.min(leftPoints.length, rightPoints.length);
+  for (let index = 0; index < sharedLength; index += 1) {
+    if (leftPoints[index] !== rightPoints[index]) return leftPoints[index] - rightPoints[index];
+  }
+  return leftPoints.length - rightPoints.length;
+}
+
 export function paginatePolicyPerformanceReport(
   report: Awaited<ReturnType<typeof buildPolicyPerformanceReport>>,
   limit: number,
   cursor: PolicyPerformanceCursor | null,
 ) {
-  const compare = (left: string, right: string) => left < right ? -1 : left > right ? 1 : 0;
+  const compare = compareUnicodeCodePoints;
   const rows = [...report.rows].sort((a, b) => compare(a.name, b.name) || compare(a.productId, b.productId));
   const filtered = cursor
     ? rows.filter((row) => compare(row.name, cursor.name) > 0 || (row.name === cursor.name && compare(row.productId, cursor.productId) > 0))
@@ -248,6 +263,26 @@ export function paginatePolicyPerformanceReport(
     ...report,
     rows: pageRows,
     page: { limit, totalCount: rows.length, hasMore, nextCursor },
+  };
+}
+
+export async function buildPolicyPerformancePage(now: Date, limit: number, cursor: PolicyPerformanceCursor | null) {
+  if (!isDbSyncActive()) return paginatePolicyPerformanceReport(await buildPolicyPerformanceReport(now), limit, cursor);
+
+  const result = await listPolicyPerformancePageDb({ now, limit, cursor });
+  if (!result) throw new Error('PostgreSQL is unavailable for policy-performance pagination');
+  const nextCursor = result.page.nextCursor
+    ? Buffer.from(JSON.stringify(result.page.nextCursor)).toString('base64url')
+    : null;
+  return {
+    report: 'policy_performance' as const,
+    trackingStart: result.trackingStart,
+    generatedAt: now.toISOString(),
+    method: POLICY_PERFORMANCE_METHOD,
+    assumption: POLICY_PERFORMANCE_ASSUMPTION,
+    totals: result.totals,
+    rows: result.rows,
+    page: { ...result.page, nextCursor },
   };
 }
 

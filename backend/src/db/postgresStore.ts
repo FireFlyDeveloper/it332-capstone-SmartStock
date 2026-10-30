@@ -637,6 +637,151 @@ export interface OrdersDbPage {
   nextCursor: { createdAt: string; id: string } | null;
 }
 
+export interface PolicyPerformanceDbPage {
+  rows: Array<{
+    productId: string;
+    sku: string;
+    name: string;
+    unit: string;
+    trackingStartedAt: string | null;
+    trackingDays: number;
+    timeWeightedAverageOnHand: number | null;
+    daysAtOrBelowReorderPoint: number;
+    percentTimeAtOrBelowReorderPoint: number | null;
+    outOfStockDays: number;
+    reorderPointChanges: number;
+    currentStock: number;
+    currentReorderPoint: number;
+    status: 'at_or_below_reorder_point' | 'above_reorder_point';
+  }>;
+  trackingStart: string | null;
+  totals: {
+    products: number;
+    productsWithHistory: number;
+    trackingDays: number;
+    outOfStockProductCount: number;
+    reorderPointChanges: number;
+  };
+  page: {
+    limit: number;
+    totalCount: number;
+    hasMore: boolean;
+    nextCursor: { name: string; productId: string } | null;
+  };
+}
+
+export async function listPolicyPerformancePageDb(input: {
+  now: Date;
+  limit: number;
+  cursor: { name: string; productId: string } | null;
+}): Promise<PolicyPerformanceDbPage | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH event_windows AS (
+      SELECT product_id, id, recorded_at, stock_after, threshold_after, threshold_before,
+        LEAD(recorded_at) OVER (PARTITION BY product_id ORDER BY recorded_at, id) AS next_recorded_at
+      FROM inventory_policy_history
+    ), event_intervals AS (
+      SELECT product_id, recorded_at, stock_after, threshold_after, threshold_before,
+        GREATEST(0, EXTRACT(EPOCH FROM (
+          GREATEST(LEAST($1::timestamptz, recorded_at), LEAST($1::timestamptz, COALESCE(next_recorded_at, $1::timestamptz)))
+          - LEAST($1::timestamptz, recorded_at)
+        )) * 1000)::numeric AS interval_ms
+      FROM event_windows
+    ), history_metrics AS (
+      SELECT product_id,
+        MIN(recorded_at) AS tracking_started_at,
+        SUM(stock_after * interval_ms) AS weighted_stock_ms,
+        SUM(interval_ms) AS tracked_ms,
+        SUM(interval_ms) FILTER (WHERE stock_after <= threshold_after) AS at_or_below_ms,
+        SUM(interval_ms) FILTER (WHERE stock_after <= 0) AS out_of_stock_ms,
+        COUNT(*) FILTER (WHERE threshold_before IS NOT NULL AND threshold_before <> threshold_after)::int AS threshold_changes
+      FROM event_intervals
+      GROUP BY product_id
+    ), product_rows AS (
+      SELECT p.id::text AS product_id, p.sku, p.name, p.unit, p.stock, p.threshold,
+        h.tracking_started_at,
+        COALESCE(h.tracked_ms, 0)::numeric AS tracked_ms,
+        COALESCE(h.weighted_stock_ms, 0)::numeric AS weighted_stock_ms,
+        COALESCE(h.at_or_below_ms, 0)::numeric AS at_or_below_ms,
+        COALESCE(h.out_of_stock_ms, 0)::numeric AS out_of_stock_ms,
+        COALESCE(h.threshold_changes, 0)::int AS threshold_changes
+      FROM products p LEFT JOIN history_metrics h ON h.product_id = p.id
+      WHERE p.deleted_at IS NULL
+    ), report_rows AS (
+      SELECT product_id, sku, name, unit, tracking_started_at,
+        ROUND((tracked_ms / 86400000)::numeric, 4) AS tracking_days,
+        CASE WHEN tracked_ms > 0 THEN ROUND((weighted_stock_ms / tracked_ms)::numeric, 4) END AS time_weighted_average_on_hand,
+        ROUND((at_or_below_ms / 86400000)::numeric, 4) AS days_at_or_below_reorder_point,
+        CASE WHEN tracked_ms > 0 THEN ROUND((at_or_below_ms / tracked_ms * 100)::numeric, 4) END AS percent_time_at_or_below_reorder_point,
+        ROUND((out_of_stock_ms / 86400000)::numeric, 4) AS out_of_stock_days,
+        threshold_changes AS reorder_point_changes,
+        stock AS current_stock, threshold AS current_reorder_point,
+        CASE WHEN stock <= threshold THEN 'at_or_below_reorder_point' ELSE 'above_reorder_point' END AS status
+      FROM product_rows
+    ), totals AS (
+      SELECT COUNT(*)::int AS products,
+        COUNT(*) FILTER (WHERE tracking_started_at IS NOT NULL)::int AS products_with_history,
+        COALESCE(ROUND(GREATEST(0, EXTRACT(EPOCH FROM ($1::timestamptz - MIN(tracking_started_at))) / 86400)::numeric, 4), 0) AS tracking_days,
+        COUNT(*) FILTER (WHERE current_stock <= 0)::int AS out_of_stock_product_count,
+        COALESCE(SUM(reorder_point_changes), 0)::int AS reorder_point_changes,
+        MIN(tracking_started_at) AS tracking_start
+      FROM report_rows
+    ), page_rows AS (
+      SELECT * FROM report_rows
+      WHERE $2::text IS NULL
+        OR name COLLATE "C" > $2::text COLLATE "C"
+        OR (name COLLATE "C" = $2::text COLLATE "C" AND product_id COLLATE "C" > $3::text COLLATE "C")
+      ORDER BY name COLLATE "C" ASC, product_id COLLATE "C" ASC
+      LIMIT $4
+    )
+    SELECT totals.products, totals.products_with_history, totals.tracking_days,
+      totals.out_of_stock_product_count, totals.reorder_point_changes, totals.tracking_start,
+      (SELECT COUNT(*)::int FROM report_rows) AS total_count,
+      COALESCE((SELECT jsonb_agg(to_jsonb(page_rows) ORDER BY page_rows.name COLLATE "C", page_rows.product_id COLLATE "C") FROM page_rows), '[]'::jsonb) AS page_items
+    FROM totals
+  `, [input.now, input.cursor?.name ?? null, input.cursor?.productId ?? null, input.limit + 1]);
+  const result = rows[0];
+  if (!result) return null;
+  const rawItems = (typeof result.page_items === 'string' ? JSON.parse(result.page_items) : result.page_items ?? []) as Record<string, unknown>[];
+  const visible = rawItems.slice(0, input.limit);
+  const parseTimestamp = (value: unknown) => value == null ? null : new Date(value as string | Date).toISOString();
+  const reportRows = visible.map((row) => ({
+    productId: String(row.product_id), sku: String(row.sku), name: String(row.name), unit: String(row.unit),
+    trackingStartedAt: parseTimestamp(row.tracking_started_at),
+    trackingDays: Number(row.tracking_days ?? 0),
+    timeWeightedAverageOnHand: row.time_weighted_average_on_hand == null ? null : Number(row.time_weighted_average_on_hand),
+    daysAtOrBelowReorderPoint: Number(row.days_at_or_below_reorder_point ?? 0),
+    percentTimeAtOrBelowReorderPoint: row.percent_time_at_or_below_reorder_point == null ? null : Number(row.percent_time_at_or_below_reorder_point),
+    outOfStockDays: Number(row.out_of_stock_days ?? 0),
+    reorderPointChanges: Number(row.reorder_point_changes ?? 0),
+    currentStock: Number(row.current_stock ?? 0),
+    currentReorderPoint: Number(row.current_reorder_point ?? 0),
+    status: String(row.status) as 'at_or_below_reorder_point' | 'above_reorder_point',
+  }));
+  const hasMore = rawItems.length > input.limit;
+  const last = reportRows.at(-1);
+  const trackingStart = parseTimestamp(result.tracking_start);
+  return {
+    rows: reportRows,
+    trackingStart,
+    totals: {
+      products: Number(result.products ?? 0),
+      productsWithHistory: Number(result.products_with_history ?? 0),
+      trackingDays: Number(result.tracking_days ?? 0),
+      outOfStockProductCount: Number(result.out_of_stock_product_count ?? 0),
+      reorderPointChanges: Number(result.reorder_point_changes ?? 0),
+    },
+    page: {
+      limit: input.limit,
+      totalCount: Number(result.total_count ?? 0),
+      hasMore,
+      nextCursor: hasMore && last ? { name: last.name, productId: last.productId } : null,
+    },
+  };
+}
+
 export async function listOrdersPageDb(input: {
   limit: number;
   status: string;
