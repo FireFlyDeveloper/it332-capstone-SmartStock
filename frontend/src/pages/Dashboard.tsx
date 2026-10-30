@@ -12,9 +12,11 @@ import { useData } from '../components/DataContext';
 import { useAuth } from '../components/AuthContext';
 import {
   getAnalyticsSalesTrends,
+  getDashboardOrderSummary,
   getDashboardRecentActivity,
   type AnalyticsSalesTrend,
   type DashboardActivityRecord,
+  type DashboardOrderSummary,
   type DashboardSalesRange,
 } from '../api';
 import { formatCurrency, formatCurrencyWhole } from '../utils/helpers';
@@ -108,13 +110,16 @@ function formatMonthLabel(month: string): string {
 }
 
 export const Dashboard: React.FC = () => {
-  const { products, orders, deliverySummary, loading, error, refresh } = useData();
+  const { products, deliverySummary, loading, error, refresh } = useData();
   const { user } = useAuth();
   const [timeRange, setTimeRange] = useState<DashboardSalesRange>('6M');
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [salesTrend, setSalesTrend] = useState<AnalyticsSalesTrend[]>([]);
   const [salesTrendLoading, setSalesTrendLoading] = useState(true);
   const [salesTrendError, setSalesTrendError] = useState<string | null>(null);
+  const [orderSummary, setOrderSummary] = useState<DashboardOrderSummary | null>(null);
+  const [orderSummaryLoading, setOrderSummaryLoading] = useState(true);
+  const [orderSummaryError, setOrderSummaryError] = useState<string | null>(null);
   const [recentActivity, setRecentActivity] = useState<DashboardActivityRecord[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
   const [activityError, setActivityError] = useState<string | null>(null);
@@ -131,6 +136,19 @@ export const Dashboard: React.FC = () => {
       .finally(() => { if (active) setSalesTrendLoading(false); });
     return () => { active = false; };
   }, [timeRange, dashboardRefreshKey]);
+
+  useEffect(() => {
+    let active = true;
+    setOrderSummaryLoading(true);
+    setOrderSummaryError(null);
+    getDashboardOrderSummary()
+      .then((summary) => { if (active) setOrderSummary(summary); })
+      .catch((cause: unknown) => {
+        if (active) setOrderSummaryError(cause instanceof Error ? cause.message : 'Request failed');
+      })
+      .finally(() => { if (active) setOrderSummaryLoading(false); });
+    return () => { active = false; };
+  }, [dashboardRefreshKey]);
 
   useEffect(() => {
     let active = true;
@@ -153,10 +171,7 @@ export const Dashboard: React.FC = () => {
     () => products.filter((product) => product.status === 'active' && product.stock <= product.threshold).length,
     [products],
   );
-  const activeOrders = useMemo(
-    () => orders.filter((order) => !['completed', 'cancelled'].includes(order.orderStatus)).length,
-    [orders],
-  );
+  const activeOrders = orderSummary?.activeOrderCount ?? 0;
   const inTransitDeliveries = deliverySummary.inTransitCount;
 
   const monthlySales = useMemo(
@@ -169,32 +184,7 @@ export const Dashboard: React.FC = () => {
     ? Math.round(totalOrderValueInRange / monthlySales.length)
     : 0;
 
-  const topItems = useMemo(() => {
-    const productsById = new Map(products.map((product) => [product.id, product]));
-    const itemMap = new Map<string, {
-      productId: string;
-      name: string;
-      category: 'glass' | 'aluminum' | null;
-      unit: string | null;
-      quantity: number;
-    }>();
-    orders.forEach((order) => {
-      if (order.orderStatus === 'cancelled') return;
-      order.items.forEach((item) => {
-        const product = productsById.get(item.productId);
-        const existing = itemMap.get(item.productId) ?? {
-          productId: item.productId,
-          name: item.productName,
-          category: product?.category ?? null,
-          unit: product?.unit ?? null,
-          quantity: 0,
-        };
-        existing.quantity += item.quantity;
-        itemMap.set(item.productId, existing);
-      });
-    });
-    return [...itemMap.values()].sort((a, b) => b.quantity - a.quantity).slice(0, 4);
-  }, [orders, products]);
+  const topItems = orderSummary?.topItems ?? [];
 
   const activeProducts = useMemo(() => products.filter((product) => product.status === 'active'), [products]);
   const glassSkuCount = activeProducts.filter((product) => product.category === 'glass').length;
@@ -204,11 +194,7 @@ export const Dashboard: React.FC = () => {
     { label: 'Aluminum products', shortLabel: 'Aluminum', value: aluminumSkuCount, color: '#4f46e5' },
   ];
 
-  const orderStatusCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    orders.forEach((order) => counts.set(order.orderStatus, (counts.get(order.orderStatus) ?? 0) + 1));
-    return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [orders]);
+  const orderStatusCounts = (orderSummary?.orderStatusCounts ?? []).map(({ status, count }) => [status, count] as [string, number]);
   const deliveryStatusCounts = ([
     ['pending', deliverySummary.pendingCount],
     ['in_transit', deliverySummary.inTransitCount],
@@ -289,8 +275,8 @@ export const Dashboard: React.FC = () => {
         {/* KPI 3: Active Orders (Blue/Info) */}
         <KpiCard
           label="ACTIVE ORDERS"
-          value={activeOrders}
-          unit="orders"
+          value={orderSummaryLoading ? 'Loading…' : orderSummaryError ? 'Unavailable' : activeOrders}
+          unit={orderSummaryLoading || orderSummaryError ? undefined : 'orders'}
           icon={ShoppingBag}
           iconBoxBg="bg-blue-50"
           iconColor="text-[#3b82f6]"
@@ -469,7 +455,11 @@ export const Dashboard: React.FC = () => {
               </div>
 
               <div className="space-y-3.5">
-                {topItems.length === 0 ? (
+                {orderSummaryLoading ? (
+                  <p role="status" className="py-6 text-center text-sm text-slate-500">Loading ordered products…</p>
+                ) : orderSummaryError ? (
+                  <p role="alert" className="py-6 text-center text-sm text-rose-700">Could not load order summary: {orderSummaryError}</p>
+                ) : topItems.length === 0 ? (
                   <p className="py-6 text-center text-sm text-slate-500">No non-cancelled order items are available.</p>
                 ) : topItems.map((item) => (
                   <div
@@ -608,7 +598,11 @@ export const Dashboard: React.FC = () => {
               <div className="space-y-5">
                 <section aria-label="Order status counts">
                   <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Orders</h4>
-                  {orderStatusCounts.length === 0 ? (
+                  {orderSummaryLoading ? (
+                    <p role="status" className="text-xs text-slate-400">Loading order counts…</p>
+                  ) : orderSummaryError ? (
+                    <p role="alert" className="text-xs text-rose-700">Order counts unavailable: {orderSummaryError}</p>
+                  ) : orderStatusCounts.length === 0 ? (
                     <p className="text-xs text-slate-400">No order records.</p>
                   ) : (
                     <ul className="space-y-2">

@@ -11,6 +11,7 @@ import { getAnalyticsInsight } from '../ai/insights.js';
 import {
   getAnnualPurchases,
   getAnnualPurchasesPage,
+  getDashboardOrderSummary,
   getForecast,
   getMovementClassification,
   getRecentActivity,
@@ -67,6 +68,8 @@ analyticsRoutes.get('/demand-forecast', (c) => {
   }
   return c.json(getDemandForecast(historyMonths));
 });
+
+analyticsRoutes.get('/dashboard-order-summary', (c) => c.json(getDashboardOrderSummary()));
 
 analyticsRoutes.get('/sales-trends', (c) => {
   const rawRange = c.req.query('range');

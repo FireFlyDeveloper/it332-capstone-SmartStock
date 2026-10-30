@@ -9,6 +9,7 @@ import { listProducts, listProductMovements } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import {
   buildAnnualPurchaseSummary,
+  buildDashboardOrderSummary,
   buildMonthlyOutboundQuantities,
   buildMonthlySalesTrend,
   buildRecentActivity,
@@ -28,6 +29,10 @@ function listAllMovements() {
 
 export function getSalesTrends(range?: DashboardSalesRange) {
   return buildMonthlySalesTrend(listOrders(), range);
+}
+
+export function getDashboardOrderSummary() {
+  return buildDashboardOrderSummary(listOrders(), listProducts());
 }
 
 export function getRecentActivity(limit = 6) {

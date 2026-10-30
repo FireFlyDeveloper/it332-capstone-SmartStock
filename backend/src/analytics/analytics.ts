@@ -16,6 +16,53 @@ export interface MonthlySalesTrendRow {
 
 export type DashboardSalesRange = '6M' | '1Y' | 'ALL';
 
+export interface DashboardOrderSummary {
+  activeOrderCount: number;
+  orderStatusCounts: Array<{ status: Order['orderStatus']; count: number }>;
+  topItems: Array<{
+    productId: string;
+    name: string;
+    category: Product['category'] | null;
+    unit: string | null;
+    quantity: number;
+  }>;
+}
+
+export function buildDashboardOrderSummary(orders: Order[], products: Product[]): DashboardOrderSummary {
+  const statuses = new Map<Order['orderStatus'], number>();
+  const productsById = new Map(products.map((product) => [product.id, product]));
+  const items = new Map<string, DashboardOrderSummary['topItems'][number]>();
+  let activeOrderCount = 0;
+
+  for (const order of orders) {
+    statuses.set(order.orderStatus, (statuses.get(order.orderStatus) ?? 0) + 1);
+    if (order.orderStatus !== 'delivered' && order.orderStatus !== 'cancelled') activeOrderCount += 1;
+    if (order.orderStatus === 'cancelled') continue;
+    for (const line of order.items) {
+      const product = productsById.get(line.productId);
+      const current = items.get(line.productId) ?? {
+        productId: line.productId,
+        name: line.name,
+        category: product?.category ?? null,
+        unit: product?.unit ?? null,
+        quantity: 0,
+      };
+      current.quantity += line.quantity;
+      items.set(line.productId, current);
+    }
+  }
+
+  return {
+    activeOrderCount,
+    orderStatusCounts: [...statuses.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([status, count]) => ({ status, count })),
+    topItems: [...items.values()]
+      .sort((left, right) => right.quantity - left.quantity || left.productId.localeCompare(right.productId))
+      .slice(0, 4),
+  };
+}
+
 export interface RecentActivityRecord {
   id: string;
   kind: 'order_recorded' | 'stock_movement';

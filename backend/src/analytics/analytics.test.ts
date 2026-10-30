@@ -15,6 +15,7 @@ import { _resetInventoryStore, createProduct, recordInboundStock, recordOutbound
 import { analyticsRoutes } from './routes.js';
 import {
   buildAnnualPurchaseSummary,
+  buildDashboardOrderSummary,
   buildMonthlySalesTrend,
   buildDemandForecast,
   paginateDemandForecast,
@@ -104,6 +105,23 @@ describe('analytics pure functions', () => {
       { month: '2026-01', transactionCount: 1, grossSales: 200 },
       { month: '2026-02', transactionCount: 1, grossSales: 300 },
     ]);
+  });
+
+  it('builds compact Dashboard order metrics from backend orders', () => {
+    _resetOrderStore(false);
+    seedDeterministicOrders();
+
+    expect(buildDashboardOrderSummary(listOrders(), [])).toEqual({
+      activeOrderCount: 2,
+      orderStatusCounts: [
+        { status: 'cancelled', count: 1 },
+        { status: 'processing', count: 2 },
+      ],
+      topItems: [
+        { productId: 'ALU-1', name: 'Aluminum', category: null, unit: null, quantity: 3 },
+        { productId: 'GLS-1', name: 'Glass', category: null, unit: null, quantity: 2 },
+      ],
+    });
   });
 
   it('zero-fills a selected calendar range and includes the current month', () => {
@@ -244,6 +262,28 @@ describe('analytics routes', () => {
       headers: { authorization: 'Bearer ' + token },
     });
     expect(staff.status).toBe(200);
+  });
+
+  it('serves compact order summary metrics from the authenticated analytics endpoint', async () => {
+    const anonymous = await app.request('/analytics/dashboard-order-summary');
+    expect(anonymous.status).toBe(401);
+
+    const token = await login(app, STAFF);
+    const res = await app.request('/analytics/dashboard-order-summary', {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      activeOrderCount: 2,
+      orderStatusCounts: [
+        { status: 'cancelled', count: 1 },
+        { status: 'processing', count: 2 },
+      ],
+      topItems: [
+        { productId: 'ALU-1', quantity: 3 },
+        { productId: 'GLS-1', quantity: 2 },
+      ],
+    });
   });
 
   it('returns deterministic sales trends from in-memory orders', async () => {

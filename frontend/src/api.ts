@@ -212,6 +212,18 @@ export interface AnalyticsSalesTrend {
 }
 
 export type DashboardSalesRange = '6M' | '1Y' | 'ALL'
+export interface DashboardOrderSummary {
+  activeOrderCount: number
+  orderStatusCounts: Array<{ status: string; count: number }>
+  topItems: Array<{
+    productId: string
+    name: string
+    category: Product['category'] | null
+    unit: string | null
+    quantity: number
+  }>
+}
+
 export interface DashboardActivityRecord {
   id: string
   kind: 'order_recorded' | 'stock_movement'
@@ -252,6 +264,10 @@ export interface AnalyticsInsightsResponse {
   risks: string[]
   confidence: 'low' | 'medium' | 'high'
   source: 'deepseek' | 'fallback'
+}
+
+export function getDashboardOrderSummary(): Promise<DashboardOrderSummary> {
+  return apiFetch<DashboardOrderSummary>('/analytics/dashboard-order-summary')
 }
 
 export function getAnalyticsSalesTrends(range?: DashboardSalesRange): Promise<AnalyticsSalesTrend[]> {
