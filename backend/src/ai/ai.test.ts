@@ -12,9 +12,10 @@ import { authRoutes } from '../auth/routes.js';
 import { createUser, _resetUserStore, type Role } from '../auth/users.js';
 import { hashPassword } from '../auth/hash.js';
 import { _resetOrderStore, createOrder } from '../orders/store.js';
-import { _resetInventoryStore, createProduct, recordInboundStock, recordOutboundStock } from '../inventory/store.js';
+import { _resetInventoryStore, createProduct, listProducts, recordInboundStock, recordOutboundStock } from '../inventory/store.js';
 import { analyticsRoutes } from '../analytics/routes.js';
 import { generateFallbackInsight, getAnalyticsInsight, buildSafeInsightPayload } from './insights.js';
+import type { SafeInsightPayload } from './types.js';
 import { validateAiInsightResponse } from './validator.js';
 import { callHermesInsight } from './hermes.js';
 
@@ -45,10 +46,10 @@ async function seedAiAnalyticsData() {
     const now = new Date();
     return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - monthsAgo, 15)).toISOString();
   };
-  const glass = await createProduct({ sku: 'AI-GLASS', name: 'AI Glass', category: 'glass', unit: 'sheet', stock: 3, price: 100, threshold: 5 });
+  const glass = await createProduct({ sku: 'AI-GLASS', name: 'AI Glass', category: 'glass', unit: 'sqm', stock: 3, price: 100, threshold: 5 });
   await recordInboundStock(glass.id, { quantity: 20, referenceNo: 'AI-PO-001', supplier: 'Supplier A', occurredAt: '2026-01-10T00:00:00.000Z' });
   await recordOutboundStock(glass.id, { quantity: 8, referenceNo: 'AI-SO-001', occurredAt: '2026-02-10T00:00:00.000Z' });
-  await createProduct({ sku: 'AI-GLASS-NO-HISTORY', name: 'AI Glass Without History', category: 'glass', unit: 'sheet', stock: 2, price: 100, threshold: 5 });
+  await createProduct({ sku: 'AI-GLASS-NO-HISTORY', name: 'AI Glass Without History', category: 'glass', unit: 'sqm', stock: 2, price: 100, threshold: 5 });
   const aluminum = await createProduct({ sku: 'AI-ALUMINUM', name: 'AI Aluminum', category: 'aluminum', unit: 'pcs', stock: 10, price: 100, threshold: 5 });
   await recordOutboundStock(aluminum.id, { quantity: 5, referenceNo: 'AI-SO-002', occurredAt: '2026-03-10T00:00:00.000Z' });
   const order = createOrder({
@@ -79,6 +80,7 @@ async function seedAiAnalyticsData() {
 }
 
 const ORIGINAL_ENV = { ...process.env };
+const TEST_NOW = new Date('2026-10-31T12:00:00.000Z');
 const AT = String.fromCharCode(64);
 const ADMIN = 'ai-admin' + AT + 'smartstock.local';
 const STAFF = 'ai-staff' + AT + 'smartstock.local';
@@ -102,21 +104,25 @@ describe('AI insight fallback layer', () => {
   });
 
   it('returns a deterministic local insight when Hermes is not configured', async () => {
-    const first = await getAnalyticsInsight({ year: 2026, threshold: 5 });
-    const second = await getAnalyticsInsight({ year: 2026, threshold: 5 });
+    const first = await getAnalyticsInsight({ movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
+    const second = await getAnalyticsInsight({ movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
 
     expect(first).toEqual(second);
     expect(first.source).toBe('fallback');
-    expect(first.summary).toContain('No sales were recorded in the earlier six-month period');
-    expect(first.summary).toContain('Rough next-month estimates');
+    expect(first.summary).toContain('gross sales');
+    expect(first.summary).toContain('2026-02');
+    expect(first.summary).toContain('at least 5 units sent out');
+    expect(first.summary).toContain('1 of 3 products met the fast-moving cutoff');
+    expect(first.summary).toContain('next-month estimates total');
     expect(first.recommendations).toHaveLength(3);
     expect(first.risks).toHaveLength(2);
-    expect(first.risks[1]).toContain('exclude 1 receipt');
-    expect(first.risks[1]).toContain('5 pcs');
-    expect(first.risks[1]).toContain('8 sheets');
+    expect(first.risks[0]).toContain('Recorded purchase costs total 0 across 0 receipts with a cost; 1 receipt has no cost recorded.');
+    expect(first.risks[1]).toContain('Current inventory:');
+    expect(first.risks[1]).toContain('20 sqm received and 8 sqm sent out');
+    expect(first.risks[1]).toContain('0 pcs received and 5 pcs sent out');
     expect(first.confidence).toBe('medium');
     const output = [first.summary, ...first.recommendations, ...first.risks].join(' ');
-    expect(output).not.toMatch(/simple_exponential_smoothing|alpha|horizon|coverage|category\/unit groups|fast-moving threshold/i);
+    expect(output).not.toMatch(/simple_exponential_smoothing|alpha|horizon|coverage|category\/unit groups/i);
     expect(output).toContain('different units');
   });
 
@@ -136,26 +142,38 @@ describe('AI insight fallback layer', () => {
   });
 
   it('sends only final aggregate computations with explicit coverage, costs, and units', async () => {
-    const payload = await buildSafeInsightPayload({ year: 2026, threshold: 5 });
+    const payload = await buildSafeInsightPayload({ movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
     const serialized = JSON.stringify(payload);
 
-    expect(payload).toHaveProperty('sales.comparison.changePercent');
+    expect(payload.sales.trend).toHaveProperty('changePercent');
     expect(payload.sales.orderCount).toBe(3);
     expect(payload.sales.grossSales).toBe(900);
-    expect(payload.sales.monthsWithSales).toBe(3);
-    expect(payload.sales.comparison.direction).toBe('new_activity');
-    expect(payload.sales.comparison.recentGrossSales).toBe(900);
-    expect(payload.sales.comparison.changePercent).toBeNull();
-    expect(payload.sales.period.months).toBe(12);
+    expect(payload.sales.averageOrderValue).toBe(300);
+    expect(payload.sales.bucketsWithSales).toBe(3);
+    expect(payload.movement.classification).toMatchObject({ month: '2026-02', threshold: 5, productCount: 3, fastMovingCount: 1, slowMovingCount: 2 });
+    expect(payload.inventory).toMatchObject({ productCount: 3, activeProductCount: 3, activeLowStockCount: 2, totalInventoryValue: expect.any(Number) });
     expect(payload.forecast).toMatchObject({
       targetPeriod: 'next month', productsWithEstimate: 1, totalProducts: 3, productsWithoutEstimate: 2,
-      estimatesByUnit: [{ unit: 'sheet', quantity: expect.any(Number) }],
+      estimatesByUnit: [{ unit: 'sqm', quantity: expect.any(Number) }],
     });
     expect(payload.purchases).toMatchObject({ recordedCost: 0, pricedReceipts: 0, unpricedReceipts: 1 });
-    expect(payload.movement.outboundByUnit).toEqual([
-      { unit: 'pcs', quantity: 5, movementCount: 1 },
-      { unit: 'sheet', quantity: 8, movementCount: 1 },
+    expect(payload.movement.selectedTotalsByUnit).toEqual([
+      { unit: 'pcs', inbound: 0, outbound: 5, inboundCount: 0, outboundCount: 1 },
+      { unit: 'sqm', inbound: 20, outbound: 8, inboundCount: 1, outboundCount: 1 },
     ]);
+    expect(payload.movement.monthlyWindow.months).toHaveLength(12);
+    const january = payload.movement.monthlyWindow.months.find((entry) => entry.month === '2026-01');
+    const february = payload.movement.monthlyWindow.months.find((entry) => entry.month === '2026-02');
+    const march = payload.movement.monthlyWindow.months.find((entry) => entry.month === '2026-03');
+    expect(january?.byUnit).toEqual(expect.arrayContaining([
+      { unit: 'pcs', inbound: 0, outbound: 0 }, { unit: 'sqm', inbound: 20, outbound: 0 },
+    ]));
+    expect(february?.byUnit).toEqual(expect.arrayContaining([
+      { unit: 'pcs', inbound: 0, outbound: 0 }, { unit: 'sqm', inbound: 0, outbound: 8 },
+    ]));
+    expect(march?.byUnit).toEqual(expect.arrayContaining([
+      { unit: 'pcs', inbound: 0, outbound: 5 }, { unit: 'sqm', inbound: 0, outbound: 0 },
+    ]));
 
     expect(serialized).not.toContain('Private Customer');
     expect(serialized).not.toContain('secret-phone');
@@ -172,7 +190,35 @@ describe('AI insight fallback layer', () => {
     expect(serialized).not.toContain('"productId":');
     expect(serialized).not.toContain('"sku":');
     expect(serialized).not.toContain('"category":');
-    expect(serialized).not.toContain('"month":');
+    expect(serialized).not.toContain('"productId":');
+    expect(serialized).not.toContain('"supplier":');
+    expect(serialized).not.toContain('AI Glass');
+    expect(payload).not.toHaveProperty('movement.rows');
+  });
+
+  it('applies inclusive delivery dates, UTC movement bounds, and the selected-month threshold', async () => {
+    const glass = listProducts().find((product) => product.sku === 'AI-GLASS');
+    if (!glass) throw new Error('AI test glass product was not seeded');
+    await recordInboundStock(glass.id, { quantity: 3, unitCost: 25, referenceNo: 'AI-PO-RANGE-END', supplier: 'Supplier A', occurredAt: '2026-02-15T23:59:59.999Z' });
+    await recordInboundStock(glass.id, { quantity: 7, unitCost: 50, referenceNo: 'AI-PO-AFTER-RANGE', supplier: 'Supplier A', occurredAt: '2026-02-16T00:00:00.000Z' });
+    const selected = await buildSafeInsightPayload({ fromDate: '2026-02-10', toDate: '2026-02-15', movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
+    expect(selected.sales.orderCount).toBe(1);
+    expect(selected.sales.grossSales).toBe(400);
+    expect(selected.purchases).toMatchObject({ recordedCost: 75, pricedReceipts: 1, unpricedReceipts: 0 });
+    expect(selected.movement.selectedTotalsByUnit).toEqual([
+      { unit: 'sqm', inbound: 3, outbound: 8, inboundCount: 1, outboundCount: 1 },
+    ]);
+    const februaryChart = selected.movement.monthlyWindow.months.find((entry) => entry.month === '2026-02');
+    expect(februaryChart?.byUnit).toEqual(expect.arrayContaining([
+      { unit: 'sqm', inbound: 10, outbound: 8 },
+    ]));
+    const boundary = await buildSafeInsightPayload({ fromDate: '2026-02-01', toDate: '2026-02-09', movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
+    expect(boundary.sales.orderCount).toBe(0);
+    expect(boundary.movement.selectedTotalsByUnit).toEqual([]);
+    const higherThreshold = await buildSafeInsightPayload({ movementMonth: '2026-02', threshold: 10 }, TEST_NOW);
+    expect(selected.movement.classification.fastMovingCount).toBe(1);
+    expect(higherThreshold.movement.classification.fastMovingCount).toBe(0);
+    expect(higherThreshold.movement.classification.slowMovingCount).toBe(3);
   });
 
   it('calls the configured Hermes profile with only aggregate JSON and validates its response', async () => {
@@ -180,14 +226,14 @@ describe('AI insight fallback layer', () => {
     process.env.HERMES_API_BASE_URL = 'http://172.29.0.1:8643/v1';
     process.env.HERMES_MODEL = 'smartstockanalytics';
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
-      summary: 'Gross sales are higher in the latest six months, with a rough estimate for one of three products.',
+      summary: 'Gross sales in the latest chart interval are lower than the previous interval.',
       recommendations: ['Check each product’s current stock before ordering.'],
       risks: ['Some products lack enough recent sales history for estimates.'],
       confidence: 'medium',
     }) } }] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await getAnalyticsInsight({ year: 2026, threshold: 5 });
+    const result = await getAnalyticsInsight({ movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [endpoint, init] = fetchMock.mock.calls[0];
@@ -199,10 +245,18 @@ describe('AI insight fallback layer', () => {
     expect(requestBody.tools).toEqual([]);
     expect(requestBody.tool_choice).toBe('none');
     expect(requestBody.messages[0].content).toContain('Speak plainly to a shop owner');
-    expect(requestBody.messages[1].content).toContain('ordinary person can understand');
-    expect(requestBody.messages[1].content).toContain('Use the supplied sales direction');
-    expect(requestBody.messages[1].content).toContain('cost total is incomplete and excludes those receipts');
-    expect(requestBody.messages[1].content).toContain('unit-specific movement');
+    expect(requestBody.messages[1].content).toContain('aggregate computations only');
+    expect(requestBody.messages[1].content).toContain('delivery-date range');
+    expect(requestBody.messages[1].content).toContain('occurr');
+    expect(requestBody.messages[1].content).toContain('threshold');
+    const sentPayload = JSON.parse(requestBody.messages[1].content.split('\n').at(-1)!) as SafeInsightPayload;
+    expect(sentPayload.movement.classification).toMatchObject({ month: '2026-02', threshold: 5 });
+    const februaryChart = sentPayload.movement.monthlyWindow.months.find((entry) => entry.month === '2026-02');
+    expect(februaryChart?.byUnit).toEqual(expect.arrayContaining([
+      { unit: 'pcs', inbound: 0, outbound: 0 },
+      { unit: 'sqm', inbound: 0, outbound: 8 },
+    ]));
+    expect(sentPayload.sales.period).toEqual({ fromDate: null, toDate: null });
     expect(requestBody.messages[1].content).not.toContain('Report its method, alpha, horizon, and coverage accurately');
     expect(requestBody.messages[1].content).not.toContain('"history":');
     expect(requestBody.messages[1].content).not.toContain('"productId":');
@@ -210,7 +264,7 @@ describe('AI insight fallback layer', () => {
     expect(requestBody.messages[1].content).not.toContain('secret-phone');
     expect(requestBody.messages[1].content).not.toContain('secret-address');
     expect(result.source).toBe('hermes');
-    expect(result.summary).toContain('higher in the latest six months');
+    expect(result.summary).toContain('latest chart interval');
   });
 
   it('falls back after an Hermes request or response validation failure', async () => {
@@ -219,11 +273,11 @@ describe('AI insight fallback layer', () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: '{"summary":"missing fields"}' } }] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await getAnalyticsInsight({ year: 2026, threshold: 5 });
+    const result = await getAnalyticsInsight({ movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.source).toBe('fallback');
-    expect(result.summary).toContain('No sales were recorded in the earlier six-month period');
+    expect(result.summary).toContain('at least 5 units sent out');
   });
 
   it('rejects public plain-HTTP Hermes endpoints before making a network call', async () => {
@@ -241,22 +295,31 @@ describe('AI insight fallback layer', () => {
     await seedUser(STAFF, 'staff');
     await seedUser(ADMIN, 'admin');
 
-    const anonymous = await app.request('/analytics/insights?year=2026&threshold=5');
+    const anonymous = await app.request('/analytics/insights?fromDate=2026-02-01&toDate=2026-02-28&movementMonth=2026-02&threshold=5');
     expect(anonymous.status).toBe(401);
 
     const staffToken = await login(app, STAFF);
-    const staff = await app.request('/analytics/insights?year=2026&threshold=5', {
+    const staff = await app.request('/analytics/insights?fromDate=2026-02-01&toDate=2026-02-28&movementMonth=2026-02&threshold=5', {
       headers: { authorization: 'Bearer ' + staffToken },
     });
     expect(staff.status).toBe(403);
 
     const adminToken = await login(app, ADMIN);
-    const res = await app.request('/analytics/insights?year=2026&threshold=5', {
+    const res = await app.request('/analytics/insights?fromDate=2026-02-01&toDate=2026-02-28&movementMonth=2026-02&threshold=5', {
       headers: { authorization: 'Bearer ' + adminToken },
     });
     expect(res.status).toBe(200);
     const json = await res.json() as ReturnType<typeof generateFallbackInsight> & { source: string };
     expect(json.source).toBe('fallback');
     expect(json.recommendations.length).toBeGreaterThan(0);
+    for (const query of [
+      'fromDate=2026-02-30',
+      'fromDate=2026-03-01&toDate=2026-02-01',
+      'movementMonth=2026-13',
+      'threshold=-1',
+    ]) {
+      const invalid = await app.request(`/analytics/insights?${query}`, { headers: { authorization: 'Bearer ' + adminToken } });
+      expect(invalid.status).toBe(400);
+    }
   });
 });

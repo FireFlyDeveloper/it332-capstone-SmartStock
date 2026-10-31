@@ -207,17 +207,19 @@ analyticsRoutes.get('/movement/items', requireRole('admin'), async (c) => {
 });
 
 analyticsRoutes.get('/insights', requireRole('admin'), async (c) => {
-  const rawYear = c.req.query('year');
+  const fromDate = c.req.query('fromDate') || undefined;
+  const toDate = c.req.query('toDate') || undefined;
+  const rawMonth = c.req.query('movementMonth');
+  const movementMonth = rawMonth ?? new Date().toISOString().slice(0, 7);
   const rawThreshold = c.req.query('threshold');
-  const year = rawYear === undefined ? undefined : Number(rawYear);
-  const threshold = rawThreshold === undefined ? undefined : Number(rawThreshold);
-  if (year !== undefined && (!Number.isInteger(year) || year < 1900 || year > 3000)) {
-    return c.json({ error: 'year must be an integer between 1900 and 3000' }, 400);
+  const threshold = rawThreshold === undefined ? 10 : Number(rawThreshold);
+  if ((fromDate && !isDateOnly(fromDate)) || (toDate && !isDateOnly(toDate))) {
+    return c.json({ error: 'fromDate and toDate must be valid YYYY-MM-DD dates' }, 400);
   }
-  if (threshold !== undefined && (!Number.isFinite(threshold) || threshold < 0)) {
-    return c.json({ error: 'threshold must be a non-negative number' }, 400);
-  }
-  return c.json(await getAnalyticsInsight({ year, threshold }));
+  if (fromDate && toDate && fromDate > toDate) return c.json({ error: 'fromDate must be on or before toDate' }, 400);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(movementMonth)) return c.json({ error: 'movementMonth must be YYYY-MM' }, 400);
+  if (!Number.isFinite(threshold) || threshold < 0) return c.json({ error: 'threshold must be a non-negative number' }, 400);
+  return c.json(await getAnalyticsInsight({ fromDate, toDate, movementMonth, threshold }));
 });
 
 analyticsRoutes.post('/forecast', requireRole('admin'), async (c) => {

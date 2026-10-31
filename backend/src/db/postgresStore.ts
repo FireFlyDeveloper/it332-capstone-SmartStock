@@ -615,6 +615,42 @@ export async function listOutboundMovementByUnitDb(startAt: Date, endAt: Date): 
   }));
 }
 
+export async function listInsightMovementSummaryDb(startAt?: Date, endAt?: Date): Promise<Array<{ unit: string; inboundQuantity: number; outboundQuantity: number; inboundCount: number; outboundCount: number }> | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    SELECT COALESCE(NULLIF(BTRIM(p.unit), ''), 'unknown') AS unit,
+      COALESCE(SUM(m.quantity) FILTER (WHERE m.type = 'inbound'), 0)::numeric AS inbound_quantity,
+      COALESCE(SUM(m.quantity) FILTER (WHERE m.type = 'outbound'), 0)::numeric AS outbound_quantity,
+      COUNT(*) FILTER (WHERE m.type = 'inbound')::int AS inbound_count,
+      COUNT(*) FILTER (WHERE m.type = 'outbound')::int AS outbound_count
+    FROM stock_movements m
+    LEFT JOIN products p ON p.id = m.product_id AND p.deleted_at IS NULL
+    WHERE m.type IN ('inbound', 'outbound')
+      AND ($1::timestamptz IS NULL OR m.occurred_at >= $1)
+      AND ($2::timestamptz IS NULL OR m.occurred_at < $2)
+    GROUP BY COALESCE(NULLIF(BTRIM(p.unit), ''), 'unknown')
+    ORDER BY COALESCE(NULLIF(BTRIM(p.unit), ''), 'unknown') COLLATE "C"
+  `, [startAt ?? null, endAt ?? null]);
+  return rows.map((row) => ({ unit: String(row.unit), inboundQuantity: Number(row.inbound_quantity), outboundQuantity: Number(row.outbound_quantity), inboundCount: Number(row.inbound_count), outboundCount: Number(row.outbound_count) }));
+}
+
+export async function listInsightPurchaseSummaryDb(startAt?: Date, endAt?: Date): Promise<{ recordedCost: number; pricedReceipts: number; unpricedReceipts: number } | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    SELECT COALESCE(SUM(m.quantity * m.unit_cost), 0)::numeric AS recorded_cost,
+      COUNT(*) FILTER (WHERE m.unit_cost IS NOT NULL)::int AS priced_receipts,
+      COUNT(*) FILTER (WHERE m.unit_cost IS NULL)::int AS unpriced_receipts
+    FROM stock_movements m
+    WHERE m.type = 'inbound'
+      AND ($1::timestamptz IS NULL OR m.occurred_at >= $1)
+      AND ($2::timestamptz IS NULL OR m.occurred_at < $2)
+  `, [startAt ?? null, endAt ?? null]);
+  const row = rows[0];
+  return row ? { recordedCost: Number(row.recorded_cost), pricedReceipts: Number(row.priced_receipts), unpricedReceipts: Number(row.unpriced_receipts) } : null;
+}
+
 export async function listMonthlyStockMovementAggregatesDb(startAt: Date, endAt: Date): Promise<MonthlyStockMovementRow[] | null> {
   const pool = getPool();
   if (!pool) return null;

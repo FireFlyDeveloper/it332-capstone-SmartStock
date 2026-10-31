@@ -5,8 +5,8 @@
  * Last touched: 2026-07-17
  */
 
-import { getAnnualPurchasesPage, getDemandForecastPage, getOutboundMovementByUnit, getSalesTrends } from '../analytics/service.js';
-import type { MonthlySalesTrendRow } from '../analytics/analytics.js';
+import { getAnalyticsOrderSummary, getInsightInventorySummary, getInsightMovementSummary, getInsightPurchaseSummary, getMonthlyItemMovementPage, getMonthlyStockMovementByUnit, getDemandForecastPage } from '../analytics/service.js';
+import type { SalesDirection } from './types.js';
 import { getHermesConfig } from './config.js';
 import { callHermesInsight } from './hermes.js';
 import type { AiInsight, AiInsightContent, InsightRequestOptions, SafeInsightPayload } from './types.js';
@@ -18,63 +18,32 @@ function roundTwo(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-function completedPeriod(now: Date) {
-  const endAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const startAt = new Date(Date.UTC(endAt.getUTCFullYear(), endAt.getUTCMonth() - INSIGHT_HISTORY_MONTHS, 1));
-  const endMonth = new Date(Date.UTC(endAt.getUTCFullYear(), endAt.getUTCMonth() - 1, 1));
-  const movementStartAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (INSIGHT_HISTORY_MONTHS - 1), 1));
-  return {
-    startAt,
-    endAt,
-    startMonth: startAt.toISOString().slice(0, 7),
-    endMonth: endMonth.toISOString().slice(0, 7),
-    movementStartAt,
-    movementEndAt: now,
-  };
+function dateBoundary(value: string | undefined, endExclusive = false): Date | undefined {
+  if (!value) return undefined;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (endExclusive) date.setUTCDate(date.getUTCDate() + 1);
+  return date;
 }
 
-function sumSales(rows: MonthlySalesTrendRow[]): { orders: number; grossSales: number; monthsWithSales: number } {
-  return {
-    orders: rows.reduce((sum, row) => sum + row.transactionCount, 0),
-    grossSales: roundTwo(rows.reduce((sum, row) => sum + row.grossSales, 0)),
-    monthsWithSales: rows.filter((row) => row.transactionCount > 0).length,
-  };
-}
-
-function summarizeSales(rows: MonthlySalesTrendRow[]): SafeInsightPayload['sales'] {
-  const previous = rows.slice(0, 6);
-  const recent = rows.slice(6, 12);
-  const previousTotals = sumSales(previous);
-  const recentTotals = sumSales(recent);
-  const total = sumSales(rows);
-  const direction = rows.length < INSIGHT_HISTORY_MONTHS
-    ? 'insufficient_data'
-    : previousTotals.grossSales === 0 && recentTotals.grossSales === 0
-      ? 'no_sales'
-      : previousTotals.grossSales === 0
-        ? 'new_activity'
-        : recentTotals.grossSales > previousTotals.grossSales
-          ? 'rising'
-          : recentTotals.grossSales < previousTotals.grossSales
-            ? 'falling'
-            : 'steady';
-
-  return {
-    period: { startMonth: rows[0]?.month ?? null, endMonth: rows.at(-1)?.month ?? null, months: rows.length },
-    orderCount: total.orders,
-    grossSales: total.grossSales,
-    monthsWithSales: total.monthsWithSales,
-    comparison: {
-      previousMonths: previous.length,
-      recentMonths: recent.length,
-      previousGrossSales: previousTotals.grossSales,
-      recentGrossSales: recentTotals.grossSales,
-      changePercent: previousTotals.grossSales > 0
-        ? roundTwo((recentTotals.grossSales - previousTotals.grossSales) / previousTotals.grossSales * 100)
-        : null,
-      direction,
-    },
-  };
+function summarizeTrend(rows: Array<{ sales: number }>): SafeInsightPayload['sales']['trend'] {
+  if (rows.length < 2) {
+    const onlyBucketSales = roundTwo(rows[0]?.sales ?? 0);
+    return {
+      direction: onlyBucketSales > 0 ? 'insufficient_data' : 'no_sales',
+      changePercent: null,
+      previousSales: 0,
+      recentSales: onlyBucketSales,
+    };
+  }
+  const previousSales = roundTwo(rows.at(-2)?.sales ?? 0);
+  const recentSales = roundTwo(rows.at(-1)?.sales ?? 0);
+  let direction: SalesDirection;
+  if (!previousSales && !recentSales) direction = 'no_sales';
+  else if (!previousSales) direction = 'new_activity';
+  else if (recentSales > previousSales) direction = 'rising';
+  else if (recentSales < previousSales) direction = 'falling';
+  else direction = 'steady';
+  return { direction, changePercent: previousSales ? roundTwo((recentSales - previousSales) / previousSales * 100) : null, previousSales, recentSales };
 }
 
 async function buildSafeDemandForecast(now: Date): Promise<SafeInsightPayload['forecast']> {
@@ -110,97 +79,86 @@ async function buildSafeDemandForecast(now: Date): Promise<SafeInsightPayload['f
   };
 }
 
-export async function buildSafeInsightPayload(options: InsightRequestOptions = {}): Promise<SafeInsightPayload> {
-  const now = new Date();
-  const year = options.year ?? now.getUTCFullYear();
-  const period = completedPeriod(now);
-  const salesAsOf = new Date(period.endAt.getTime() - 1);
-  const [salesRows, purchases, outboundByUnit, forecast] = await Promise.all([
-    getSalesTrends('1Y', salesAsOf),
-    getAnnualPurchasesPage(year, 1, null),
-    getOutboundMovementByUnit(period.movementStartAt, period.movementEndAt),
+export async function buildSafeInsightPayload(options: InsightRequestOptions = {}, now = new Date()): Promise<SafeInsightPayload> {
+  const movementMonth = options.movementMonth ?? now.toISOString().slice(0, 7);
+  const startAt = dateBoundary(options.fromDate);
+  const endAt = dateBoundary(options.toDate, true);
+  const [salesAnalytics, purchases, selectedMovement, monthly, inventory, classification, forecast] = await Promise.all([
+    getAnalyticsOrderSummary(options.fromDate, options.toDate),
+    getInsightPurchaseSummary(startAt, endAt),
+    getInsightMovementSummary(startAt, endAt),
+    getMonthlyStockMovementByUnit(INSIGHT_HISTORY_MONTHS, now),
+    getInsightInventorySummary(),
+    getMonthlyItemMovementPage(movementMonth, options.threshold ?? 10, 1, null),
     buildSafeDemandForecast(now),
   ]);
-
+  const trendRows = salesAnalytics.salesTrendData;
   return {
-    year,
-    sales: summarizeSales(salesRows),
-    purchases: {
-      year,
-      recordedCost: roundTwo(purchases.totalSpend),
-      pricedReceipts: purchases.pricedReceiptCount,
-      unpricedReceipts: purchases.unpricedReceiptCount,
-    },
+    sales: { period: { fromDate: options.fromDate ?? null, toDate: options.toDate ?? null }, orderCount: salesAnalytics.totalOrderCount,
+      averageOrderValue: roundTwo(salesAnalytics.averageOrderValue), grossSales: roundTwo(trendRows.reduce((sum, row) => sum + row.sales, 0)),
+      bucketsWithSales: trendRows.filter((row) => row.sales > 0).length, trend: summarizeTrend(trendRows) },
+    purchases: { period: { fromDate: options.fromDate ?? null, toDate: options.toDate ?? null },
+      recordedCost: roundTwo(purchases.recordedCost), pricedReceipts: purchases.pricedReceipts, unpricedReceipts: purchases.unpricedReceipts },
     movement: {
-      period: {
-        startDate: period.movementStartAt.toISOString().slice(0, 10),
-        endDate: period.movementEndAt.toISOString().slice(0, 10),
-        months: INSIGHT_HISTORY_MONTHS,
-      },
-      outboundByUnit,
+      selectedPeriod: { fromDate: options.fromDate ?? null, toDate: options.toDate ?? null, basis: startAt || endAt ? 'occurredAt_utc' : 'all_time' },
+      selectedTotalsByUnit: selectedMovement.map((row) => ({ unit: row.unit, inbound: roundTwo(row.inboundQuantity), outbound: roundTwo(row.outboundQuantity), inboundCount: row.inboundCount, outboundCount: row.outboundCount })),
+      monthlyWindow: { startMonth: monthly.period.startMonth, endMonth: monthly.period.endMonth,
+        months: monthly.months.map((month) => ({ month, byUnit: monthly.rows.filter((row) => row.month === month).map((row) => ({
+          unit: row.unit, inbound: roundTwo(row.inboundQuantity), outbound: roundTwo(row.outboundQuantity),
+        })) })) },
+      classification: { month: movementMonth, threshold: options.threshold ?? 10, productCount: classification.summary.productCount,
+        fastMovingCount: classification.summary.fastMovingCount, slowMovingCount: classification.summary.slowMovingCount },
     },
-    forecast,
+    inventory, forecast,
   };
 }
 
 function formatUnitTotals(rows: Array<{ unit: string; quantity: number }>): string {
-  return rows.length
-    ? rows.map((row) => {
-      const unit = row.unit === 'sheet' && row.quantity !== 1 ? 'sheets' : row.unit;
-      return `${roundTwo(row.quantity)} ${unit}`;
-    }).join(' and ')
-    : 'no unit-specific estimate is available';
+  return rows.length ? rows.map((row) => `${roundTwo(row.quantity)} ${row.unit}`).join(' and ') : 'no unit-specific estimate is available';
 }
 
 export function generateFallbackInsight(payload: SafeInsightPayload): AiInsightContent {
-  const { sales, purchases, movement, forecast } = payload;
-  const { direction, recentGrossSales, changePercent } = sales.comparison;
-  const trendSummary = direction === 'rising'
-    ? `Gross sales were ${Math.abs(changePercent ?? 0)}% higher in the latest six complete months than in the six before them.`
-    : direction === 'falling'
-      ? `Gross sales were ${Math.abs(changePercent ?? 0)}% lower in the latest six complete months than in the six before them.`
-      : direction === 'steady'
-        ? 'Gross sales were the same in the latest six complete months as in the six before them.'
-        : direction === 'new_activity'
-          ? `No sales were recorded in the earlier six-month period; the latest six months recorded ${recentGrossSales} in gross sales.`
-          : direction === 'no_sales'
-            ? 'No non-cancelled sales were recorded in the last 12 complete months.'
-            : 'There are not enough complete months in this report to compare two six-month periods.';
-  const forecastSummary = forecast.productsWithEstimate > 0
-    ? ` Rough next-month estimates are ${formatUnitTotals(forecast.estimatesByUnit)} for ${forecast.productsWithEstimate} of ${forecast.totalProducts} products.`
-    : ` No next-month estimates are available yet for the ${forecast.totalProducts} products in the report.`;
-  const summary = `${trendSummary}${forecastSummary}`;
-
-  const coverageRisk = forecast.productsWithoutEstimate > 0
-    ? `Estimates are available for ${forecast.productsWithEstimate} of ${forecast.totalProducts} products; the rest need more recent sales history.`
-    : 'Past sales estimates are a planning guide, not a promise of future demand.';
+  const { sales, purchases, movement, inventory, forecast } = payload;
+  const trend = sales.trend;
+  const direction = trend.direction;
+  const salesLine = `The selected delivery-date range contains ${sales.orderCount} order records, ${sales.grossSales} in gross sales, and an average gross order value of ${sales.averageOrderValue}`;
+  const trendSummary = direction === 'rising' || direction === 'falling'
+    ? `latest-interval gross sales were ${Math.abs(trend.changePercent ?? 0)}% ${direction} than the previous interval`
+    : direction === 'new_activity' ? 'gross sales started in the latest chart interval after none in the previous one'
+      : direction === 'no_sales' ? 'no gross sales were recorded in the selected delivery-date range'
+        : direction === 'steady' ? 'gross sales were unchanged between the latest chart intervals' : 'there is only one chart interval, so a sales trend cannot be compared';
+  const classification = movement.classification;
+  const cutoff = classification.threshold === 0 ? 'any recorded outbound movement' : `at least ${classification.threshold} ${classification.threshold === 1 ? 'unit' : 'units'} sent out`;
+  const summary = `${salesLine}; ${trendSummary}. In ${classification.month}, ${classification.fastMovingCount} of ${classification.productCount} products met the fast-moving cutoff (${cutoff}) and ${classification.slowMovingCount} did not; next-month estimates total ${formatUnitTotals(forecast.estimatesByUnit)} for ${forecast.productsWithEstimate} of ${forecast.totalProducts} products.`;
+  const selected = movement.selectedTotalsByUnit.map((row) => `${row.inbound} ${row.unit} received and ${row.outbound} ${row.unit} sent out`).join('; ') || 'no recorded movement';
+  const monthlyTotals = new Map<string, { unit: string; inbound: number; outbound: number }>();
+  for (const month of movement.monthlyWindow.months) {
+    for (const row of month.byUnit) {
+      const total = monthlyTotals.get(row.unit) ?? { unit: row.unit, inbound: 0, outbound: 0 };
+      total.inbound += row.inbound;
+      total.outbound += row.outbound;
+      monthlyTotals.set(row.unit, total);
+    }
+  }
+  const monthly = [...monthlyTotals.values()].map((row) => `${row.inbound} ${row.unit} received and ${row.outbound} ${row.unit} sent out`).join('; ') || 'no recorded movement';
+  const receiptLabel = (count: number) => `${count} ${count === 1 ? 'receipt' : 'receipts'}`;
   const costRisk = purchases.unpricedReceipts > 0
-    ? `Recorded purchase costs exclude ${purchases.unpricedReceipts} ${purchases.unpricedReceipts === 1 ? 'receipt' : 'receipts'} with no cost entered.`
-    : 'Keep recording purchase costs so spending totals stay complete.';
-  const movementRisk = movement.outboundByUnit.length > 0
-    ? `Recorded outbound movement was ${formatUnitTotals(movement.outboundByUnit)}; these totals do not show how quickly any one product sells.`
-    : 'No outbound stock movements were recorded in this period.';
-
+    ? `Recorded purchase costs total ${purchases.recordedCost} across ${receiptLabel(purchases.pricedReceipts)} with a cost; ${purchases.unpricedReceipts} ${purchases.unpricedReceipts === 1 ? 'receipt has' : 'receipts have'} no cost recorded.`
+    : purchases.pricedReceipts > 0
+      ? `Recorded purchase costs total ${purchases.recordedCost} across ${receiptLabel(purchases.pricedReceipts)}.`
+      : 'No purchase receipts were recorded in the selected period.';
+  const movementPeriodLabel = movement.selectedPeriod.basis === 'all_time' ? 'all recorded history' : 'the selected event-date range';
   return {
     summary,
-    recommendations: [
-      'Check each product’s current stock before using an estimate to place an order.',
-      purchases.unpricedReceipts > 0
-        ? 'Record the missing purchase costs so the spending summary is more complete.'
-        : 'Keep recording purchase costs for every receipt.',
-      'Keep amounts with different units separate, and review individual items for selling speed.',
-    ],
-    risks: [coverageRisk, `${costRisk} ${movementRisk}`],
-    confidence: sales.monthsWithSales < 3 || forecast.productsWithEstimate === 0
-      ? 'low'
-      : forecast.productsWithoutEstimate > 0 || purchases.unpricedReceipts > 0
-        ? 'medium'
-        : 'high',
+    recommendations: [`Review products meeting the fast-moving cutoff for ${classification.month} before replenishing.`,
+      'Check current inventory and keep different units separate.', `Use estimates as a guide; they cover ${forecast.productsWithEstimate} of ${forecast.totalProducts} products.`],
+    risks: [costRisk, `Current inventory: ${inventory.productCount} products, ${inventory.activeProductCount} active, ${inventory.activeLowStockCount} active low-stock, ${inventory.criticalStockCount} critical, ${inventory.outOfStockCount} out of stock; listed value ${inventory.totalInventoryValue}. Movement in ${movementPeriodLabel}: ${selected}. Monthly chart totals (${movement.monthlyWindow.startMonth}–${movement.monthlyWindow.endMonth}): ${monthly}.`],
+    confidence: sales.bucketsWithSales < 2 || forecast.productsWithEstimate === 0 ? 'low' : purchases.unpricedReceipts > 0 || forecast.productsWithoutEstimate > 0 ? 'medium' : 'high',
   };
 }
 
-export async function getAnalyticsInsight(options: InsightRequestOptions = {}): Promise<AiInsight> {
-  const payload = await buildSafeInsightPayload(options);
+export async function getAnalyticsInsight(options: InsightRequestOptions = {}, now = new Date()): Promise<AiInsight> {
+  const payload = await buildSafeInsightPayload(options, now);
   const fallback = (): AiInsight => ({ ...generateFallbackInsight(payload), source: 'fallback' });
   const config = getHermesConfig();
   if (!config.apiKey || !config.baseUrl) return fallback();

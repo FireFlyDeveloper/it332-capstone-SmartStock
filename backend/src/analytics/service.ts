@@ -6,9 +6,10 @@
  */
 
 import { isDbSyncActive } from '../db/syncState.js';
-import { getAnalyticsOrderSummaryDb, getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlyItemMovementPageDb, listMonthlySalesTrendDb, listMonthlyStockMovementAggregatesDb, listOutboundMovementByUnitDb, listRecentActivityDb } from '../db/postgresStore.js';
+import { getAnalyticsOrderSummaryDb, getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlyItemMovementPageDb, listMonthlySalesTrendDb, listMonthlyStockMovementAggregatesDb, listOutboundMovementByUnitDb, listRecentActivityDb, listInsightMovementSummaryDb, listInsightPurchaseSummaryDb } from '../db/postgresStore.js';
 import { listProducts, listProductMovements } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
+import { listProductPageRecords } from '../inventory/service.js';
 import {
   buildAnnualPurchaseSummary,
   buildAnalyticsOrderSummary,
@@ -108,6 +109,53 @@ export async function getOutboundMovementByUnit(startAt: Date, endAt: Date) {
     return rows;
   }
   return buildOutboundMovementByUnit(listAllMovements(), listProducts(), startAt, endAt);
+}
+
+export async function getInsightMovementSummary(startAt?: Date, endAt?: Date) {
+  if (isDbSyncActive()) {
+    const rows = await listInsightMovementSummaryDb(startAt, endAt);
+    if (!rows) throw new Error('PostgreSQL is unavailable for insight movement summary');
+    return rows;
+  }
+  const products = new Map(listProducts().map((product) => [product.id, product]));
+  const totals = new Map<string, { unit: string; inboundQuantity: number; outboundQuantity: number; inboundCount: number; outboundCount: number }>();
+  for (const movement of listAllMovements()) {
+    const at = Date.parse(movement.occurredAt);
+    if (!Number.isFinite(at) || (startAt && at < startAt.getTime()) || (endAt && at >= endAt.getTime())) continue;
+    const unit = products.get(movement.productId)?.unit?.trim() || 'unknown';
+    const row = totals.get(unit) ?? { unit, inboundQuantity: 0, outboundQuantity: 0, inboundCount: 0, outboundCount: 0 };
+    if (movement.type === 'inbound') { row.inboundQuantity += movement.quantity; row.inboundCount += 1; }
+    else if (movement.type === 'outbound') { row.outboundQuantity += movement.quantity; row.outboundCount += 1; }
+    totals.set(unit, row);
+  }
+  return [...totals.values()].sort((a, b) => a.unit.localeCompare(b.unit));
+}
+
+export async function getInsightPurchaseSummary(startAt?: Date, endAt?: Date) {
+  if (isDbSyncActive()) {
+    const summary = await listInsightPurchaseSummaryDb(startAt, endAt);
+    if (!summary) throw new Error('PostgreSQL is unavailable for insight purchase summary');
+    return summary;
+  }
+  const movements = listAllMovements().filter((movement) => {
+    const at = Date.parse(movement.occurredAt);
+    return movement.type === 'inbound' && Number.isFinite(at) && (!startAt || at >= startAt.getTime()) && (!endAt || at < endAt.getTime());
+  });
+  return {
+    recordedCost: movements.reduce((sum, movement) => sum + (movement.unitCost === undefined ? 0 : movement.quantity * movement.unitCost), 0),
+    pricedReceipts: movements.filter((movement) => movement.unitCost !== undefined).length,
+    unpricedReceipts: movements.filter((movement) => movement.unitCost === undefined).length,
+  };
+}
+
+export async function getInsightInventorySummary() {
+  const page = await listProductPageRecords({ limit: 1, category: 'all', stock: 'all', searchTokens: [], cursorName: null, cursorId: null });
+  return {
+    productCount: page.totalProducts, activeProductCount: page.activeProductCount, activeLowStockCount: page.activeLowStockCount, lowStockCount: page.lowStockCount,
+    outOfStockCount: page.outOfStockCount, healthyStockCount: page.healthyStockCount,
+    criticalStockCount: page.criticalStockCount, lowStockStatusCount: page.lowStockStatusCount,
+    totalInventoryValue: Number(page.totalInventoryValue),
+  };
 }
 
 export async function getMonthlyStockMovementByUnit(months = 12, now = new Date()) {

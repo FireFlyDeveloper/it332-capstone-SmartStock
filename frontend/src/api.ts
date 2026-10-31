@@ -612,8 +612,18 @@ export function getAnalyticsForecast(quantities: number[], alpha = 0.35): Promis
   })
 }
 
-export function getAnalyticsInsights(year: number, threshold: number): Promise<AnalyticsInsightsResponse> {
-  return apiFetch<AnalyticsInsightsResponse>(
-    `/analytics/insights?year=${encodeURIComponent(String(year))}&threshold=${encodeURIComponent(String(threshold))}`,
-  )
+export interface AnalyticsInsightsCriteria {
+  fromDate?: string
+  toDate?: string
+  movementMonth: string
+  threshold: number
+}
+
+export function getAnalyticsInsights(criteria: AnalyticsInsightsCriteria): Promise<AnalyticsInsightsResponse> {
+  const params = new URLSearchParams()
+  if (criteria.fromDate) params.set('fromDate', criteria.fromDate)
+  if (criteria.toDate) params.set('toDate', criteria.toDate)
+  params.set('movementMonth', criteria.movementMonth)
+  params.set('threshold', String(criteria.threshold))
+  return apiFetch<AnalyticsInsightsResponse>(`/analytics/insights?${params.toString()}`)
 }

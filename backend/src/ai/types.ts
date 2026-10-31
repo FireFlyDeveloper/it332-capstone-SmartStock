@@ -20,37 +20,40 @@ export interface AiInsight extends AiInsightContent {
 }
 
 export interface InsightRequestOptions {
-  year?: number;
+  fromDate?: string;
+  toDate?: string;
+  movementMonth?: string;
   threshold?: number;
 }
 
 export type SalesDirection = 'rising' | 'falling' | 'steady' | 'new_activity' | 'no_sales' | 'insufficient_data';
 
 export interface SafeSalesSummary {
-  period: { startMonth: string | null; endMonth: string | null; months: number };
+  period: { fromDate: string | null; toDate: string | null };
   orderCount: number;
+  averageOrderValue: number;
   grossSales: number;
-  monthsWithSales: number;
-  comparison: {
-    previousMonths: number;
-    recentMonths: number;
-    previousGrossSales: number;
-    recentGrossSales: number;
-    changePercent: number | null;
-    direction: SalesDirection;
-  };
+  bucketsWithSales: number;
+  trend: { direction: SalesDirection; changePercent: number | null; previousSales: number; recentSales: number };
 }
 
 export interface SafePurchaseSummary {
-  year: number;
+  period: { fromDate: string | null; toDate: string | null };
   recordedCost: number;
   pricedReceipts: number;
   unpricedReceipts: number;
 }
 
 export interface SafeMovementSummary {
-  period: { startDate: string; endDate: string; months: number };
-  outboundByUnit: Array<{ unit: string; quantity: number; movementCount: number }>;
+  selectedPeriod: { fromDate: string | null; toDate: string | null; basis: 'all_time' | 'occurredAt_utc' };
+  selectedTotalsByUnit: Array<{ unit: string; inbound: number; outbound: number; inboundCount: number; outboundCount: number }>;
+  monthlyWindow: { startMonth: string; endMonth: string; months: Array<{ month: string; byUnit: Array<{ unit: string; inbound: number; outbound: number }> }> };
+  classification: { month: string; threshold: number; productCount: number; fastMovingCount: number; slowMovingCount: number };
+}
+
+export interface SafeInventorySummary {
+  productCount: number; activeProductCount: number; activeLowStockCount: number; lowStockCount: number; outOfStockCount: number;
+  healthyStockCount: number; criticalStockCount: number; lowStockStatusCount: number; totalInventoryValue: number;
 }
 
 export interface SafeDemandForecast {
@@ -62,9 +65,9 @@ export interface SafeDemandForecast {
 }
 
 export interface SafeInsightPayload {
-  year: number;
   sales: SafeSalesSummary;
   purchases: SafePurchaseSummary;
   movement: SafeMovementSummary;
+  inventory: SafeInventorySummary;
   forecast: SafeDemandForecast;
 }
