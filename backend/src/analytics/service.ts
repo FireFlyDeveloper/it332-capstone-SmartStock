@@ -6,13 +6,14 @@
  */
 
 import { isDbSyncActive } from '../db/syncState.js';
-import { getAnalyticsOrderSummaryDb, getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlyItemMovementPageDb, listMonthlySalesTrendDb, listMonthlyStockMovementAggregatesDb, listOutboundMovementByUnitDb, listRecentActivityDb, listInsightMovementSummaryDb, listInsightPurchaseSummaryDb } from '../db/postgresStore.js';
+import { getAnalyticsOrderSummaryDb, getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlyItemMovementPageDb, listMonthlySalesTrendDb, listMonthlyStockMovementAggregatesDb, listOutboundMovementByUnitDb, listRecentActivityDb, listInsightMovementSummaryDb, listInsightPurchaseSummaryDb, listInsightYtdPurchaseSummaryDb, listInsightInventorySummaryDb } from '../db/postgresStore.js';
 import { listProducts, listProductMovements } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
-import { listProductPageRecords } from '../inventory/service.js';
+import { buildInventoryInsightSummary } from '../inventory/service.js';
 import {
   buildAnnualPurchaseSummary,
   buildAnalyticsOrderSummary,
+  buildYtdInboundPurchaseSummary,
   buildDashboardOrderSummary,
   buildMonthlyOutboundQuantities,
   buildMonthlyStockMovementByUnit,
@@ -29,6 +30,7 @@ import {
   paginateDemandForecast,
   paginateAnnualPurchaseSummary,
   type AnnualPurchaseCursor,
+  type AnalyticsOrderSummary,
   type DashboardSalesRange,
   type DemandForecastCursor,
   type MonthlyItemMovementCursor,
@@ -148,20 +150,49 @@ export async function getInsightPurchaseSummary(startAt?: Date, endAt?: Date) {
   };
 }
 
-export async function getInsightInventorySummary() {
-  const page = await listProductPageRecords({ limit: 1, category: 'all', stock: 'all', searchTokens: [], cursorName: null, cursorId: null });
+export function projectInsightOrderRankings(summary: Pick<AnalyticsOrderSummary, 'aiProductRankings'>) {
+  const grouped = summary.aiProductRankings;
+  const convert = (groups: typeof grouped.allTime) => groups.map((group) => ({ unit: group.unit,
+    items: group.items.map((item) => ({ label: item.name, category: item.category, orderedQuantity: item.quantity, currentStock: item.stock, stockStatus: item.status })) }));
   return {
-    productCount: page.totalProducts, activeProductCount: page.activeProductCount, activeLowStockCount: page.activeLowStockCount, lowStockCount: page.lowStockCount,
-    outOfStockCount: page.outOfStockCount, healthyStockCount: page.healthyStockCount,
-    criticalStockCount: page.criticalStockCount, lowStockStatusCount: page.lowStockStatusCount,
-    totalInventoryValue: Number(page.totalInventoryValue),
+    selectedRangeTopByUnit: convert(grouped.selectedRange),
+    allTimeMostByUnit: convert(grouped.allTime),
+    allTimeFewestByUnit: convert(grouped.allTimeFewest),
+    omittedUnitGroups: { selectedRangeTop: grouped.omittedUnitGroups.selectedRange, allTimeMost: grouped.omittedUnitGroups.allTime, allTimeFewest: grouped.omittedUnitGroups.allTimeFewest },
   };
 }
 
+export async function getInsightAnnualMaterialSummary(startAt?: Date, endAt?: Date) {
+  const now = endAt ?? new Date();
+  const year = startAt?.getUTCFullYear() ?? now.getUTCFullYear();
+  const summary = isDbSyncActive()
+    ? await listInsightYtdPurchaseSummaryDb(year, now)
+    : buildYtdInboundPurchaseSummary(listAllMovements(), listProducts(), now);
+  if (!summary) throw new Error('PostgreSQL is unavailable for YTD inbound purchase summary');
+  return {
+    year: summary.year,
+    byCategory: summary.categories.map((row) => ({ category: row.category, recordedCost: row.totalCost, pricedReceipts: row.pricedReceipts, unpricedReceipts: row.unpricedReceipts })),
+    quantityByCategoryAndUnit: summary.categoryUnits.map((row) => ({ category: row.category, unit: row.unit, quantity: row.totalQuantity })),
+  };
+}
+
+export async function getInsightInventorySummary() {
+  if (isDbSyncActive()) {
+    const summary = await listInsightInventorySummaryDb();
+    if (!summary) throw new Error('PostgreSQL is unavailable for inventory summary');
+    const value = (category: string) => summary.categoryValues.find((row) => row.category === category)?.listedPriceValue ?? 0;
+    return { ...summary, glassInventoryValue: value('glass'), aluminumInventoryValue: value('aluminum'),
+      activeOutOfStockCount: summary.activeAlertCounts.outOfStock, activeCriticalStockCount: summary.activeAlertCounts.critical,
+      activeLowAlertCount: summary.activeAlertCounts.low };
+  }
+  return buildInventoryInsightSummary(listProducts());
+}
+
+
 export async function getMonthlyStockMovementByUnit(months = 12, now = new Date()) {
   if (!Number.isInteger(months) || months < 1 || months > 60) throw new Error('months must be an integer between 1 and 60');
-  const endAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-  const startAt = new Date(Date.UTC(endAt.getUTCFullYear(), endAt.getUTCMonth() - months, 1));
+  const endAt = new Date(now.getTime() + 1);
+  const startAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months + 1, 1));
   if (isDbSyncActive()) {
     const aggregates = await listMonthlyStockMovementAggregatesDb(startAt, endAt);
     if (!aggregates) throw new Error('PostgreSQL is unavailable for monthly stock movement');

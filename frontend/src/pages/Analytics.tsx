@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import { formatCurrency, formatDateInput } from '../utils/helpers';
+import InsightBreakdown from '../components/InsightBreakdown';
 import { getAnalyticsInsights, getAnalyticsMonthlyItemMovementPage, getAnalyticsMonthlyMovement, getAnalyticsOrderSummary, getDemandForecastPage, getProductsPage, type AnalyticsInsightsResponse, type AnalyticsMonthlyMovementResponse, type AnalyticsMonthlyItemMovementPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse } from '../api';
 import { toast } from 'sonner';
 import { 
@@ -673,7 +674,7 @@ export const Analytics: React.FC = () => {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h3 className="text-lg font-bold text-slate-900">SmartStock Insights</h3>
-              <p className="mt-1 max-w-3xl text-xs text-slate-500">Summarizes the selected delivery-date range and monthly stock movement. The sales estimate is separate from this summary; no customer details or raw records are sent.</p>
+              <p className="mt-1 max-w-3xl text-xs text-slate-500">Summarizes the selected delivery-date range, monthly stock movement, and all 13 analytics. No customer details or raw records are sent.</p>
             </div>
             <button type="button" onClick={() => void generateInsights()} disabled={aiInsightLoading} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-60">
               {aiInsightLoading ? 'Preparing…' : aiInsight ? 'Refresh summary' : 'Get a quick summary'}
@@ -696,6 +697,7 @@ export const Analytics: React.FC = () => {
               <div><h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">What you can do</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{aiInsight.recommendations.map((item, index) => <li key={`rec-${index}`}>{simplifyInsightText(item)}</li>)}</ul></div>
               <div><h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">Things to watch</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{aiInsight.risks.map((item, index) => <li key={`risk-${index}`}>{simplifyInsightText(item)}</li>)}</ul></div>
             </div>
+            <InsightBreakdown interpretations={aiInsight.interpretations} />
           </div>}
         </section>
 

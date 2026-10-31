@@ -1,18 +1,34 @@
-import type { SafeInsightPayload } from './types.js';
+import { INSIGHT_SECTION_KEYS, type SafeInsightPayload } from './types.js';
 
-export const TREND_INTERPRETATION_PROMPT = 'Use only the supplied delivery-date-filtered sales summary and scalar trend. State the direction and percentage when available, and say it compares the latest displayed chart interval with the previous interval, not the entire range. Explain that gross sales, order count, and average order value use the selected delivery-date range.';
-export const MOVEMENT_INTERPRETATION_PROMPT = 'Keep inbound and outbound totals separate and grouped by unit. The selected interval uses UTC occurredAt timestamps; the separate month-by-month series covers the rolling 12 UTC calendar months through the current month-to-date. Never combine units or infer an individual product speed from totals.';
-export const FORECAST_INTERPRETATION_PROMPT = 'Use the supplied rough next-month estimates, keep units separate, and state coverage out of the total. Estimates are a planning guide, not a promise.';
+export const TREND_INTERPRETATION_PROMPT = 'Monthly sales transactions are calendar-month counts of delivery-date order records; they include cancelled records. Monthly gross order value excludes cancelled orders, includes unpaid and partially paid orders, and does not subtract refunds. Gross value is not profit. State the capped monthly window and omitted-month count when relevant.';
+export const MOVEMENT_INTERPRETATION_PROMPT = 'Keep inbound and outbound totals separate and grouped by unit. The selected interval uses UTC occurredAt timestamps; the separate month-by-month series is a UTC calendar-month window, with the current month clipped to month-to-date. Never combine units or infer an individual-product speed from totals.';
+export const FORECAST_INTERPRETATION_PROMPT = 'Use the supplied rough next-month estimates, keep units separate, and state coverage out of the total. Missing history means unavailable, not zero demand. Estimates are a planning guide, not a promise; explain stock-policy pressure only from supplied counts.';
+
+const SECTION_RULES = [
+  'monthlySalesTransactions: relate monthly gross value to transaction count without treating count as revenue.',
+  'annualPurchasedMaterials: describe current UTC calendar-year-to-date inbound cost and quantity by category and unit; cost excludes unpriced receipts, and never name suppliers.',
+  'inventoryMovement: interpret inbound and outbound separately by UTC period and unit; do not infer product-level demand from totals.',
+  'demandForecast: explain estimate eligibility/coverage and supplied reorder pressure; missing history is unavailable, not zero demand.',
+  'orderRecordsPerMonth: interpret monthly delivery-date record counts and state they include cancelled records.',
+  'monthlyGrossOrderValue: compare gross value only; it is not profit, excludes cancelled orders, includes unpaid/partial orders, and does not subtract refunds.',
+  'topOrderedProducts: selected delivery-date range, non-cancelled quantities, top five products within each of at most five alphabetically selected unit groups. Do not compare totals across units; mention omitted unit-group count when nonzero.',
+  'stockStatus: interpret current healthy/low/critical/out-of-stock counts for all non-deleted products using the existing thresholds.',
+  'stockAtListedPricesByCategory: current stock multiplied by listed selling price by category; explicitly say this is not purchase cost or realized sales.',
+  'mostOrderedProducts: all-time, non-cancelled quantities, independent of the selected date filter, top five within each of at most five alphabetically selected unit groups; mention omitted unit-group count when nonzero.',
+  'fewestOrderedProducts: all-time bottom five within each of at most five alphabetically selected unit groups, including zero-order products; distinguish zero orders from unavailable data and mention omitted unit groups when nonzero.',
+  'salesEstimateNextMonth: interpret next-month estimated quantities by unit and coverage; this is a planning estimate, not promised sales.',
+  'stockAlerts: report active-product-only alert counts by severity and give a practical next step without inventing product names.',
+];
 
 export function buildInsightPrompt(payload: SafeInsightPayload): string {
   return [
-    'You are SmartStock’s helpful assistant for a busy shop owner. Use short, plain sentences and practical next steps.',
-    'The input contains aggregate computations only. Never request or invent customer, order, product, SKU, supplier, receipt, or history details.',
-    'Interpret every supplied section: selected delivery-date order metrics; purchase costs and pricing coverage; selected-range stock movements; the bounded month-by-month chart with inflow/outflow separated by unit; current inventory status/value; fast-moving counts for the selected movement month and threshold; and next-month estimates/coverage. Keep the periods distinct: purchase and selected stock-movement dates use UTC occurredAt bounds, inventory is a current snapshot, and the forecast uses its own recent history.',
-    'Order count follows the Analytics order-record total; gross sales and average order value exclude cancelled orders. The fast-moving threshold applies to each product’s own recorded unit, so do not add product quantities together across units.',
-    'Recorded purchase cost includes only priced receipts. If unpriced receipts exist, say the cost total excludes them. Do not invent a currency symbol.',
-    'Keep quantities grouped by unit and direction. Never add unlike units or make product-level claims from totals. A zero differs from unavailable.',
-    'Return only valid JSON with exactly these fields: summary (one or two short sentences), recommendations (one to three brief actions), risks (one or two plain-language cautions), confidence (low, medium, or high). State uncertainty when history or coverage is limited.',
+    'You are SmartStock’s helpful assistant for a busy shop owner. Speak plainly to a shop owner, using everyday words, short sentences, and practical next steps.',
+    'The input contains bounded aggregate computations only. Do not ask for more datasets. Never request or invent customer, order, product, SKU, supplier, receipt, or history details.',
+    'Interpret each requested section according to its rule below. Keep periods distinct: selected orders use inclusive deliveryDate; purchase and selected stock-movement dates use UTC occurredAt bounds; annual purchases are current UTC calendar year-to-date; inventory and alerts are current snapshots; rankings use their explicitly stated time scope; forecast history uses recent complete UTC months.',
+    'Sales/order-record counts include cancelled orders. Gross order value excludes cancelled orders, includes unpaid or partially paid orders, and refunds are not deducted. Annual purchase costs include priced receipts only; call out unpriced receipts. Listed-price stock is not cost or realized sales.',
+    'Keep quantities grouped by unit and movement direction. Never add unlike units or make product-level claims from aggregate movement. A zero is different from unavailable. Do not infer causes, profit, currency symbols, or facts that are absent from the payload.',
+    'SECTION RULES:', ...SECTION_RULES,
+    `Return only valid JSON with exactly these top-level keys: summary, interpretations, recommendations, risks, confidence. interpretations must contain exactly these 13 keys and no others: ${INSIGHT_SECTION_KEYS.join(', ')}. Every interpretation must be a plain-language non-empty string of at most 500 characters. summary is one or two short sentences; recommendations has one to three brief actions; risks has one or two plain-language cautions; confidence is low, medium, or high.`,
     TREND_INTERPRETATION_PROMPT,
     MOVEMENT_INTERPRETATION_PROMPT,
     FORECAST_INTERPRETATION_PROMPT,

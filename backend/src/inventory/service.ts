@@ -220,6 +220,33 @@ function parseStockMovement(body: unknown, type: 'inbound' | 'outbound'): Servic
   };
 }
 
+export function buildInventoryInsightSummary(products: Product[]) {
+  const categoryValues = new Map<string, number>();
+  for (const product of products) categoryValues.set(product.category, (categoryValues.get(product.category) ?? 0) + product.stock * product.price);
+  const active = products.filter((product) => product.status === 'active');
+  const activeAlertCounts = {
+    outOfStock: active.filter((product) => product.stock <= 0).length,
+    critical: active.filter((product) => product.stock > 0 && product.stock <= product.threshold * 0.5).length,
+    low: active.filter((product) => product.stock > product.threshold * 0.5 && product.stock <= product.threshold).length,
+  };
+  const totalInventoryValue = products.reduce((total, product) => total + product.stock * product.price, 0);
+  return {
+    productCount: products.length, activeProductCount: active.length, totalInventoryValue,
+    healthyStockCount: products.filter((product) => product.stock > product.threshold).length,
+    lowStockStatusCount: products.filter((product) => product.stock > 0 && product.stock > product.threshold * 0.5 && product.stock <= product.threshold).length,
+    criticalStockCount: products.filter((product) => product.stock > 0 && product.stock <= product.threshold * 0.5).length,
+    outOfStockCount: products.filter((product) => product.stock <= 0).length,
+    lowStockCount: products.filter((product) => product.stock <= product.threshold).length,
+    activeLowStockCount: active.filter((product) => product.stock <= product.threshold).length,
+    activeThresholdStockCount: active.filter((product) => product.stock <= product.threshold).length,
+    categoryValues: [...categoryValues].map(([category, listedPriceValue]) => ({ category, listedPriceValue })),
+    glassInventoryValue: categoryValues.get('glass') ?? 0, aluminumInventoryValue: categoryValues.get('aluminum') ?? 0,
+    activeAlertCounts,
+    activeOutOfStockCount: activeAlertCounts.outOfStock, activeCriticalStockCount: activeAlertCounts.critical,
+    activeLowAlertCount: activeAlertCounts.low,
+  };
+}
+
 export function listProductRecords(filters: ProductFilters = {}): Product[] {
   const q = filters.q?.trim().toLowerCase();
   return listProducts().filter((product) => {

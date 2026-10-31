@@ -12,6 +12,7 @@ import { createUser, _resetUserStore, type Role } from '../auth/users.js';
 import { hashPassword } from '../auth/hash.js';
 import { inventoryRoutes } from './routes.js';
 import { _resetInventoryStore } from './store.js';
+import { buildInventoryInsightSummary } from './service.js';
 
 function buildApp() {
   const app = new Hono();
@@ -49,6 +50,22 @@ describe('product inventory routes', () => {
     app = buildApp();
     await seedUser(ADMIN, 'admin');
     await seedUser(STAFF, 'staff');
+  });
+
+  it('summarizes listed-price category values and active-only alert severities', () => {
+    const products = [
+      { id: '1', name: 'Empty', sku: 'S1', category: 'glass' as const, unit: 'sheet', stock: 0, price: 20, threshold: 10, status: 'active' as const },
+      { id: '2', name: 'Critical', sku: 'S2', category: 'glass' as const, unit: 'sheet', stock: 5, price: 10, threshold: 10, status: 'active' as const },
+      { id: '3', name: 'Low', sku: 'S3', category: 'aluminum' as const, unit: 'length', stock: 8, price: 5, threshold: 10, status: 'active' as const },
+      { id: '4', name: 'Inactive Empty', sku: 'S4', category: 'aluminum' as const, unit: 'length', stock: 0, price: 99, threshold: 10, status: 'discontinued' as const },
+    ];
+    expect(buildInventoryInsightSummary(products)).toMatchObject({
+      productCount: 4, totalInventoryValue: 90, glassInventoryValue: 50, aluminumInventoryValue: 40,
+      categoryValues: [{ category: 'glass', listedPriceValue: 50 }, { category: 'aluminum', listedPriceValue: 40 }],
+      outOfStockCount: 2, criticalStockCount: 1, lowStockStatusCount: 1,
+      activeLowStockCount: 3, activeLowAlertCount: 1,
+      activeAlertCounts: { outOfStock: 1, critical: 1, low: 1 },
+    });
   });
 
   it('lists seeded products for authenticated staff', async () => {

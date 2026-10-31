@@ -24,6 +24,127 @@ export interface AnalyticsOrderSummary {
   leastOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>;
   orderedQuantities: Record<string, number>;
   salesTrendData: Array<{ month: string; sales: number; orders: number }>;
+  deliveryDateMonthlySeries: {
+    months: Array<{ month: string; orderCount: number; grossSales: number }>;
+    omittedMonthCount: number;
+    omittedBefore: string | null;
+    omittedAfter: string | null;
+  };
+  aiProductRankings: {
+    allTime: InsightProductUnitRanking[];
+    allTimeFewest: InsightProductUnitRanking[];
+    selectedRange: InsightProductUnitRanking[];
+    omittedUnitGroups: { allTime: number; allTimeFewest: number; selectedRange: number };
+  };
+}
+
+export interface InsightProductUnitRanking {
+  unit: string;
+  items: Array<{ name: string; category: string; quantity: number; stock: number; unit: string; status: string }>;
+}
+
+export function buildDeliveryDateMonthlySeries(orders: Order[], fromDate?: string, toDate?: string, now = new Date()) {
+  const filtered = orders.filter((order) => (!fromDate || order.deliveryDate >= fromDate) && (!toDate || order.deliveryDate <= toDate));
+  const monthCounts = new Map<string, { month: string; orderCount: number; grossSales: number }>();
+  for (const order of filtered) {
+    if (!order.deliveryDate) continue;
+    const month = order.deliveryDate.slice(0, 7);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) continue;
+    const row = monthCounts.get(month) ?? { month, orderCount: 0, grossSales: 0 };
+    row.orderCount += 1;
+    if (order.orderStatus !== 'cancelled') row.grossSales += order.total;
+    monthCounts.set(month, row);
+  }
+  if (!monthCounts.size && !fromDate && !toDate) return { months: [], omittedMonthCount: 0, omittedBefore: null, omittedAfter: null };
+  const observedMonths = [...monthCounts.keys()].sort();
+  const startMonth = fromDate?.slice(0, 7) ?? observedMonths[0] ?? toDate!.slice(0, 7);
+  const endMonth = toDate?.slice(0, 7) ?? observedMonths.at(-1) ?? (fromDate ? now.toISOString().slice(0, 7) : startMonth);
+  const toOrdinal = (month: string) => Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1;
+  const fromOrdinal = (ordinal: number) => `${Math.floor(ordinal / 12).toString().padStart(4, '0')}-${String(ordinal % 12 + 1).padStart(2, '0')}`;
+  const start = toOrdinal(startMonth);
+  const end = toOrdinal(endMonth);
+  if (start > end) return { months: [], omittedMonthCount: 0, omittedBefore: null, omittedAfter: null };
+  const totalMonths = end - start + 1;
+  const omittedMonthCount = Math.max(0, totalMonths - 12);
+  const visibleStart = Math.max(start, end - 11);
+  const visibleMonths = Array.from({ length: end - visibleStart + 1 }, (_, index) => fromOrdinal(visibleStart + index));
+  return {
+    months: visibleMonths.map((month) => monthCounts.get(month) ?? { month, orderCount: 0, grossSales: 0 }),
+    omittedMonthCount,
+    omittedBefore: omittedMonthCount ? startMonth : null,
+    omittedAfter: null,
+  };
+}
+
+export function buildInsightProductRankings(orders: Order[], products: Product[], fromDate?: string, toDate?: string) {
+  const build = (selected: Order[], direction: 'asc' | 'desc' = 'desc', includeZero = false) => {
+    const quantities = new Map<string, number>();
+    for (const order of selected) {
+      if (order.orderStatus === 'cancelled') continue;
+      for (const line of order.items) quantities.set(line.productId, (quantities.get(line.productId) ?? 0) + line.quantity);
+    }
+    const units = new Map<string, Array<{ productId: string; item: InsightProductUnitRanking['items'][number] }>>();
+    for (const product of products) {
+      const quantity = quantities.get(product.id) ?? 0;
+      if (!includeZero && !quantity) continue;
+      const unit = product.unit?.trim() || 'unknown';
+      const items = units.get(unit) ?? [];
+      items.push({ productId: product.id, item: { name: product.name, category: product.category, quantity, stock: product.stock,
+        unit, status: product.stock <= 0 ? 'out_of_stock' : product.stock <= product.threshold * 0.5 ? 'critical' : product.stock <= product.threshold ? 'low' : 'healthy' } });
+      units.set(unit, items);
+    }
+    const compareText = (left: string, right: string) => left < right ? -1 : left > right ? 1 : 0;
+    const orderedUnits = [...units.entries()].sort(([left], [right]) => compareText(left, right));
+    return {
+      rows: orderedUnits.slice(0, 5).map(([unit, items]) => ({
+        unit,
+        items: items.sort((a, b) => (direction === 'desc' ? b.item.quantity - a.item.quantity : a.item.quantity - b.item.quantity)
+          || compareText(a.item.name, b.item.name) || compareText(a.productId, b.productId)).slice(0, 5).map(({ item }) => item),
+      })),
+      omittedUnitGroups: Math.max(0, orderedUnits.length - 5),
+    };
+  };
+  const allTime = build(orders);
+  const allTimeFewest = build(orders, 'asc', true);
+  const selectedRange = build(orders.filter((order) => (!fromDate || order.deliveryDate >= fromDate) && (!toDate || order.deliveryDate <= toDate)));
+  return {
+    allTime: allTime.rows,
+    allTimeFewest: allTimeFewest.rows,
+    selectedRange: selectedRange.rows,
+    omittedUnitGroups: { allTime: allTime.omittedUnitGroups, allTimeFewest: allTimeFewest.omittedUnitGroups, selectedRange: selectedRange.omittedUnitGroups },
+  };
+}
+
+export interface YtdInboundPurchaseAggregateRow {
+  category: string; transactionCount: number; totalQuantity: number; totalCost: number;
+  pricedReceipts: number; unpricedReceipts: number; pricedQuantity: number; unpricedQuantity: number;
+}
+
+export function buildYtdInboundPurchaseSummary(movements: StockMovement[], products: Product[], now = new Date()) {
+  const year = now.getUTCFullYear();
+  const end = now.getTime();
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const category = new Map<string, YtdInboundPurchaseAggregateRow>();
+  const categoryUnit = new Map<string, YtdInboundPurchaseAggregateRow & { unit: string }>();
+  for (const movement of movements) {
+    const timestamp = Date.parse(movement.occurredAt);
+    if (movement.type !== 'inbound' || !Number.isFinite(timestamp) || timestamp < Date.UTC(year, 0, 1) || timestamp > end) continue;
+    const product = productById.get(movement.productId);
+    const categoryName = product?.category ?? 'unknown';
+    const unit = product?.unit?.trim() || 'unknown';
+    const apply = (row: YtdInboundPurchaseAggregateRow) => {
+      row.transactionCount += 1; row.totalQuantity += movement.quantity;
+      if (movement.unitCost === undefined) { row.unpricedReceipts += 1; row.unpricedQuantity += movement.quantity; }
+      else { row.pricedReceipts += 1; row.pricedQuantity += movement.quantity; row.totalCost += movement.quantity * movement.unitCost; }
+    };
+    const cat = category.get(categoryName) ?? { category: categoryName, transactionCount: 0, totalQuantity: 0, totalCost: 0, pricedReceipts: 0, unpricedReceipts: 0, pricedQuantity: 0, unpricedQuantity: 0 };
+    apply(cat); category.set(categoryName, cat);
+    const key = `${categoryName}\u0000${unit}`;
+    const cu = categoryUnit.get(key) ?? { ...cat, category: categoryName, unit, transactionCount: 0, totalQuantity: 0, totalCost: 0, pricedReceipts: 0, unpricedReceipts: 0, pricedQuantity: 0, unpricedQuantity: 0 };
+    apply(cu); categoryUnit.set(key, cu);
+  }
+  const sort = <T extends { category: string }>(rows: T[]) => rows.sort((a, b) => a.category.localeCompare(b.category));
+  return { year, categories: sort([...category.values()]), categoryUnits: sort([...categoryUnit.values()]).sort((a, b) => a.category.localeCompare(b.category) || a.unit.localeCompare(b.unit)) };
 }
 
 export function buildAnalyticsOrderSummary(orders: Order[], products: Product[], fromDate?: string, toDate?: string): AnalyticsOrderSummary {
@@ -102,6 +223,8 @@ export function buildAnalyticsOrderSummary(orders: Order[], products: Product[],
     leastOrderedItems,
     orderedQuantities,
     salesTrendData: [...trendBuckets.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, row]) => row),
+    deliveryDateMonthlySeries: buildDeliveryDateMonthlySeries(filtered, fromDate, toDate),
+    aiProductRankings: buildInsightProductRankings(orders, products, fromDate, toDate),
   };
 }
 
@@ -504,16 +627,18 @@ export function buildMonthlyStockMovementReport(
 ): MonthlyStockMovementReport {
   const isMonthBoundary = (date: Date) => date.getUTCDate() === 1 && date.getUTCHours() === 0
     && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0;
-  if (!Number.isFinite(startAt.getTime()) || !Number.isFinite(endAt.getTime()) || startAt >= endAt
-    || !isMonthBoundary(startAt) || !isMonthBoundary(endAt)) {
-    throw new Error('monthly stock movement requires increasing UTC month boundaries');
+  if (!Number.isFinite(startAt.getTime()) || !Number.isFinite(endAt.getTime()) || startAt >= endAt || !isMonthBoundary(startAt)) {
+    throw new Error('monthly stock movement requires an increasing UTC month window starting at a month boundary');
   }
 
   const months: string[] = [];
-  for (let cursor = new Date(startAt); cursor < endAt; cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1))) {
+  const finalIncludedAt = new Date(endAt.getTime() - 1);
+  const lastIncludedMonth = new Date(Date.UTC(finalIncludedAt.getUTCFullYear(), finalIncludedAt.getUTCMonth(), 1));
+  for (let cursor = new Date(startAt); cursor <= lastIncludedMonth; cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1))) {
     months.push(cursor.toISOString().slice(0, 7));
     if (months.length > 60) throw new Error('monthly stock movement is limited to 60 months');
   }
+  if (!months.length) throw new Error('monthly stock movement window must include at least one month');
   const monthSet = new Set(months);
   const byKey = new Map<string, MonthlyStockMovementRow>();
   for (const aggregate of aggregates) {

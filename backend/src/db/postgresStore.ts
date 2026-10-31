@@ -651,6 +651,91 @@ export async function listInsightPurchaseSummaryDb(startAt?: Date, endAt?: Date)
   return row ? { recordedCost: Number(row.recorded_cost), pricedReceipts: Number(row.priced_receipts), unpricedReceipts: Number(row.unpriced_receipts) } : null;
 }
 
+export async function listInsightYtdPurchaseSummaryDb(year = new Date().getUTCFullYear(), now = new Date()): Promise<{
+  year: number;
+  categories: Array<{ category: string; transactionCount: number; totalQuantity: number; totalCost: number; pricedReceipts: number; unpricedReceipts: number; pricedQuantity: number; unpricedQuantity: number }>;
+  categoryUnits: Array<{ category: string; unit: string; transactionCount: number; totalQuantity: number; totalCost: number; pricedReceipts: number; unpricedReceipts: number; pricedQuantity: number; unpricedQuantity: number }>;
+} | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const startAt = new Date(Date.UTC(year, 0, 1));
+  const { rows } = await pool.query(`
+    WITH inbound_materials AS (
+      SELECT COALESCE(NULLIF(p.category, ''), 'unknown') AS category,
+        COALESCE(NULLIF(BTRIM(p.unit), ''), 'unknown') AS unit, m.quantity, m.unit_cost
+      FROM stock_movements m
+      LEFT JOIN products p ON p.id = m.product_id AND p.deleted_at IS NULL
+      WHERE m.type = 'inbound' AND m.occurred_at >= $1::timestamptz AND m.occurred_at <= $2::timestamptz
+    )
+    SELECT category, unit,
+      COUNT(*)::int AS transaction_count,
+      COALESCE(SUM(quantity), 0)::numeric AS total_quantity,
+      COALESCE(SUM(quantity * unit_cost) FILTER (WHERE unit_cost IS NOT NULL), 0)::numeric AS total_cost,
+      COUNT(*) FILTER (WHERE unit_cost IS NOT NULL)::int AS priced_receipts,
+      COUNT(*) FILTER (WHERE unit_cost IS NULL)::int AS unpriced_receipts,
+      COALESCE(SUM(quantity) FILTER (WHERE unit_cost IS NOT NULL), 0)::numeric AS priced_quantity,
+      COALESCE(SUM(quantity) FILTER (WHERE unit_cost IS NULL), 0)::numeric AS unpriced_quantity
+    FROM inbound_materials
+    GROUP BY category, unit
+    ORDER BY category COLLATE "C", unit COLLATE "C"
+  `, [startAt, now]);
+  const categoryMap = new Map<string, Record<string, number | string>>();
+  const mapped = rows.map((row) => ({ category: String(row.category), unit: String(row.unit),
+    transactionCount: Number(row.transaction_count), totalQuantity: Number(row.total_quantity), totalCost: Number(row.total_cost),
+    pricedReceipts: Number(row.priced_receipts), unpricedReceipts: Number(row.unpriced_receipts),
+    pricedQuantity: Number(row.priced_quantity), unpricedQuantity: Number(row.unpriced_quantity) }));
+  for (const row of mapped) {
+    const current = categoryMap.get(row.category) ?? { category: row.category, transactionCount: 0, totalQuantity: 0, totalCost: 0, pricedReceipts: 0, unpricedReceipts: 0, pricedQuantity: 0, unpricedQuantity: 0 };
+    for (const field of ['transactionCount', 'totalQuantity', 'totalCost', 'pricedReceipts', 'unpricedReceipts', 'pricedQuantity', 'unpricedQuantity'] as const) current[field] = Number(current[field]) + row[field];
+    categoryMap.set(row.category, current);
+  }
+  return { year, categories: [...categoryMap.values()] as never, categoryUnits: mapped };
+}
+
+export async function listInsightInventorySummaryDb(): Promise<{
+  productCount: number; activeProductCount: number; totalInventoryValue: number; categoryValues: Array<{ category: string; listedPriceValue: number }>;
+  healthyStockCount: number; lowStockStatusCount: number; criticalStockCount: number; outOfStockCount: number; lowStockCount: number; activeLowStockCount: number; activeThresholdStockCount: number;
+  activeAlertCounts: { outOfStock: number; critical: number; low: number };
+} | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH products_summary AS (
+      SELECT COUNT(*)::int AS product_count, COUNT(*) FILTER (WHERE status = 'active')::int AS active_product_count,
+        COALESCE(SUM(stock * unit_price), 0)::numeric AS total_inventory_value,
+        COUNT(*) FILTER (WHERE stock > threshold)::int AS healthy_stock_count,
+        COUNT(*) FILTER (WHERE stock > 0 AND stock > threshold * 0.5 AND stock <= threshold)::int AS low_stock_status_count,
+        COUNT(*) FILTER (WHERE stock > 0 AND stock <= threshold * 0.5)::int AS critical_stock_count,
+        COUNT(*) FILTER (WHERE stock <= 0)::int AS out_of_stock_count,
+        COUNT(*) FILTER (WHERE stock <= threshold)::int AS low_stock_count,
+        COUNT(*) FILTER (WHERE status = 'active' AND stock <= threshold)::int AS active_low_stock_count,
+        COUNT(*) FILTER (WHERE status = 'active' AND stock <= threshold)::int AS active_threshold_stock_count
+      FROM products WHERE deleted_at IS NULL
+    ), category_values AS (
+      SELECT COALESCE(NULLIF(category, ''), 'unknown') AS category, COALESCE(SUM(stock * unit_price), 0)::numeric AS listed_price_value
+      FROM products WHERE deleted_at IS NULL GROUP BY COALESCE(NULLIF(category, ''), 'unknown')
+    ), active_alerts AS (
+      SELECT COUNT(*) FILTER (WHERE stock <= 0)::int AS out_of_stock_count,
+        COUNT(*) FILTER (WHERE stock > 0 AND stock <= COALESCE(threshold, 0) * 0.5)::int AS critical_count,
+        COUNT(*) FILTER (WHERE stock > COALESCE(threshold, 0) * 0.5 AND stock <= COALESCE(threshold, 0))::int AS low_count
+      FROM products WHERE deleted_at IS NULL AND status = 'active'
+    )
+    SELECT s.product_count, s.active_product_count, s.total_inventory_value, s.healthy_stock_count, s.low_stock_status_count,
+      s.critical_stock_count, s.out_of_stock_count, s.low_stock_count, s.active_low_stock_count, s.active_threshold_stock_count,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('category', category, 'listedPriceValue', listed_price_value) ORDER BY category COLLATE "C") FROM category_values), '[]'::jsonb) AS category_values,
+      a.out_of_stock_count AS active_out_of_stock_count, a.critical_count AS active_critical_count, a.low_count AS active_low_count
+    FROM products_summary s CROSS JOIN active_alerts a
+  `);
+  const row = rows[0];
+  if (!row) return null;
+  const values = typeof row.category_values === 'string' ? JSON.parse(row.category_values) : row.category_values;
+  return { productCount: Number(row.product_count), activeProductCount: Number(row.active_product_count), totalInventoryValue: Number(row.total_inventory_value),
+    healthyStockCount: Number(row.healthy_stock_count), lowStockStatusCount: Number(row.low_stock_status_count), criticalStockCount: Number(row.critical_stock_count),
+    outOfStockCount: Number(row.out_of_stock_count), lowStockCount: Number(row.low_stock_count), activeLowStockCount: Number(row.active_low_stock_count), activeThresholdStockCount: Number(row.active_threshold_stock_count),
+    categoryValues: Array.isArray(values) ? values.map((item: Record<string, unknown>) => ({ category: String(item.category), listedPriceValue: Number(item.listedPriceValue) })) : [],
+    activeAlertCounts: { outOfStock: Number(row.active_out_of_stock_count), critical: Number(row.active_critical_count), low: Number(row.active_low_count) } };
+}
+
 export async function listMonthlyStockMovementAggregatesDb(startAt: Date, endAt: Date): Promise<MonthlyStockMovementRow[] | null> {
   const pool = getPool();
   if (!pool) return null;
@@ -1360,6 +1445,65 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
       FROM filtered_orders o CROSS JOIN date_meta d
       WHERE o.delivery_date IS NOT NULL
       GROUP BY 1, d.use_day_buckets
+    ), monthly_base AS (
+      SELECT date_trunc('month', delivery_date::timestamp)::date AS month,
+        COUNT(*)::int AS order_count,
+        COALESCE(SUM(total_amount) FILTER (WHERE order_status <> 'cancelled'), 0)::double precision AS gross_sales
+      FROM filtered_orders WHERE delivery_date IS NOT NULL GROUP BY 1
+    ), month_bounds AS (
+      SELECT COALESCE(date_trunc('month', $1::date)::date, MIN(month), date_trunc('month', $2::date)::date) AS first_month,
+        COALESCE(date_trunc('month', $2::date)::date, MAX(month),
+          CASE WHEN $1::date IS NOT NULL THEN date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date END,
+          date_trunc('month', $1::date)::date) AS last_month
+      FROM monthly_base
+    ), monthly_series AS (
+      SELECT gs.month::date AS month, COALESCE(m.order_count, 0)::int AS order_count,
+        COALESCE(m.gross_sales, 0)::double precision AS gross_sales
+      FROM month_bounds b CROSS JOIN LATERAL generate_series(b.first_month, b.last_month, interval '1 month') gs(month)
+      LEFT JOIN monthly_base m ON m.month = gs.month::date
+    ), ranking_source AS (
+      SELECT 'allTime'::text AS scope, o.items FROM orders o
+      WHERE o.deleted_at IS NULL AND o.order_status <> 'cancelled'
+      UNION ALL
+      SELECT 'selectedRange'::text AS scope, o.items FROM filtered_orders o WHERE o.order_status <> 'cancelled'
+    ), ranking_products AS (
+      SELECT rs.scope, COALESCE(NULLIF(BTRIM(p.unit), ''), 'unknown') AS unit,
+        p.name, COALESCE(NULLIF(p.category, ''), 'unknown') AS category,
+        p.stock, COALESCE(p.threshold, 0) AS threshold,
+        item.value->>'productId' AS product_id,
+        SUM((item.value->>'quantity')::numeric)::double precision AS quantity
+      FROM ranking_source rs
+      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(rs.items, '[]'::jsonb)) item(value)
+      JOIN products p ON p.id::text = item.value->>'productId' AND p.deleted_at IS NULL
+      GROUP BY rs.scope, unit, p.name, category, p.stock, p.threshold, product_id
+    ), ranked_items AS (
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY scope, unit ORDER BY quantity DESC, name COLLATE "C", product_id COLLATE "C") AS item_rank
+      FROM ranking_products
+    ), unit_groups AS (
+      SELECT r.scope, r.unit,
+        jsonb_agg(jsonb_build_object('name', r.name, 'category', r.category, 'quantity', r.quantity, 'stock', r.stock,
+          'unit', r.unit, 'status', CASE WHEN r.stock <= 0 THEN 'out_of_stock' WHEN r.stock <= r.threshold * 0.5 THEN 'critical'
+          WHEN r.stock <= r.threshold THEN 'low' ELSE 'healthy' END) ORDER BY r.quantity DESC, r.name COLLATE "C", r.product_id COLLATE "C") AS items
+      FROM ranked_items r
+      WHERE r.item_rank <= 5 GROUP BY r.scope, r.unit
+    ), ranked_units AS (
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY scope ORDER BY unit COLLATE "C") AS unit_rank FROM unit_groups
+    ), fewest_products AS (
+      SELECT COALESCE(NULLIF(BTRIM(p.unit), ''), 'unknown') AS unit, p.name,
+        COALESCE(NULLIF(p.category, ''), 'unknown') AS category, p.stock, COALESCE(p.threshold, 0) AS threshold,
+        COALESCE(q.units_ordered, 0)::int AS quantity, p.id::text AS product_id
+      FROM products p LEFT JOIN all_item_quantities q ON q.product_id = p.id::text WHERE p.deleted_at IS NULL
+    ), fewest_ranked AS (
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY unit ORDER BY quantity ASC, name COLLATE "C", product_id COLLATE "C") AS item_rank
+      FROM fewest_products
+    ), fewest_unit_groups AS (
+      SELECT r.unit,
+        jsonb_agg(jsonb_build_object('name', r.name, 'category', r.category, 'quantity', r.quantity, 'stock', r.stock,
+          'unit', r.unit, 'status', CASE WHEN r.stock <= 0 THEN 'out_of_stock' WHEN r.stock <= r.threshold * 0.5 THEN 'critical'
+          WHEN r.stock <= r.threshold THEN 'low' ELSE 'healthy' END) ORDER BY r.quantity ASC, r.name COLLATE "C", r.product_id COLLATE "C") AS items
+      FROM fewest_ranked r WHERE r.item_rank <= 5 GROUP BY r.unit
+    ), fewest_ranked_units AS (
+      SELECT *, ROW_NUMBER() OVER (ORDER BY unit COLLATE "C") AS unit_rank FROM fewest_unit_groups
     )
     SELECT
       (SELECT COUNT(*)::int FROM filtered_orders) AS total_order_count,
@@ -1376,7 +1520,21 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
       COALESCE((SELECT jsonb_object_agg(product_id, quantity) FROM range_item_quantities), '{}'::jsonb) AS ordered_quantities,
       COALESCE((SELECT jsonb_agg(jsonb_build_object(
         'month', CASE WHEN use_day_buckets THEN to_char(bucket, 'FMMon FMDD') ELSE to_char(bucket, 'FMMon YY') END,
-        'sales', sales, 'orders', orders) ORDER BY bucket ASC) FROM trends), '[]'::jsonb) AS sales_trend_data
+        'sales', sales, 'orders', orders) ORDER BY bucket ASC) FROM trends), '[]'::jsonb) AS sales_trend_data,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('month', to_char(month, 'YYYY-MM'), 'orderCount', order_count, 'grossSales', gross_sales) ORDER BY month)
+        FROM (SELECT * FROM monthly_series ORDER BY month DESC LIMIT 12) capped), '[]'::jsonb) AS delivery_monthly_series,
+      GREATEST((SELECT COUNT(*) FROM monthly_series) - 12, 0)::int AS omitted_month_count,
+      CASE WHEN (SELECT COUNT(*) FROM monthly_series) > 12 THEN (SELECT to_char(MIN(month), 'YYYY-MM') FROM monthly_series) ELSE NULL END AS omitted_before,
+      NULL::text AS omitted_after,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('unit', unit, 'items', items) ORDER BY unit COLLATE "C")
+        FROM ranked_units WHERE scope = 'allTime' AND unit_rank <= 5), '[]'::jsonb) AS ai_rankings_all_time,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('unit', unit, 'items', items) ORDER BY unit COLLATE "C")
+        FROM ranked_units WHERE scope = 'selectedRange' AND unit_rank <= 5), '[]'::jsonb) AS ai_rankings_selected_range,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('unit', unit, 'items', items) ORDER BY unit COLLATE "C")
+        FROM fewest_ranked_units WHERE unit_rank <= 5), '[]'::jsonb) AS ai_rankings_all_time_fewest,
+      GREATEST((SELECT COUNT(*) FROM unit_groups WHERE scope = 'allTime') - 5, 0)::int AS ai_omitted_unit_groups_all_time,
+      GREATEST((SELECT COUNT(*) FROM unit_groups WHERE scope = 'selectedRange') - 5, 0)::int AS ai_omitted_unit_groups_selected_range,
+      GREATEST((SELECT COUNT(*) FROM fewest_unit_groups) - 5, 0)::int AS ai_omitted_unit_groups_all_time_fewest
   `, [fromDate ?? null, toDate ?? null]);
   const row = rows[0];
   if (!row) return null;
@@ -1407,6 +1565,37 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
     salesTrendData: array(row.sales_trend_data).map((item) => ({
       month: String(item.month), sales: Number(item.sales ?? 0), orders: Number(item.orders ?? 0),
     })),
+    deliveryDateMonthlySeries: {
+      months: array(row.delivery_monthly_series).map((item) => ({ month: String(item.month), orderCount: Number(item.orderCount ?? 0), grossSales: Number(item.grossSales ?? 0) })),
+      omittedMonthCount: Number(row.omitted_month_count ?? 0),
+      omittedBefore: row.omitted_before == null ? null : String(row.omitted_before),
+      omittedAfter: row.omitted_after == null ? null : String(row.omitted_after),
+    },
+    aiProductRankings: {
+      allTime: array(row.ai_rankings_all_time).map((group) => ({
+        unit: String(group.unit), items: Array.isArray(group.items) ? (group.items as Record<string, unknown>[]).map((item) => ({
+          name: String(item.name ?? ''), category: String(item.category ?? 'unknown'), quantity: Number(item.quantity ?? 0),
+          stock: Number(item.stock ?? 0), unit: String(item.unit ?? group.unit), status: String(item.status ?? 'healthy'),
+        })) : [],
+      })),
+      allTimeFewest: array(row.ai_rankings_all_time_fewest).map((group) => ({
+        unit: String(group.unit), items: Array.isArray(group.items) ? (group.items as Record<string, unknown>[]).map((item) => ({
+          name: String(item.name ?? ''), category: String(item.category ?? 'unknown'), quantity: Number(item.quantity ?? 0),
+          stock: Number(item.stock ?? 0), unit: String(item.unit ?? group.unit), status: String(item.status ?? 'healthy'),
+        })) : [],
+      })),
+      selectedRange: array(row.ai_rankings_selected_range).map((group) => ({
+        unit: String(group.unit), items: Array.isArray(group.items) ? (group.items as Record<string, unknown>[]).map((item) => ({
+          name: String(item.name ?? ''), category: String(item.category ?? 'unknown'), quantity: Number(item.quantity ?? 0),
+          stock: Number(item.stock ?? 0), unit: String(item.unit ?? group.unit), status: String(item.status ?? 'healthy'),
+        })) : [],
+      })),
+      omittedUnitGroups: {
+        allTime: Number(row.ai_omitted_unit_groups_all_time ?? 0),
+        allTimeFewest: Number(row.ai_omitted_unit_groups_all_time_fewest ?? 0),
+        selectedRange: Number(row.ai_omitted_unit_groups_selected_range ?? 0),
+      },
+    },
   };
 }
 

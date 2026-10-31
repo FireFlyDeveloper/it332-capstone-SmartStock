@@ -16,6 +16,9 @@ import { analyticsRoutes } from './routes.js';
 import {
   buildAnnualPurchaseSummary,
   buildAnalyticsOrderSummary,
+  buildInsightProductRankings,
+  buildDeliveryDateMonthlySeries,
+  buildYtdInboundPurchaseSummary,
   buildDashboardOrderSummary,
   buildMonthlySalesTrend,
   buildMonthlyStockMovementByUnit,
@@ -125,6 +128,68 @@ describe('analytics pure functions', () => {
         { productId: 'ALU-1', name: 'Aluminum', category: null, unit: null, quantity: 3 },
         { productId: 'GLS-1', name: 'Glass', category: null, unit: null, quantity: 2 },
       ],
+    });
+  });
+
+  it('builds a capped delivery-date monthly series with omitted-window metadata and cancelled-inclusive counts', () => {
+    const products = [
+      { id: 'a', name: 'A', category: 'glass' as const, unit: 'sheet', stock: 4, price: 20, threshold: 5, status: 'active' as const, sku: 'A-1' },
+      { id: 'b', name: 'B', category: 'aluminum' as const, unit: 'length', stock: 8, price: 30, threshold: 5, status: 'active' as const, sku: 'B-1' },
+    ];
+    const result = buildDeliveryDateMonthlySeries([
+      ...Array.from({ length: 14 }, (_, index) => ({ deliveryDate: new Date(Date.UTC(2025, index, 15)).toISOString().slice(0, 10), orderStatus: index === 13 ? 'cancelled' as const : 'delivered' as const, total: 100, items: [] })),
+    ] as unknown as Parameters<typeof buildDeliveryDateMonthlySeries>[0], '2025-01-01', '2026-12-31');
+    expect(result.months).toHaveLength(12);
+    expect(result).toMatchObject({ omittedMonthCount: 12, omittedBefore: '2025-01', omittedAfter: null });
+    expect(result.months.at(-1)).toMatchObject({ month: '2026-12', orderCount: 0, grossSales: 0 });
+  });
+
+  it('zero-fills selected delivery months with no orders', () => {
+    const result = buildDeliveryDateMonthlySeries([
+      { deliveryDate: '2026-02-10', orderStatus: 'delivered', total: 42, items: [] },
+    ] as unknown as Parameters<typeof buildDeliveryDateMonthlySeries>[0], '2026-01-10', '2026-03-31', new Date('2026-03-31T12:00:00.000Z'));
+    expect(result.months).toEqual([
+      { month: '2026-01', orderCount: 0, grossSales: 0 },
+      { month: '2026-02', orderCount: 1, grossSales: 42 },
+      { month: '2026-03', orderCount: 0, grossSales: 0 },
+    ]);
+    expect(result.omittedMonthCount).toBe(0);
+  });
+
+  it('groups AI product rankings by unit, bounds groups/items, reports omitted units, and never ranks units by incomparable quantities', () => {
+    const products = Array.from({ length: 36 }, (_, index) => ({
+      id: `product-${index}`, name: `Item ${index}`, sku: `SKU-${index}`, category: 'glass' as const,
+      unit: `unit-${Math.floor(index / 6)}`, stock: 10, price: 10, threshold: 5, status: 'active' as const,
+    }));
+    const orders = products.map((product, index) => ({
+      deliveryDate: '2026-03-01', orderStatus: 'delivered' as const,
+      items: [{ productId: product.id, name: product.name, quantity: (index + 1) * (index < 6 ? 100 : 1) }],
+    }));
+    const result = buildInsightProductRankings(orders as unknown as Parameters<typeof buildInsightProductRankings>[0], products);
+    const ranked = result.allTime;
+    expect(ranked.map((group) => group.unit)).toEqual(['unit-0', 'unit-1', 'unit-2', 'unit-3', 'unit-4']);
+    expect(result.omittedUnitGroups).toEqual({ allTime: 1, allTimeFewest: 1, selectedRange: 1 });
+    expect(ranked).toHaveLength(5);
+    expect(ranked.every((group) => group.items.length <= 5)).toBe(true);
+    expect(JSON.stringify(ranked)).not.toMatch(/product-|SKU-/);
+    expect(ranked.find((group) => group.unit === 'unit-4')?.items[0]).toMatchObject({ name: 'Item 29', quantity: 30 });
+  });
+
+  it('aggregates current UTC YTD inbound purchases by category and category-unit with cost coverage', () => {
+    const products = [
+      { id: 'g', name: 'Glass', category: 'glass' as const, unit: 'sheet', stock: 0, price: 10, threshold: 5, status: 'active' as const, sku: 'G' },
+      { id: 'a', name: 'Aluminum', category: 'aluminum' as const, unit: 'length', stock: 0, price: 20, threshold: 5, status: 'active' as const, sku: 'A' },
+    ];
+    const movements = [
+      { id: 'm1', productId: 'g', type: 'inbound' as const, quantity: 2, unitCost: 10, occurredAt: '2026-01-01T00:00:00Z' },
+      { id: 'm2', productId: 'g', type: 'inbound' as const, quantity: 3, occurredAt: '2026-05-01T00:00:00Z' },
+      { id: 'm-now-plus-one-ms', productId: 'g', type: 'inbound' as const, quantity: 99, unitCost: 10, occurredAt: '2026-06-01T00:00:00.001Z' },
+      { id: 'm3', productId: 'a', type: 'inbound' as const, quantity: 1, unitCost: 50, occurredAt: '2025-12-31T23:59:59Z' },
+    ];
+    expect(buildYtdInboundPurchaseSummary(movements as unknown as Parameters<typeof buildYtdInboundPurchaseSummary>[0], products, new Date('2026-06-01T00:00:00Z'))).toEqual({
+      year: 2026,
+      categories: [{ category: 'glass', transactionCount: 2, totalQuantity: 5, totalCost: 20, pricedReceipts: 1, unpricedReceipts: 1, pricedQuantity: 2, unpricedQuantity: 3 }],
+      categoryUnits: [{ category: 'glass', unit: 'sheet', transactionCount: 2, totalQuantity: 5, totalCost: 20, pricedReceipts: 1, unpricedReceipts: 1, pricedQuantity: 2, unpricedQuantity: 3 }],
     });
   });
 
@@ -255,6 +320,24 @@ describe('analytics pure functions', () => {
         { month: '2026-03', unit: 'sqm', inboundQuantity: 0, outboundQuantity: 0, inboundMovementCount: 0, outboundMovementCount: 0 },
       ],
     });
+  });
+
+  it('clips a current-month movement window at now and excludes future-dated movement rows', () => {
+    const now = new Date('2026-02-15T12:00:00.000Z');
+    const startAt = new Date('2026-01-01T00:00:00.000Z');
+    const endAt = new Date(now.getTime() + 1);
+    const products = [{ id: 'P', sku: 'S', name: 'Piece', category: 'aluminum' as const, unit: 'pcs', stock: 1, price: 1, threshold: 1, status: 'active' as const }];
+    const movements = [
+      { id: 'jan', productId: 'P', type: 'inbound' as const, quantity: 1, referenceNo: 'PO-1', occurredAt: '2026-01-15T00:00:00.000Z', createdBy: 'test' },
+      { id: 'now', productId: 'P', type: 'outbound' as const, quantity: 2, referenceNo: 'SO-1', occurredAt: now.toISOString(), createdBy: 'test' },
+      { id: 'future', productId: 'P', type: 'outbound' as const, quantity: 99, referenceNo: 'SO-2', occurredAt: '2026-02-15T12:00:00.002Z', createdBy: 'test' },
+    ];
+    const report = buildMonthlyStockMovementByUnit(movements, products, startAt, endAt);
+    expect(report.period).toEqual({ startMonth: '2026-01', endMonth: '2026-02', months: 2 });
+    expect(report.rows).toEqual([
+      { month: '2026-01', unit: 'pcs', inboundQuantity: 1, outboundQuantity: 0, inboundMovementCount: 1, outboundMovementCount: 0 },
+      { month: '2026-02', unit: 'pcs', inboundQuantity: 0, outboundQuantity: 2, inboundMovementCount: 0, outboundMovementCount: 1 },
+    ]);
   });
 
   it('paginates monthly product movement with full-set classification totals', () => {

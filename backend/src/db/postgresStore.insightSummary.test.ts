@@ -6,7 +6,7 @@ vi.mock('./client.js', () => ({
   getPool: () => database.available ? { query: database.query } : null,
 }));
 
-import { listInsightMovementSummaryDb, listInsightPurchaseSummaryDb } from './postgresStore.js';
+import { listInsightMovementSummaryDb, listInsightPurchaseSummaryDb, listInsightYtdPurchaseSummaryDb, listInsightInventorySummaryDb } from './postgresStore.js';
 
 describe('PostgreSQL AI insight aggregate queries', () => {
   beforeEach(() => {
@@ -45,6 +45,43 @@ describe('PostgreSQL AI insight aggregate queries', () => {
     expect(sql).toContain('m.occurred_at >= $1');
     expect(sql).toContain('m.occurred_at < $2');
     expect(values).toEqual([null, null]);
+  });
+
+  it('aggregates inbound purchase totals by category and category-unit with priced coverage', async () => {
+    database.query.mockResolvedValue({ rows: [
+      { category: 'glass', unit: 'sheet', transaction_count: 2, total_quantity: '5', total_cost: '20', priced_receipts: 1, unpriced_receipts: 1, priced_quantity: '2', unpriced_quantity: '3' },
+    ] });
+    const now = new Date('2026-06-15T12:30:00.000Z');
+    await expect(listInsightYtdPurchaseSummaryDb(2026, now)).resolves.toEqual({
+      year: 2026,
+      categories: [{ category: 'glass', transactionCount: 2, totalQuantity: 5, totalCost: 20, pricedReceipts: 1, unpricedReceipts: 1, pricedQuantity: 2, unpricedQuantity: 3 }],
+      categoryUnits: [{ category: 'glass', unit: 'sheet', transactionCount: 2, totalQuantity: 5, totalCost: 20, pricedReceipts: 1, unpricedReceipts: 1, pricedQuantity: 2, unpricedQuantity: 3 }],
+    });
+    const [sql, values] = database.query.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("m.type = 'inbound'");
+    expect(sql).toContain('WITH inbound_materials AS');
+    expect(sql).toContain('m.occurred_at >= $1::timestamptz');
+    expect(sql).toContain('GROUP BY category, unit');
+    expect(sql).not.toContain('supplier');
+    expect(values).toEqual([new Date('2026-01-01T00:00:00.000Z'), now]);
+  });
+
+  it('aggregates listed-price inventory value by category and active-only alert severity counts', async () => {
+    database.query.mockResolvedValue({ rows: [{
+      product_count: 4, active_product_count: 3, total_inventory_value: '90', healthy_stock_count: 1, low_stock_status_count: 1,
+      critical_stock_count: 1, out_of_stock_count: 1, low_stock_count: 3, active_low_stock_count: 2, active_threshold_stock_count: 2,
+      category_values: [{ category: 'glass', listedPriceValue: '40' }],
+      active_out_of_stock_count: 1, active_critical_count: 1, active_low_count: 1,
+    }] });
+    await expect(listInsightInventorySummaryDb()).resolves.toEqual({
+      productCount: 4, activeProductCount: 3, totalInventoryValue: 90, categoryValues: [{ category: 'glass', listedPriceValue: 40 }],
+      healthyStockCount: 1, lowStockStatusCount: 1, criticalStockCount: 1, outOfStockCount: 1, lowStockCount: 3, activeLowStockCount: 2, activeThresholdStockCount: 2,
+      activeAlertCounts: { outOfStock: 1, critical: 1, low: 1 },
+    });
+    const [sql] = database.query.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain('stock * unit_price');
+    expect(sql).toContain("COUNT(*) FILTER (WHERE status = 'active' AND stock <= threshold)::int AS active_low_stock_count");
+    expect(sql).toContain('stock > 0');
   });
 
   it('returns null for both summaries if PostgreSQL is not configured', async () => {

@@ -352,10 +352,26 @@ export interface AnalyticsForecastResponse {
   forecast: number
 }
 
+export type AnalyticsInsightKey =
+  | 'monthlySalesTransactions'
+  | 'annualPurchasedMaterials'
+  | 'inventoryMovement'
+  | 'demandForecast'
+  | 'orderRecordsPerMonth'
+  | 'monthlyGrossOrderValue'
+  | 'topOrderedProducts'
+  | 'stockStatus'
+  | 'stockAtListedPricesByCategory'
+  | 'mostOrderedProducts'
+  | 'fewestOrderedProducts'
+  | 'salesEstimateNextMonth'
+  | 'stockAlerts'
+
 export interface AnalyticsInsightsResponse {
   summary: string
   recommendations: string[]
   risks: string[]
+  interpretations?: Partial<Record<AnalyticsInsightKey, string>>
   confidence: 'low' | 'medium' | 'high'
   source: 'hermes' | 'deepseek' | 'fallback'
 }
