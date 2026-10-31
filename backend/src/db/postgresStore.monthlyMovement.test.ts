@@ -30,7 +30,20 @@ describe('PostgreSQL monthly stock movement queries', () => {
     expect(sql).toContain("DATE_TRUNC('month', m.occurred_at AT TIME ZONE 'UTC')");
     expect(sql).toContain("m.type IN ('inbound', 'outbound')");
     expect(sql).toContain('GROUP BY 1, 2');
-    expect(values).toEqual([startAt, endAt]);
+    expect(values).toEqual([startAt, endAt, null]);
+  });
+
+  it('caps the exclusive window at the exact as-of timestamp to exclude future events', async () => {
+    const startAt = new Date('2026-02-01T00:00:00.000Z');
+    const now = new Date('2026-02-15T12:00:00.000Z');
+    const endAt = new Date(now.getTime() + 1);
+    database.query.mockResolvedValue({ rows: [] });
+
+    await listMonthlyStockMovementAggregatesDb(startAt, endAt, now);
+
+    const [sql, values] = database.query.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain('m.occurred_at <= $3');
+    expect(values).toEqual([startAt, endAt, now]);
   });
 
   it('keyset-pages product movement with full-dataset counts and per-unit totals', async () => {

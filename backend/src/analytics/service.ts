@@ -194,11 +194,11 @@ export async function getMonthlyStockMovementByUnit(months = 12, now = new Date(
   const endAt = new Date(now.getTime() + 1);
   const startAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months + 1, 1));
   if (isDbSyncActive()) {
-    const aggregates = await listMonthlyStockMovementAggregatesDb(startAt, endAt);
+    const aggregates = await listMonthlyStockMovementAggregatesDb(startAt, endAt, now);
     if (!aggregates) throw new Error('PostgreSQL is unavailable for monthly stock movement');
     return buildMonthlyStockMovementReport(aggregates, startAt, endAt);
   }
-  return buildMonthlyStockMovementByUnit(listAllMovements(), listProducts(), startAt, endAt);
+  return buildMonthlyStockMovementByUnit(listAllMovements(), listProducts(), startAt, endAt, now);
 }
 
 export async function getMonthlyItemMovementPage(

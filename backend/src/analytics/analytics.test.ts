@@ -325,14 +325,14 @@ describe('analytics pure functions', () => {
   it('clips a current-month movement window at now and excludes future-dated movement rows', () => {
     const now = new Date('2026-02-15T12:00:00.000Z');
     const startAt = new Date('2026-01-01T00:00:00.000Z');
-    const endAt = new Date(now.getTime() + 1);
+    const endAt = new Date(now.getTime() + 2);
     const products = [{ id: 'P', sku: 'S', name: 'Piece', category: 'aluminum' as const, unit: 'pcs', stock: 1, price: 1, threshold: 1, status: 'active' as const }];
     const movements = [
       { id: 'jan', productId: 'P', type: 'inbound' as const, quantity: 1, referenceNo: 'PO-1', occurredAt: '2026-01-15T00:00:00.000Z', createdBy: 'test' },
       { id: 'now', productId: 'P', type: 'outbound' as const, quantity: 2, referenceNo: 'SO-1', occurredAt: now.toISOString(), createdBy: 'test' },
-      { id: 'future', productId: 'P', type: 'outbound' as const, quantity: 99, referenceNo: 'SO-2', occurredAt: '2026-02-15T12:00:00.002Z', createdBy: 'test' },
+      { id: 'future', productId: 'P', type: 'outbound' as const, quantity: 99, referenceNo: 'SO-2', occurredAt: '2026-02-15T12:00:00.001Z', createdBy: 'test' },
     ];
-    const report = buildMonthlyStockMovementByUnit(movements, products, startAt, endAt);
+    const report = buildMonthlyStockMovementByUnit(movements, products, startAt, endAt, now);
     expect(report.period).toEqual({ startMonth: '2026-01', endMonth: '2026-02', months: 2 });
     expect(report.rows).toEqual([
       { month: '2026-01', unit: 'pcs', inboundQuantity: 1, outboundQuantity: 0, inboundMovementCount: 1, outboundMovementCount: 0 },

@@ -736,7 +736,7 @@ export async function listInsightInventorySummaryDb(): Promise<{
     activeAlertCounts: { outOfStock: Number(row.active_out_of_stock_count), critical: Number(row.active_critical_count), low: Number(row.active_low_count) } };
 }
 
-export async function listMonthlyStockMovementAggregatesDb(startAt: Date, endAt: Date): Promise<MonthlyStockMovementRow[] | null> {
+export async function listMonthlyStockMovementAggregatesDb(startAt: Date, endAt: Date, asOfAt?: Date): Promise<MonthlyStockMovementRow[] | null> {
   const pool = getPool();
   if (!pool) return null;
   const { rows } = await pool.query(`
@@ -750,12 +750,13 @@ export async function listMonthlyStockMovementAggregatesDb(startAt: Date, endAt:
       FROM stock_movements m
       LEFT JOIN products p ON p.id = m.product_id AND p.deleted_at IS NULL
       WHERE m.type IN ('inbound', 'outbound') AND m.occurred_at >= $1 AND m.occurred_at < $2
+        AND ($3::timestamptz IS NULL OR m.occurred_at <= $3)
       GROUP BY 1, 2
     )
     SELECT month, unit, inbound_quantity, outbound_quantity, inbound_movement_count, outbound_movement_count
     FROM monthly
     ORDER BY month COLLATE "C", unit COLLATE "C"
-  `, [startAt, endAt]);
+  `, [startAt, endAt, asOfAt ?? null]);
   return rows.map((row) => ({
     month: String(row.month),
     unit: String(row.unit ?? 'unknown'),

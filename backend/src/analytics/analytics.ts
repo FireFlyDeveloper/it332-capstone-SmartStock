@@ -672,13 +672,15 @@ export function buildMonthlyStockMovementByUnit(
   products: Product[],
   startAt: Date,
   endAt: Date,
+  asOfAt?: Date,
 ): MonthlyStockMovementReport {
   const productById = new Map(products.map((product) => [product.id, product]));
   const aggregates = new Map<string, MonthlyStockMovementRow>();
   for (const movement of movements) {
     if (movement.type !== 'inbound' && movement.type !== 'outbound') continue;
     const occurredAt = Date.parse(movement.occurredAt);
-    if (!Number.isFinite(occurredAt) || occurredAt < startAt.getTime() || occurredAt >= endAt.getTime()) continue;
+    if (!Number.isFinite(occurredAt) || occurredAt < startAt.getTime() || occurredAt >= endAt.getTime()
+      || (asOfAt && occurredAt > asOfAt.getTime())) continue;
     const month = new Date(occurredAt).toISOString().slice(0, 7);
     const unit = productById.get(movement.productId)?.unit?.trim() || 'unknown';
     const key = JSON.stringify([month, unit]);
