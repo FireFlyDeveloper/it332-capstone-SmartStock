@@ -15,14 +15,14 @@ import {
   getDashboardOrderSummary,
   getForecast,
   getMovementClassification,
-  getMonthlyItemMovementPage,
+  getItemMovementPage,
   getMonthlyStockMovementByUnit,
   getRecentActivity,
   getSalesTrends,
   getDemandForecast,
   getDemandForecastPage,
 } from './service.js';
-import type { AnnualPurchaseCursor, DashboardSalesRange, DemandForecastCursor, MonthlyItemMovementCursor } from './analytics.js';
+import type { AnnualPurchaseCursor, DashboardSalesRange, DemandForecastCursor, ItemMovementCursor } from './analytics.js';
 
 export const analyticsRoutes = new Hono();
 
@@ -76,6 +76,14 @@ function isDateOnly(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function monthDateRange(month: string): { fromDate: string; toDate: string } {
+  const [year, monthNumber] = month.split('-').map(Number);
+  return {
+    fromDate: `${month}-01`,
+    toDate: new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10),
+  };
 }
 
 analyticsRoutes.get('/orders/summary', requireRole('admin'), async (c) => {
@@ -169,9 +177,23 @@ analyticsRoutes.get('/movement', requireRole('admin'), (c) => {
 });
 
 analyticsRoutes.get('/movement/items', requireRole('admin'), async (c) => {
+  const rawFromDate = c.req.query('fromDate') || undefined;
+  const rawToDate = c.req.query('toDate') || undefined;
+  const rawScope = c.req.query('scope');
+  if (rawScope !== undefined && rawScope !== 'all') return c.json({ error: 'scope must be all when provided' }, 400);
+  if ((rawFromDate && !isDateOnly(rawFromDate)) || (rawToDate && !isDateOnly(rawToDate))) {
+    return c.json({ error: 'fromDate and toDate must be valid YYYY-MM-DD dates' }, 400);
+  }
+  if (rawFromDate && rawToDate && rawFromDate > rawToDate) return c.json({ error: 'fromDate must be on or before toDate' }, 400);
+
   const rawMonth = c.req.query('month');
-  const month = rawMonth ?? new Date().toISOString().slice(0, 7);
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return c.json({ error: 'month must be YYYY-MM' }, 400);
+  if (rawMonth !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(rawMonth)) return c.json({ error: 'month must be YYYY-MM' }, 400);
+  if (rawScope === 'all' && (rawFromDate || rawToDate || rawMonth)) return c.json({ error: 'scope=all cannot be combined with date or month filters' }, 400);
+  if (rawMonth && (rawFromDate || rawToDate)) return c.json({ error: 'month cannot be combined with fromDate or toDate' }, 400);
+  const legacyMonth = rawMonth ?? (!rawScope && !rawFromDate && !rawToDate ? new Date().toISOString().slice(0, 7) : undefined);
+  const legacyRange = legacyMonth ? monthDateRange(legacyMonth) : undefined;
+  const fromDate = rawFromDate ?? legacyRange?.fromDate;
+  const toDate = rawToDate ?? legacyRange?.toDate;
 
   const rawThreshold = c.req.query('threshold');
   const threshold = rawThreshold === undefined ? 10 : Number(rawThreshold);
@@ -181,7 +203,7 @@ analyticsRoutes.get('/movement/items', requireRole('admin'), async (c) => {
   const limit = rawLimit === undefined ? 25 : Number(rawLimit);
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) return c.json({ error: 'limit must be an integer between 1 and 100' }, 400);
 
-  let cursor: MonthlyItemMovementCursor | null = null;
+  let cursor: ItemMovementCursor | null = null;
   const rawCursor = c.req.query('cursor');
   if (rawCursor !== undefined) {
     if (rawCursor.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(rawCursor)) return c.json({ error: 'cursor is invalid' }, 400);
@@ -199,7 +221,7 @@ analyticsRoutes.get('/movement/items', requireRole('admin'), async (c) => {
     }
   }
 
-  const result = await getMonthlyItemMovementPage(month, threshold, limit, cursor);
+  const result = await getItemMovementPage(fromDate, toDate, threshold, limit, cursor);
   const nextCursor = result.page.nextCursor
     ? Buffer.from(JSON.stringify(result.page.nextCursor)).toString('base64url')
     : null;
@@ -210,16 +232,16 @@ analyticsRoutes.get('/insights', requireRole('admin'), async (c) => {
   const fromDate = c.req.query('fromDate') || undefined;
   const toDate = c.req.query('toDate') || undefined;
   const rawMonth = c.req.query('movementMonth');
-  const movementMonth = rawMonth ?? new Date().toISOString().slice(0, 7);
   const rawThreshold = c.req.query('threshold');
   const threshold = rawThreshold === undefined ? 10 : Number(rawThreshold);
   if ((fromDate && !isDateOnly(fromDate)) || (toDate && !isDateOnly(toDate))) {
     return c.json({ error: 'fromDate and toDate must be valid YYYY-MM-DD dates' }, 400);
   }
   if (fromDate && toDate && fromDate > toDate) return c.json({ error: 'fromDate must be on or before toDate' }, 400);
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(movementMonth)) return c.json({ error: 'movementMonth must be YYYY-MM' }, 400);
+  if (rawMonth !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(rawMonth)) return c.json({ error: 'movementMonth must be YYYY-MM' }, 400);
   if (!Number.isFinite(threshold) || threshold < 0) return c.json({ error: 'threshold must be a non-negative number' }, 400);
-  return c.json(await getAnalyticsInsight({ fromDate, toDate, movementMonth, threshold }));
+  const legacyMovementRange = rawMonth ? monthDateRange(rawMonth) : undefined;
+  return c.json(await getAnalyticsInsight({ fromDate, toDate, movementFromDate: legacyMovementRange?.fromDate, movementToDate: legacyMovementRange?.toDate, threshold }));
 });
 
 analyticsRoutes.post('/forecast', requireRole('admin'), async (c) => {

@@ -1,7 +1,7 @@
 import { INSIGHT_SECTION_KEYS, type SafeInsightPayload } from './types.js';
 
 export const TREND_INTERPRETATION_PROMPT = 'Monthly sales transactions are calendar-month counts of delivery-date order records; they include cancelled records. Monthly gross order value excludes cancelled orders, includes unpaid and partially paid orders, and does not subtract refunds. Gross value is not profit. State the capped monthly window and omitted-month count when relevant.';
-export const MOVEMENT_INTERPRETATION_PROMPT = 'Keep inbound and outbound totals separate and grouped by unit. The selected interval uses UTC occurredAt timestamps; the separate month-by-month series is a UTC calendar-month window, with the current month clipped to month-to-date. Never combine units or infer an individual-product speed from totals.';
+export const MOVEMENT_INTERPRETATION_PROMPT = 'Keep inbound and outbound totals separate and grouped by unit. The selected movement period uses the shared date range (or all time) with UTC occurredAt timestamps; orders use the same selected dates by deliveryDate. The separate month-by-month series is a UTC calendar-month window, with the current month clipped to month-to-date. Never combine units or infer an individual-product speed from totals.';
 export const FORECAST_INTERPRETATION_PROMPT = 'Use the supplied rough next-month estimates, keep units separate, and state coverage out of the total. Missing history means unavailable, not zero demand. Estimates are a planning guide, not a promise; explain stock-policy pressure only from supplied counts.';
 
 const SECTION_RULES = [

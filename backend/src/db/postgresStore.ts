@@ -9,7 +9,7 @@ import { getPool } from './client.js';
 import { hasDatabaseUrl } from './config.js';
 import { setDbSyncActive } from './syncState.js';
 
-import type { AnalyticsOrderSummary, MonthlyItemMovementCursor, MonthlyItemMovementRow, MonthlyStockMovementRow, OutboundMovementByUnit, RecentActivityRecord } from '../analytics/analytics.js';
+import type { AnalyticsOrderSummary, ItemMovementCursor, ItemMovementRow, MonthlyStockMovementRow, OutboundMovementByUnit, RecentActivityRecord } from '../analytics/analytics.js';
 import { decodeNotificationCursor, encodeNotificationCursor, notificationTypeRank, type NotificationFeedItem, type NotificationPageInput, type NotificationPageResult } from '../notifications/feed.js';
 import type { InventoryPolicyEvent, Product, ProductCreateInput, ProductUpdateInput, StockMovement, StockMovementInput } from '../inventory/store.js';
 import type { Order, OrderCreateInput, OrderUpdateInput, PaymentStatus, RefundType } from '../orders/store.js';
@@ -767,25 +767,26 @@ export async function listMonthlyStockMovementAggregatesDb(startAt: Date, endAt:
   }));
 }
 
-export async function listMonthlyItemMovementPageDb(input: {
-  month: string;
+export async function listItemMovementPageDb(input: {
+  startAt: Date | null;
+  endAt: Date | null;
   threshold: number;
   limit: number;
-  cursor: MonthlyItemMovementCursor | null;
+  cursor: ItemMovementCursor | null;
 }): Promise<{
-  rows: MonthlyItemMovementRow[];
+  rows: ItemMovementRow[];
   summary: { productCount: number; fastMovingCount: number; slowMovingCount: number; outboundByUnit: Array<{ unit: string; quantity: number }> };
-  page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: MonthlyItemMovementCursor | null };
+  page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: ItemMovementCursor | null };
 } | null> {
   const pool = getPool();
   if (!pool) return null;
-  const monthStart = new Date(`${input.month}-01T00:00:00.000Z`);
-  const monthEnd = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1));
   const { rows } = await pool.query(`
     WITH movement_totals AS MATERIALIZED (
       SELECT product_id, SUM(quantity)::numeric AS quantity
       FROM stock_movements
-      WHERE type = 'outbound' AND occurred_at >= $1 AND occurred_at < $2
+      WHERE type = 'outbound'
+        AND ($1::timestamptz IS NULL OR occurred_at >= $1)
+        AND ($2::timestamptz IS NULL OR occurred_at < $2)
       GROUP BY product_id
     ), product_rows AS MATERIALIZED (
       SELECT p.id::text AS product_id, p.name, p.sku, p.category, p.unit, p.status, p.threshold,
@@ -816,14 +817,14 @@ export async function listMonthlyItemMovementPageDb(input: {
     )
     SELECT summary.total_count, summary.fast_moving_count, summary.slow_moving_count,
       (SELECT COALESCE(jsonb_agg(jsonb_build_object(
-        'month', $7::text, 'productId', page_rows.product_id, 'name', page_rows.name,
+        'productId', page_rows.product_id, 'name', page_rows.name,
         'sku', page_rows.sku, 'category', page_rows.category, 'unit', page_rows.unit,
         'status', page_rows.status, 'quantity', page_rows.quantity, 'threshold', page_rows.threshold,
         'classification', page_rows.classification
       ) ORDER BY page_rows.name COLLATE "C", page_rows.product_id COLLATE "C"), '[]'::jsonb) FROM page_rows) AS page_rows,
       (SELECT COALESCE(jsonb_agg(jsonb_build_object('unit', unit, 'quantity', quantity) ORDER BY unit COLLATE "C"), '[]'::jsonb) FROM unit_summary) AS outbound_by_unit
     FROM summary
-  `, [monthStart, monthEnd, input.threshold, input.limit + 1, input.cursor?.name ?? null, input.cursor?.productId ?? null, input.month]);
+  `, [input.startAt, input.endAt, input.threshold, input.limit + 1, input.cursor?.name ?? null, input.cursor?.productId ?? null]);
 
   const record = rows[0] as Record<string, unknown> | undefined;
   if (!record) return null;
@@ -834,11 +835,11 @@ export async function listMonthlyItemMovementPageDb(input: {
   const pageRows = pageRowsRaw.map((value) => {
     const row = value as Record<string, unknown>;
     return {
-      month: String(row.month), productId: String(row.productId), name: String(row.name), sku: String(row.sku),
+      productId: String(row.productId), name: String(row.name), sku: String(row.sku),
       category: String(row.category) as Product['category'], unit: String(row.unit ?? 'unknown'),
       status: String(row.status) as Product['status'], quantity: Number(row.quantity ?? 0),
-      threshold: Number(row.threshold ?? 0), classification: String(row.classification) as MonthlyItemMovementRow['classification'],
-    } satisfies MonthlyItemMovementRow;
+      threshold: Number(row.threshold ?? 0), classification: String(row.classification) as ItemMovementRow['classification'],
+    } satisfies ItemMovementRow;
   });
   const hasMore = pageRows.length > input.limit;
   const visibleRows = pageRows.slice(0, input.limit);

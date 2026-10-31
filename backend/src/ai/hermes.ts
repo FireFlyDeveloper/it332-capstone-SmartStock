@@ -58,7 +58,7 @@ export async function callHermesInsight(
     messages: [
       {
         role: 'system',
-        content: 'Interpret only the aggregate SmartStock analytics supplied in the request. Speak plainly to a shop owner with everyday words, short sentences, and practical advice. Explain selected date-range bases, separate units and movement directions, the current inventory snapshot, selected-month threshold, and forecast coverage. Do not invent facts or identifying details, combine unlike units, request records, or call tools. Return only valid JSON with summary, recommendations, risks, and confidence.',
+        content: 'Interpret only the aggregate SmartStock analytics supplied in the request. Speak plainly to a shop owner with everyday words, short sentences, and practical advice. Explain selected date-range bases, separate units and movement directions, the current inventory snapshot, the selected movement period and cutoff, and forecast coverage. Do not invent facts or identifying details, combine unlike units, request records, or call tools. Return only valid JSON with summary, recommendations, risks, and confidence.',
       },
       { role: 'user', content: buildInsightPrompt(payload as SafeInsightPayload) },
     ],

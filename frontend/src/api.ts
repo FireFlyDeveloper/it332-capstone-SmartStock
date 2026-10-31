@@ -326,8 +326,7 @@ export interface AnalyticsMovementMetric {
   classification: 'fast_moving' | 'slow_moving'
 }
 
-export interface AnalyticsMonthlyItemMovement {
-  month: string
+export interface AnalyticsItemMovement {
   productId: string
   name: string
   sku: string
@@ -339,10 +338,10 @@ export interface AnalyticsMonthlyItemMovement {
   classification: 'fast_moving' | 'slow_moving'
 }
 
-export interface AnalyticsMonthlyItemMovementPage {
-  month: string
+export interface AnalyticsItemMovementPage {
+  period: { fromDate: string | null; toDate: string | null }
   threshold: number
-  rows: AnalyticsMonthlyItemMovement[]
+  rows: AnalyticsItemMovement[]
   summary: { productCount: number; fastMovingCount: number; slowMovingCount: number; outboundByUnit: Array<{ unit: string; quantity: number }> }
   page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null }
 }
@@ -594,13 +593,15 @@ export function getAnalyticsMovement(threshold: number): Promise<AnalyticsMoveme
   return apiFetch<AnalyticsMovementMetric[]>(`/analytics/movement?threshold=${encodeURIComponent(String(threshold))}`)
 }
 
-export function getAnalyticsMonthlyItemMovementPage(options: { month?: string; threshold?: number; limit?: number; cursor?: string | null } = {}): Promise<AnalyticsMonthlyItemMovementPage> {
+export function getAnalyticsItemMovementPage(options: { fromDate?: string; toDate?: string; allTime?: boolean; threshold?: number; limit?: number; cursor?: string | null } = {}): Promise<AnalyticsItemMovementPage> {
   const params = new URLSearchParams()
-  if (options.month) params.set('month', options.month)
+  if (options.fromDate) params.set('fromDate', options.fromDate)
+  if (options.toDate) params.set('toDate', options.toDate)
+  if (options.allTime) params.set('scope', 'all')
   if (options.threshold !== undefined) params.set('threshold', String(options.threshold))
   if (options.limit !== undefined) params.set('limit', String(options.limit))
   if (options.cursor) params.set('cursor', options.cursor)
-  return apiFetch<AnalyticsMonthlyItemMovementPage>(`/analytics/movement/items?${params.toString()}`)
+  return apiFetch<AnalyticsItemMovementPage>(`/analytics/movement/items?${params.toString()}`)
 }
 
 export interface AnalyticsMonthlyMovementResponse {
@@ -631,7 +632,6 @@ export function getAnalyticsForecast(quantities: number[], alpha = 0.35): Promis
 export interface AnalyticsInsightsCriteria {
   fromDate?: string
   toDate?: string
-  movementMonth: string
   threshold: number
 }
 
@@ -639,7 +639,6 @@ export function getAnalyticsInsights(criteria: AnalyticsInsightsCriteria): Promi
   const params = new URLSearchParams()
   if (criteria.fromDate) params.set('fromDate', criteria.fromDate)
   if (criteria.toDate) params.set('toDate', criteria.toDate)
-  params.set('movementMonth', criteria.movementMonth)
   params.set('threshold', String(criteria.threshold))
   return apiFetch<AnalyticsInsightsResponse>(`/analytics/insights?${params.toString()}`)
 }

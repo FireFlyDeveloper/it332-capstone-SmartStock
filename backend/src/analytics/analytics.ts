@@ -312,8 +312,7 @@ export interface MovementClassificationRow extends MonthlyQuantity {
   classification: MovementClassification;
 }
 
-export interface MonthlyItemMovementRow {
-  month: string;
+export interface ItemMovementRow {
   productId: string;
   name: string;
   sku: string;
@@ -325,7 +324,7 @@ export interface MonthlyItemMovementRow {
   classification: MovementClassification;
 }
 
-export interface MonthlyItemMovementCursor {
+export interface ItemMovementCursor {
   name: string;
   productId: string;
 }
@@ -340,23 +339,34 @@ function compareTextCodePoints(left: string, right: string): number {
   return leftPoints.length - rightPoints.length;
 }
 
-export function buildMonthlyItemMovementClassification(
+function parseDateOnly(value: string | undefined, endExclusive = false): number | undefined {
+  if (!value) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('fromDate and toDate must be valid YYYY-MM-DD dates');
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+    throw new Error('fromDate and toDate must be valid YYYY-MM-DD dates');
+  }
+  if (endExclusive) date.setUTCDate(date.getUTCDate() + 1);
+  return date.getTime();
+}
+
+export function buildItemMovementClassification(
   movements: StockMovement[],
   products: Product[],
-  month: string,
+  fromDate?: string,
+  toDate?: string,
   threshold = 10,
-): MonthlyItemMovementRow[] {
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('month must be YYYY-MM');
+): ItemMovementRow[] {
+  const startAt = parseDateOnly(fromDate);
+  const endAt = parseDateOnly(toDate, true);
+  if (fromDate && toDate && fromDate > toDate) throw new Error('fromDate must be on or before toDate');
   if (!Number.isFinite(threshold) || threshold < 0) throw new Error('threshold must be a non-negative number');
 
   const quantities = new Map<string, number>();
   for (const movement of movements) {
     if (movement.type !== 'outbound') continue;
-    try {
-      if (monthKey(movement.occurredAt) !== month) continue;
-    } catch {
-      continue;
-    }
+    const occurredAt = Date.parse(movement.occurredAt);
+    if (!Number.isFinite(occurredAt) || (startAt !== undefined && occurredAt < startAt) || (endAt !== undefined && occurredAt >= endAt)) continue;
     quantities.set(movement.productId, (quantities.get(movement.productId) ?? 0) + movement.quantity);
   }
 
@@ -364,7 +374,6 @@ export function buildMonthlyItemMovementClassification(
     const quantity = quantities.get(product.id) ?? 0;
     const classification: MovementClassification = quantity > 0 && quantity >= threshold ? 'fast_moving' : 'slow_moving';
     return {
-      month,
       productId: product.id,
       name: product.name,
       sku: product.sku,
@@ -378,10 +387,10 @@ export function buildMonthlyItemMovementClassification(
   }).sort((left, right) => compareTextCodePoints(left.name, right.name) || compareTextCodePoints(left.productId, right.productId));
 }
 
-export function paginateMonthlyItemMovement(
-  rows: MonthlyItemMovementRow[],
+export function paginateItemMovement(
+  rows: ItemMovementRow[],
   limit: number,
-  cursor: MonthlyItemMovementCursor | null,
+  cursor: ItemMovementCursor | null,
 ) {
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('limit must be an integer between 1 and 100');
   const afterCursor = cursor

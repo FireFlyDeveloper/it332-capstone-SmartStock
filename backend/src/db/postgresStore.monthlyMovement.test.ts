@@ -6,7 +6,7 @@ vi.mock('./client.js', () => ({
   getPool: () => database.available ? { query: database.query } : null,
 }));
 
-import { listMonthlyItemMovementPageDb, listMonthlyStockMovementAggregatesDb } from './postgresStore.js';
+import { listItemMovementPageDb, listMonthlyStockMovementAggregatesDb } from './postgresStore.js';
 
 describe('PostgreSQL monthly stock movement queries', () => {
   beforeEach(() => {
@@ -46,37 +46,39 @@ describe('PostgreSQL monthly stock movement queries', () => {
     expect(values).toEqual([startAt, endAt, now]);
   });
 
-  it('keyset-pages product movement with full-dataset counts and per-unit totals', async () => {
+  it('keyset-pages item movement for an inclusive date range with full-dataset counts and per-unit totals', async () => {
+    const startAt = new Date('2026-02-10T00:00:00.000Z');
+    const endAt = new Date('2026-02-16T00:00:00.000Z');
     database.query.mockResolvedValue({ rows: [{
       total_count: 2,
       fast_moving_count: 1,
       slow_moving_count: 1,
       page_rows: [
-        { month: '2026-02', productId: 'P1', name: 'Alpha', sku: 'A', category: 'glass', unit: 'sqm', status: 'active', quantity: 7, threshold: 5, classification: 'fast_moving' },
-        { month: '2026-02', productId: 'P2', name: 'Beta', sku: 'B', category: 'aluminum', unit: 'pcs', status: 'active', quantity: 0, threshold: 5, classification: 'slow_moving' },
+        { productId: 'P1', name: 'Alpha', sku: 'A', category: 'glass', unit: 'sqm', status: 'active', quantity: 7, threshold: 5, classification: 'fast_moving' },
+        { productId: 'P2', name: 'Beta', sku: 'B', category: 'aluminum', unit: 'pcs', status: 'active', quantity: 0, threshold: 5, classification: 'slow_moving' },
       ],
       outbound_by_unit: [{ unit: 'pcs', quantity: 3 }, { unit: 'sqm', quantity: 7 }],
     }] });
 
-    await expect(listMonthlyItemMovementPageDb({ month: '2026-02', threshold: 5, limit: 1, cursor: null })).resolves.toEqual({
-      rows: [{ month: '2026-02', productId: 'P1', name: 'Alpha', sku: 'A', category: 'glass', unit: 'sqm', status: 'active', quantity: 7, threshold: 5, classification: 'fast_moving' }],
+    await expect(listItemMovementPageDb({ startAt, endAt, threshold: 5, limit: 1, cursor: null })).resolves.toEqual({
+      rows: [{ productId: 'P1', name: 'Alpha', sku: 'A', category: 'glass', unit: 'sqm', status: 'active', quantity: 7, threshold: 5, classification: 'fast_moving' }],
       summary: { productCount: 2, fastMovingCount: 1, slowMovingCount: 1, outboundByUnit: [{ unit: 'pcs', quantity: 3 }, { unit: 'sqm', quantity: 7 }] },
       page: { limit: 1, totalCount: 2, hasMore: true, nextCursor: { name: 'Alpha', productId: 'P1' } },
     });
     const [sql, values] = database.query.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain('movement_totals AS MATERIALIZED');
+    expect(sql).toContain('occurred_at >= $1');
+    expect(sql).toContain('occurred_at < $2');
     expect(sql).toContain('p.deleted_at IS NULL');
     expect(sql).toContain('ORDER BY name COLLATE "C", product_id COLLATE "C"');
     expect(sql).toContain('LIMIT $4');
-    expect(values).toEqual([
-      new Date('2026-02-01T00:00:00.000Z'), new Date('2026-03-01T00:00:00.000Z'), 5, 2, null, null, '2026-02',
-    ]);
+    expect(values).toEqual([startAt, endAt, 5, 2, null, null]);
   });
 
   it('returns null instead of using PostgreSQL when the pool is unavailable', async () => {
     database.available = false;
     await expect(listMonthlyStockMovementAggregatesDb(new Date(), new Date())).resolves.toBeNull();
-    await expect(listMonthlyItemMovementPageDb({ month: '2026-02', threshold: 10, limit: 25, cursor: null })).resolves.toBeNull();
+    await expect(listItemMovementPageDb({ startAt: null, endAt: null, threshold: 10, limit: 25, cursor: null })).resolves.toBeNull();
     expect(database.query).not.toHaveBeenCalled();
   });
 });

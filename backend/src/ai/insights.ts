@@ -5,7 +5,7 @@
  * Last touched: 2026-07-17
  */
 
-import { getAnalyticsOrderSummary, getInsightAnnualMaterialSummary, getInsightInventorySummary, getInsightMovementSummary, projectInsightOrderRankings, getInsightPurchaseSummary, getMonthlyItemMovementPage, getMonthlyStockMovementByUnit, getDemandForecastPage } from '../analytics/service.js';
+import { getAnalyticsOrderSummary, getInsightAnnualMaterialSummary, getInsightInventorySummary, getInsightMovementSummary, projectInsightOrderRankings, getInsightPurchaseSummary, getItemMovementPage, getMonthlyStockMovementByUnit, getDemandForecastPage } from '../analytics/service.js';
 import type { SalesDirection } from './types.js';
 import { getHermesConfig } from './config.js';
 import { callHermesInsight } from './hermes.js';
@@ -88,9 +88,10 @@ async function buildSafeDemandForecast(now: Date): Promise<SafeInsightPayload['f
 }
 
 export async function buildSafeInsightPayload(options: InsightRequestOptions = {}, now = new Date()): Promise<SafeInsightPayload> {
-  const movementMonth = options.movementMonth ?? now.toISOString().slice(0, 7);
   const startAt = dateBoundary(options.fromDate);
   const endAt = dateBoundary(options.toDate, true);
+  const movementFromDate = options.movementFromDate ?? options.fromDate;
+  const movementToDate = options.movementToDate ?? options.toDate;
   const year = now.getUTCFullYear();
   const annualStart = new Date(Date.UTC(year, 0, 1));
   const annualEnd = now;
@@ -100,7 +101,7 @@ export async function buildSafeInsightPayload(options: InsightRequestOptions = {
     getInsightMovementSummary(startAt, endAt),
     getMonthlyStockMovementByUnit(INSIGHT_HISTORY_MONTHS, now),
     getInsightInventorySummary(),
-    getMonthlyItemMovementPage(movementMonth, options.threshold ?? 10, 1, null),
+    getItemMovementPage(movementFromDate, movementToDate, options.threshold ?? 10, 1, null),
     buildSafeDemandForecast(now),
     getInsightAnnualMaterialSummary(annualStart, annualEnd),
   ]);
@@ -146,7 +147,7 @@ export async function buildSafeInsightPayload(options: InsightRequestOptions = {
           })) };
         }) },
       monthlyOmittedUnitGroups,
-      classification: { month: movementMonth, threshold: options.threshold ?? 10, productCount: classification.summary.productCount,
+      classification: { fromDate: movementFromDate ?? null, toDate: movementToDate ?? null, threshold: options.threshold ?? 10, productCount: classification.summary.productCount,
         fastMovingCount: classification.summary.fastMovingCount, slowMovingCount: classification.summary.slowMovingCount },
     },
     inventory: { ...inventory, glassInventoryValue: roundTwo(inventory.glassInventoryValue), aluminumInventoryValue: roundTwo(inventory.aluminumInventoryValue) }, forecast,
@@ -186,8 +187,11 @@ export function generateFallbackInsight(payload: SafeInsightPayload): AiInsightC
       : direction === 'no_sales' ? 'no gross sales were recorded in the selected delivery-date range'
         : direction === 'steady' ? 'gross sales were unchanged between the latest chart intervals' : 'there is only one chart interval, so a sales trend cannot be compared';
   const classification = movement.classification;
+  const classificationPeriod = classification.fromDate || classification.toDate
+    ? `${classification.fromDate ?? 'any date'} to ${classification.toDate ?? 'any date'}`
+    : 'all recorded movement history';
   const cutoff = classification.threshold === 0 ? 'any recorded outbound movement' : `at least ${classification.threshold} ${classification.threshold === 1 ? 'unit' : 'units'} sent out`;
-  const summary = `${salesLine}; ${trendSummary}. In ${classification.month}, ${classification.fastMovingCount} of ${classification.productCount} products met the fast-moving cutoff (${cutoff}) and ${classification.slowMovingCount} did not; next-month estimates total ${formatUnitTotals(forecast.estimatesByUnit)} for ${forecast.productsWithEstimate} of ${forecast.totalProducts} products.`;
+  const summary = `${salesLine}; ${trendSummary}. During ${classificationPeriod}, ${classification.fastMovingCount} of ${classification.productCount} products met the fast-moving cutoff (${cutoff}) and ${classification.slowMovingCount} did not; next-month estimates total ${formatUnitTotals(forecast.estimatesByUnit)} for ${forecast.productsWithEstimate} of ${forecast.totalProducts} products.`;
   const selected = movement.selectedTotalsByUnit.map((row) => `${row.inbound} ${row.unit} received and ${row.outbound} ${row.unit} sent out`).join('; ') || 'no recorded movement';
   const monthlyTotals = new Map<string, { unit: string; inbound: number; outbound: number }>();
   for (const month of movement.monthlyWindow.months) {
@@ -246,7 +250,7 @@ export function generateFallbackInsight(payload: SafeInsightPayload): AiInsightC
   return {
     summary,
     interpretations,
-    recommendations: [`Review products meeting the fast-moving cutoff for ${classification.month} before replenishing.`,
+    recommendations: [`Review products meeting the fast-moving cutoff during ${classificationPeriod} before replenishing.`,
       'Check current inventory and keep different units separate.', `Use estimates as a guide; they cover ${forecast.productsWithEstimate} of ${forecast.totalProducts} products.`],
     risks: [costRisk, `Current inventory: ${inventory.productCount} products, ${inventory.activeProductCount} active, ${inventory.activeLowStockCount} active low-stock, ${inventory.criticalStockCount} critical, ${inventory.outOfStockCount} out of stock; listed value ${inventory.totalInventoryValue}. Movement in ${movementPeriodLabel}: ${selected}. Monthly chart totals (${movement.monthlyWindow.startMonth}–${movement.monthlyWindow.endMonth}): ${monthly}.`],
     confidence: sales.bucketsWithSales < 2 || forecast.productsWithEstimate === 0 ? 'low' : purchases.unpricedReceipts > 0 || forecast.productsWithoutEstimate > 0 ? 'medium' : 'high',

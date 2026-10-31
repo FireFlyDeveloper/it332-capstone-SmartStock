@@ -16,7 +16,7 @@ import {
 
 import { formatCurrency, formatDateInput } from '../utils/helpers';
 import InsightBreakdown from '../components/InsightBreakdown';
-import { getAnalyticsInsights, getAnalyticsMonthlyItemMovementPage, getAnalyticsMonthlyMovement, getAnalyticsOrderSummary, getDemandForecastPage, getProductsPage, type AnalyticsInsightsResponse, type AnalyticsMonthlyMovementResponse, type AnalyticsMonthlyItemMovementPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse } from '../api';
+import { getAnalyticsInsights, getAnalyticsItemMovementPage, getAnalyticsMonthlyMovement, getAnalyticsOrderSummary, getDemandForecastPage, getProductsPage, type AnalyticsInsightsResponse, type AnalyticsMonthlyMovementResponse, type AnalyticsItemMovementPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse } from '../api';
 import { toast } from 'sonner';
 import { 
   AreaChart, 
@@ -62,6 +62,11 @@ function describeFastMovingCutoff(threshold: number): string {
 function formatMonthlyLabel(month: string): string {
   const [year, number] = month.split('-').map(Number);
   return new Date(Date.UTC(year, number - 1, 1)).toLocaleDateString('en', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+function formatAnalyticsDateRange(fromDate: string, toDate: string): string {
+  if (!fromDate && !toDate) return 'All time';
+  return `${fromDate || 'Any date'} to ${toDate || 'Any date'}`;
 }
 
 function simplifyInsightText(text: string): string {
@@ -136,12 +141,11 @@ export const Analytics: React.FC = () => {
   const snapshotScrollerRef = useRef<HTMLDivElement | null>(null);
   const snapshotRequestRef = useRef(0);
   const snapshotLoadingMoreRef = useRef(false);
-  const [movementMonth, setMovementMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [movementThreshold, setMovementThreshold] = useState('10');
   const [movementRetry, setMovementRetry] = useState(0);
-  const [movementRows, setMovementRows] = useState<AnalyticsMonthlyItemMovementPage['rows']>([]);
-  const [movementSummary, setMovementSummary] = useState<AnalyticsMonthlyItemMovementPage['summary'] | null>(null);
-  const [movementPage, setMovementPage] = useState<AnalyticsMonthlyItemMovementPage['page'] | null>(null);
+  const [movementRows, setMovementRows] = useState<AnalyticsItemMovementPage['rows']>([]);
+  const [movementSummary, setMovementSummary] = useState<AnalyticsItemMovementPage['summary'] | null>(null);
+  const [movementPage, setMovementPage] = useState<AnalyticsItemMovementPage['page'] | null>(null);
   const [movementLoading, setMovementLoading] = useState(true);
   const [movementLoadingMore, setMovementLoadingMore] = useState(false);
   const [movementError, setMovementError] = useState('');
@@ -153,15 +157,15 @@ export const Analytics: React.FC = () => {
   const [aiInsight, setAiInsight] = useState<AnalyticsInsightsResponse | null>(null);
   const [aiInsightLoading, setAiInsightLoading] = useState(false);
   const [aiInsightError, setAiInsightError] = useState('');
-  const [aiInsightCriteria, setAiInsightCriteria] = useState<{ fromDate: string; toDate: string; movementMonth: string; threshold: number } | null>(null);
+  const [aiInsightCriteria, setAiInsightCriteria] = useState<{ fromDate: string; toDate: string; threshold: number } | null>(null);
   const aiInsightRequestRef = useRef(0);
-  const aiInsightIsStale = !!aiInsightCriteria && (aiInsightCriteria.fromDate !== fromDate || aiInsightCriteria.toDate !== toDate || aiInsightCriteria.movementMonth !== movementMonth || aiInsightCriteria.threshold !== Number(movementThreshold));
+  const aiInsightIsStale = !!aiInsightCriteria && (aiInsightCriteria.fromDate !== fromDate || aiInsightCriteria.toDate !== toDate || aiInsightCriteria.threshold !== Number(movementThreshold));
 
   useEffect(() => {
     aiInsightRequestRef.current += 1;
     setAiInsightLoading(false);
     setAiInsightError('');
-  }, [fromDate, toDate, movementMonth, movementThreshold]);
+  }, [fromDate, toDate, movementThreshold]);
 
   useEffect(() => {
     const requestId = ++monthlyMovementRequestRef.current;
@@ -283,16 +287,18 @@ export const Analytics: React.FC = () => {
     movementLoadingMoreRef.current = false;
     setMovementLoadingMore(false);
 
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(movementMonth)
+    if ((fromDate && !/^\d{4}-\d{2}-\d{2}$/.test(fromDate))
+      || (toDate && !/^\d{4}-\d{2}-\d{2}$/.test(toDate))
+      || (fromDate && toDate && fromDate > toDate)
       || movementThreshold.trim() === '' || !Number.isFinite(threshold) || threshold < 0) {
-      setMovementError('Choose a valid month and enter a non-negative number of units.');
+      setMovementError('Choose a valid date range and enter a non-negative number of units.');
       setMovementLoading(false);
       return () => {
         if (requestId === movementRequestRef.current) movementRequestRef.current += 1;
       };
     }
 
-    getAnalyticsMonthlyItemMovementPage({ month: movementMonth, threshold, limit: 25 })
+    getAnalyticsItemMovementPage({ fromDate: fromDate || undefined, toDate: toDate || undefined, allTime: !fromDate && !toDate, threshold, limit: 25 })
       .then((response) => {
         if (requestId !== movementRequestRef.current) return;
         setMovementRows(response.rows);
@@ -300,7 +306,7 @@ export const Analytics: React.FC = () => {
         setMovementPage(response.page);
       })
       .catch((error) => {
-        if (requestId === movementRequestRef.current) setMovementError(error instanceof Error ? error.message : 'Could not load monthly item movement.');
+        if (requestId === movementRequestRef.current) setMovementError(error instanceof Error ? error.message : 'Could not load product movement.');
       })
       .finally(() => {
         if (requestId === movementRequestRef.current) setMovementLoading(false);
@@ -308,7 +314,7 @@ export const Analytics: React.FC = () => {
     return () => {
       if (requestId === movementRequestRef.current) movementRequestRef.current += 1;
     };
-  }, [movementMonth, movementThreshold, movementRetry]);
+  }, [fromDate, toDate, movementThreshold, movementRetry]);
 
   const loadMoreMovement = useCallback(async () => {
     if (!movementPage?.hasMore || !movementPage.nextCursor || movementLoading || movementLoadingMoreRef.current) return;
@@ -318,7 +324,7 @@ export const Analytics: React.FC = () => {
     setMovementLoadingMore(true);
     setMovementLoadMoreError('');
     try {
-      const response = await getAnalyticsMonthlyItemMovementPage({ month: movementMonth, threshold, limit: 25, cursor: movementPage.nextCursor });
+      const response = await getAnalyticsItemMovementPage({ fromDate: fromDate || undefined, toDate: toDate || undefined, allTime: !fromDate && !toDate, threshold, limit: 25, cursor: movementPage.nextCursor });
       if (requestId !== movementRequestRef.current) return;
       setMovementRows((current) => [...current, ...response.rows]);
       setMovementSummary(response.summary);
@@ -331,7 +337,7 @@ export const Analytics: React.FC = () => {
         setMovementLoadingMore(false);
       }
     }
-  }, [movementPage, movementLoading, movementMonth, movementThreshold]);
+  }, [movementPage, movementLoading, fromDate, toDate, movementThreshold]);
 
   useEffect(() => {
     const sentinel = movementSentinelRef.current;
@@ -350,11 +356,11 @@ export const Analytics: React.FC = () => {
       return;
     }
     const requestId = ++aiInsightRequestRef.current;
-    const criteria = { fromDate, toDate, movementMonth, threshold };
+    const criteria = { fromDate, toDate, threshold };
     setAiInsightError('');
     setAiInsightLoading(true);
     try {
-      const result = await getAnalyticsInsights({ fromDate: fromDate || undefined, toDate: toDate || undefined, movementMonth, threshold });
+      const result = await getAnalyticsInsights({ fromDate: fromDate || undefined, toDate: toDate || undefined, threshold });
       if (requestId === aiInsightRequestRef.current) {
         setAiInsight(result);
         setAiInsightCriteria(criteria);
@@ -364,7 +370,7 @@ export const Analytics: React.FC = () => {
     } finally {
       if (requestId === aiInsightRequestRef.current) setAiInsightLoading(false);
     }
-  }, [fromDate, toDate, movementMonth, movementThreshold]);
+  }, [fromDate, toDate, movementThreshold]);
 
   const handleDatePreset = (preset: '7d' | '30d' | 'all') => {
     setDatePreset(preset);
@@ -687,7 +693,7 @@ export const Analytics: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">{aiInsight.source === 'fallback' ? 'SmartStock summary' : 'AI summary'}</span>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold capitalize text-slate-600">How sure: {aiInsight.confidence}</span>
-              {aiInsightCriteria && <span className="text-xs text-slate-500">Delivery dates: {aiInsightCriteria.fromDate || aiInsightCriteria.toDate ? `${aiInsightCriteria.fromDate || 'Any date'} to ${aiInsightCriteria.toDate || 'Any date'}` : 'All time'} · Movement month: {aiInsightCriteria.movementMonth} · Fast-moving cutoff: {describeFastMovingCutoff(aiInsightCriteria.threshold)}</span>}
+              {aiInsightCriteria && <span className="text-xs text-slate-500">Selected dates: {formatAnalyticsDateRange(aiInsightCriteria.fromDate, aiInsightCriteria.toDate)} · Orders use delivery dates; stock movement uses UTC event dates · Fast-moving cutoff: {describeFastMovingCutoff(aiInsightCriteria.threshold)}</span>}
             </div>
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">At a glance</h4>
@@ -1122,17 +1128,14 @@ export const Analytics: React.FC = () => {
           </div>}
         </section>
 
-        {/* Monthly item-level stock movement classification */}
+        {/* Item-level stock movement classification */}
         <section className="space-y-4 rounded-[28px] border border-sky-100 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <h3 className="text-lg font-bold text-slate-900">Movement by Product</h3>
-              <p className="mt-1 max-w-3xl text-xs text-slate-500">Shows how many units of each product were sent out during the selected month. Products with no recorded movement are marked as slow-moving. Fast-moving means at least the number of units you choose were sent out.</p>
+              <p className="mt-1 max-w-3xl text-xs text-slate-500">Shows units sent out during the selected Delivery Date Range, using each movement’s recorded UTC date. With All time selected, it shows all recorded movement. Products with no recorded movement are marked slow-moving; fast-moving uses the cutoff you choose.</p>
             </div>
             <div className="flex flex-wrap items-end gap-3">
-              <label className="text-xs font-semibold text-slate-600">Month
-                <input aria-label="Movement month" type="month" value={movementMonth} onChange={(event) => setMovementMonth(event.target.value)} className="input mt-1 block w-40" />
-              </label>
               <label className="text-xs font-semibold text-slate-600">Movement needed to count as fast-moving (in each item’s unit)
                 <input aria-label="Movement required for fast-moving products" type="number" min="0" step="1" value={movementThreshold} onChange={(event) => setMovementThreshold(event.target.value)} className="input mt-1 block w-36" />
               </label>
@@ -1142,10 +1145,10 @@ export const Analytics: React.FC = () => {
           {movementSummary && <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl bg-emerald-50 p-4"><p className="text-xs uppercase text-emerald-700">Fast-moving items</p><p className="mt-1 text-xl font-black text-emerald-900">{movementSummary.fastMovingCount}</p></div>
             <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-600">Slow-moving items</p><p className="mt-1 text-xl font-black text-slate-900">{movementSummary.slowMovingCount}</p></div>
-            <div className="rounded-2xl bg-sky-50 p-4"><p className="text-xs uppercase text-sky-700">Units sent out · {movementMonth}</p><p className="mt-1 text-sm font-black text-sky-900">{movementSummary.outboundByUnit.length ? movementSummary.outboundByUnit.map((item) => `${item.quantity} ${item.unit}`).join(' · ') : 'No stock sent out'}</p></div>
+            <div className="rounded-2xl bg-sky-50 p-4"><p className="text-xs uppercase text-sky-700">Units sent out · {formatAnalyticsDateRange(fromDate, toDate)}</p><p className="mt-1 text-sm font-black text-sky-900">{movementSummary.outboundByUnit.length ? movementSummary.outboundByUnit.map((item) => `${item.quantity} ${item.unit}`).join(' · ') : 'No stock sent out'}</p></div>
           </div>}
 
-          {movementLoading && <p role="status" className="py-6 text-center text-sm text-slate-500">Loading monthly item movements…</p>}
+          {movementLoading && <p role="status" className="py-6 text-center text-sm text-slate-500">Loading product movement…</p>}
           {movementError && <div role="alert" className="py-4 text-center text-sm text-rose-700"><p>{movementError}</p><button type="button" onClick={() => setMovementRetry((current) => current + 1)} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
           {!movementLoading && !movementError && movementRows.length === 0 && <p className="py-6 text-center text-sm text-slate-500">No products are available for this report.</p>}
           {movementRows.length > 0 && <div ref={movementScrollerRef} className="max-h-96 overflow-auto rounded-xl border border-slate-100"><div className="overflow-x-auto"><table className="w-full text-left">
@@ -1160,7 +1163,7 @@ export const Analytics: React.FC = () => {
           </table></div>
           {movementPage?.hasMore && <div ref={movementSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">More products are available below.</div>}
           </div>}
-          {movementPage && <p className="text-xs text-slate-500">Showing {movementRows.length} of {movementPage.totalCount} products for {movementMonth}; fast-moving means {describeFastMovingCutoff(Number(movementThreshold))}.</p>}
+          {movementPage && <p className="text-xs text-slate-500">Showing {movementRows.length} of {movementPage.totalCount} products for {formatAnalyticsDateRange(fromDate, toDate)}; stock movement uses its recorded UTC date, and fast-moving means {describeFastMovingCutoff(Number(movementThreshold))}.</p>}
           {movementPage?.hasMore && <div className="flex justify-center py-3"><button type="button" onClick={() => void loadMoreMovement()} disabled={movementLoadingMore} className="rounded-lg border border-indigo-200 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">{movementLoadingMore ? 'Loading…' : movementLoadMoreError ? 'Retry loading products' : 'Load more products'}</button></div>}
           {movementLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more products…</p>}
           {movementLoadMoreError && <p role="alert" className="text-center text-sm text-rose-700">{movementLoadMoreError}</p>}

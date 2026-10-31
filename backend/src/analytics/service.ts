@@ -6,7 +6,7 @@
  */
 
 import { isDbSyncActive } from '../db/syncState.js';
-import { getAnalyticsOrderSummaryDb, getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listMonthlyItemMovementPageDb, listMonthlySalesTrendDb, listMonthlyStockMovementAggregatesDb, listOutboundMovementByUnitDb, listRecentActivityDb, listInsightMovementSummaryDb, listInsightPurchaseSummaryDb, listInsightYtdPurchaseSummaryDb, listInsightInventorySummaryDb } from '../db/postgresStore.js';
+import { getAnalyticsOrderSummaryDb, getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listItemMovementPageDb, listMonthlySalesTrendDb, listMonthlyStockMovementAggregatesDb, listOutboundMovementByUnitDb, listRecentActivityDb, listInsightMovementSummaryDb, listInsightPurchaseSummaryDb, listInsightYtdPurchaseSummaryDb, listInsightInventorySummaryDb } from '../db/postgresStore.js';
 import { listProducts, listProductMovements } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import { buildInventoryInsightSummary } from '../inventory/service.js';
@@ -22,8 +22,8 @@ import {
   buildMonthlySalesTrend,
   buildRecentActivity,
   classifyMovement,
-  buildMonthlyItemMovementClassification,
-  paginateMonthlyItemMovement,
+  buildItemMovementClassification,
+  paginateItemMovement,
   simpleExponentialSmoothingForecast,
   buildDemandForecast,
   DEMAND_FORECAST_ASSUMPTION,
@@ -33,7 +33,7 @@ import {
   type AnalyticsOrderSummary,
   type DashboardSalesRange,
   type DemandForecastCursor,
-  type MonthlyItemMovementCursor,
+  type ItemMovementCursor,
 } from './analytics.js';
 
 function listAllMovements() {
@@ -201,19 +201,35 @@ export async function getMonthlyStockMovementByUnit(months = 12, now = new Date(
   return buildMonthlyStockMovementByUnit(listAllMovements(), listProducts(), startAt, endAt, now);
 }
 
-export async function getMonthlyItemMovementPage(
-  month: string,
+function movementDateRangeBounds(fromDate?: string, toDate?: string) {
+  const parse = (value: string | undefined, endExclusive = false): Date | null => {
+    if (!value) return null;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+      throw new Error('fromDate and toDate must be valid YYYY-MM-DD dates');
+    }
+    if (endExclusive) date.setUTCDate(date.getUTCDate() + 1);
+    return date;
+  };
+  if (fromDate && toDate && fromDate > toDate) throw new Error('fromDate must be on or before toDate');
+  return { startAt: parse(fromDate), endAt: parse(toDate, true) };
+}
+
+export async function getItemMovementPage(
+  fromDate: string | undefined,
+  toDate: string | undefined,
   threshold: number,
   limit: number,
-  cursor: MonthlyItemMovementCursor | null,
+  cursor: ItemMovementCursor | null,
 ) {
+  const { startAt, endAt } = movementDateRangeBounds(fromDate, toDate);
   if (isDbSyncActive()) {
-    const page = await listMonthlyItemMovementPageDb({ month, threshold, limit, cursor });
-    if (!page) throw new Error('PostgreSQL is unavailable for monthly item movement');
-    return { month, threshold, ...page };
+    const page = await listItemMovementPageDb({ startAt, endAt, threshold, limit, cursor });
+    if (!page) throw new Error('PostgreSQL is unavailable for item movement');
+    return { period: { fromDate: fromDate ?? null, toDate: toDate ?? null }, threshold, ...page };
   }
-  const rows = buildMonthlyItemMovementClassification(listAllMovements(), listProducts(), month, threshold);
-  return { month, threshold, ...paginateMonthlyItemMovement(rows, limit, cursor) };
+  const rows = buildItemMovementClassification(listAllMovements(), listProducts(), fromDate, toDate, threshold);
+  return { period: { fromDate: fromDate ?? null, toDate: toDate ?? null }, threshold, ...paginateItemMovement(rows, limit, cursor) };
 }
 
 export function getDemandForecast(historyMonths = 12, now = new Date()) {

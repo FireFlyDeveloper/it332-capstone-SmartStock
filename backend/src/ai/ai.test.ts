@@ -105,8 +105,8 @@ describe('AI insight fallback layer', () => {
   });
 
   it('returns a deterministic local insight when Hermes is not configured', async () => {
-    const first = await getAnalyticsInsight({ movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
-    const second = await getAnalyticsInsight({ movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
+    const first = await getAnalyticsInsight({ movementFromDate: '2026-02-01', movementToDate: '2026-02-28', threshold: 5 }, TEST_NOW);
+    const second = await getAnalyticsInsight({ movementFromDate: '2026-02-01', movementToDate: '2026-02-28', threshold: 5 }, TEST_NOW);
 
     expect(first).toEqual(second);
     expect(first.source).toBe('fallback');
@@ -164,7 +164,7 @@ describe('AI insight fallback layer', () => {
   });
 
   it('sends only final aggregate computations with explicit coverage, costs, and units', async () => {
-    const payload = await buildSafeInsightPayload({ movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
+    const payload = await buildSafeInsightPayload({ movementFromDate: '2026-02-01', movementToDate: '2026-02-28', threshold: 5 }, TEST_NOW);
     const serialized = JSON.stringify(payload);
 
     expect(payload.sales.trend).toHaveProperty('changePercent');
@@ -172,7 +172,7 @@ describe('AI insight fallback layer', () => {
     expect(payload.sales.grossSales).toBe(900);
     expect(payload.sales.averageOrderValue).toBe(300);
     expect(payload.sales.bucketsWithSales).toBe(3);
-    expect(payload.movement.classification).toMatchObject({ month: '2026-02', threshold: 5, productCount: 3, fastMovingCount: 1, slowMovingCount: 2 });
+    expect(payload.movement.classification).toMatchObject({ fromDate: '2026-02-01', toDate: '2026-02-28', threshold: 5, productCount: 3, fastMovingCount: 1, slowMovingCount: 2 });
     expect(payload.inventory).toMatchObject({ productCount: 3, activeProductCount: 3, activeLowStockCount: 2, activeLowAlertCount: 1, activeCriticalStockCount: 1, totalInventoryValue: expect.any(Number) });
     expect(payload.inventory).toHaveProperty('glassInventoryValue');
     expect(payload.inventory).toHaveProperty('aluminumInventoryValue');
@@ -242,26 +242,28 @@ describe('AI insight fallback layer', () => {
     expect(payload).not.toHaveProperty('movement.rows');
   });
 
-  it('applies inclusive delivery dates, UTC movement bounds, and the selected-month threshold', async () => {
+  it('applies inclusive delivery dates and movement dates with the selected cutoff', async () => {
     const glass = listProducts().find((product) => product.sku === 'AI-GLASS');
     if (!glass) throw new Error('AI test glass product was not seeded');
     await recordInboundStock(glass.id, { quantity: 3, unitCost: 25, referenceNo: 'AI-PO-RANGE-END', supplier: 'Supplier A', occurredAt: '2026-02-15T23:59:59.999Z' });
     await recordInboundStock(glass.id, { quantity: 7, unitCost: 50, referenceNo: 'AI-PO-AFTER-RANGE', supplier: 'Supplier A', occurredAt: '2026-02-16T00:00:00.000Z' });
-    const selected = await buildSafeInsightPayload({ fromDate: '2026-02-10', toDate: '2026-02-15', movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
+    const selected = await buildSafeInsightPayload({ fromDate: '2026-02-10', toDate: '2026-02-15', threshold: 5 }, TEST_NOW);
     expect(selected.sales.orderCount).toBe(1);
     expect(selected.sales.grossSales).toBe(400);
     expect(selected.purchases).toMatchObject({ recordedCost: 75, pricedReceipts: 1, unpricedReceipts: 0 });
     expect(selected.movement.selectedTotalsByUnit).toEqual([
       { unit: 'sqm', inbound: 3, outbound: 8, inboundCount: 1, outboundCount: 1 },
     ]);
+    expect(selected.movement.classification).toMatchObject({ fromDate: '2026-02-10', toDate: '2026-02-15', fastMovingCount: 1, slowMovingCount: 2 });
     const februaryChart = selected.movement.monthlyWindow.months.find((entry) => entry.month === '2026-02');
     expect(februaryChart?.byUnit).toEqual(expect.arrayContaining([
       { unit: 'sqm', inbound: 10, outbound: 8 },
     ]));
-    const boundary = await buildSafeInsightPayload({ fromDate: '2026-02-01', toDate: '2026-02-09', movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
+    const boundary = await buildSafeInsightPayload({ fromDate: '2026-02-01', toDate: '2026-02-09', threshold: 5 }, TEST_NOW);
     expect(boundary.sales.orderCount).toBe(0);
     expect(boundary.movement.selectedTotalsByUnit).toEqual([]);
-    const higherThreshold = await buildSafeInsightPayload({ movementMonth: '2026-02', threshold: 10 }, TEST_NOW);
+    expect(boundary.movement.classification).toMatchObject({ fromDate: '2026-02-01', toDate: '2026-02-09', fastMovingCount: 0, slowMovingCount: 3 });
+    const higherThreshold = await buildSafeInsightPayload({ movementFromDate: '2026-02-01', movementToDate: '2026-02-28', threshold: 10 }, TEST_NOW);
     expect(selected.movement.classification.fastMovingCount).toBe(1);
     expect(higherThreshold.movement.classification.fastMovingCount).toBe(0);
     expect(higherThreshold.movement.classification.slowMovingCount).toBe(3);
@@ -280,7 +282,7 @@ describe('AI insight fallback layer', () => {
     }) } }] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await getAnalyticsInsight({ movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
+    const result = await getAnalyticsInsight({ movementFromDate: '2026-02-01', movementToDate: '2026-02-28', threshold: 5 }, TEST_NOW);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [endpoint, init] = fetchMock.mock.calls[0];
@@ -298,7 +300,7 @@ describe('AI insight fallback layer', () => {
     expect(requestBody.messages[1].content).toContain('threshold');
     for (const key of INSIGHT_SECTION_KEYS) expect(requestBody.messages[1].content).toContain(key);
     const sentPayload = JSON.parse(requestBody.messages[1].content.split('\n').at(-1)!) as SafeInsightPayload;
-    expect(sentPayload.movement.classification).toMatchObject({ month: '2026-02', threshold: 5 });
+    expect(sentPayload.movement.classification).toMatchObject({ fromDate: '2026-02-01', toDate: '2026-02-28', threshold: 5 });
     const februaryChart = sentPayload.movement.monthlyWindow.months.find((entry) => entry.month === '2026-02');
     expect(februaryChart?.byUnit).toEqual(expect.arrayContaining([
       { unit: 'pcs', inbound: 0, outbound: 0 },
@@ -321,7 +323,7 @@ describe('AI insight fallback layer', () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: '{"summary":"missing fields"}' } }] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await getAnalyticsInsight({ movementMonth: '2026-02', threshold: 5 }, TEST_NOW);
+    const result = await getAnalyticsInsight({ movementFromDate: '2026-02-01', movementToDate: '2026-02-28', threshold: 5 }, TEST_NOW);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.source).toBe('fallback');
@@ -343,17 +345,17 @@ describe('AI insight fallback layer', () => {
     await seedUser(STAFF, 'staff');
     await seedUser(ADMIN, 'admin');
 
-    const anonymous = await app.request('/analytics/insights?fromDate=2026-02-01&toDate=2026-02-28&movementMonth=2026-02&threshold=5');
+    const anonymous = await app.request('/analytics/insights?fromDate=2026-02-01&toDate=2026-02-28&threshold=5');
     expect(anonymous.status).toBe(401);
 
     const staffToken = await login(app, STAFF);
-    const staff = await app.request('/analytics/insights?fromDate=2026-02-01&toDate=2026-02-28&movementMonth=2026-02&threshold=5', {
+    const staff = await app.request('/analytics/insights?fromDate=2026-02-01&toDate=2026-02-28&threshold=5', {
       headers: { authorization: 'Bearer ' + staffToken },
     });
     expect(staff.status).toBe(403);
 
     const adminToken = await login(app, ADMIN);
-    const res = await app.request('/analytics/insights?fromDate=2026-02-01&toDate=2026-02-28&movementMonth=2026-02&threshold=5', {
+    const res = await app.request('/analytics/insights?fromDate=2026-02-01&toDate=2026-02-28&threshold=5', {
       headers: { authorization: 'Bearer ' + adminToken },
     });
     expect(res.status).toBe(200);

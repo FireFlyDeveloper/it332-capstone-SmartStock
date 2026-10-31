@@ -32,7 +32,8 @@ export interface AiInsight extends AiInsightContent {
 export interface InsightRequestOptions {
   fromDate?: string;
   toDate?: string;
-  movementMonth?: string;
+  movementFromDate?: string;
+  movementToDate?: string;
   threshold?: number;
 }
 
@@ -60,7 +61,7 @@ export interface SafeMovementSummary {
   selectedOmittedUnitGroups: number;
   monthlyWindow: { startMonth: string; endMonth: string; months: Array<{ month: string; byUnit: Array<{ unit: string; inbound: number; outbound: number }> }> };
   monthlyOmittedUnitGroups: number;
-  classification: { month: string; threshold: number; productCount: number; fastMovingCount: number; slowMovingCount: number };
+  classification: { fromDate: string | null; toDate: string | null; threshold: number; productCount: number; fastMovingCount: number; slowMovingCount: number };
 }
 
 export interface SafeInventorySummary {
