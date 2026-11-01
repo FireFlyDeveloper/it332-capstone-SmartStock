@@ -2,11 +2,29 @@
  * Hermes Agent client for the SmartStock aggregate analytics interpreter.
  */
 
-import { createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { HermesConfig } from './config.js';
 import { buildInsightPrompt } from './prompts.js';
 import { validateAiInsightResponse } from './validator.js';
-import type { AiInsightContent, SafeInsightPayload } from './types.js';
+import { INSIGHT_SECTION_KEYS, type AiInsightContent, type SafeInsightPayload } from './types.js';
+
+const INSIGHT_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    summary: { type: 'string' },
+    interpretations: {
+      type: 'object',
+      properties: Object.fromEntries(INSIGHT_SECTION_KEYS.map((key) => [key, { type: 'string' }])),
+      required: [...INSIGHT_SECTION_KEYS],
+      additionalProperties: false,
+    },
+    recommendations: { type: 'array', items: { type: 'string' } },
+    risks: { type: 'array', items: { type: 'string' } },
+    confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
+  },
+  required: ['summary', 'interpretations', 'recommendations', 'risks', 'confidence'],
+  additionalProperties: false,
+} as const;
 
 type FetchLike = typeof fetch;
 
@@ -58,16 +76,19 @@ export async function callHermesInsight(
     messages: [
       {
         role: 'system',
-        content: 'Interpret only the aggregate SmartStock analytics supplied in the request. Speak plainly to a shop owner with everyday words, short sentences, and practical advice. Explain selected date-range bases, separate units and movement directions, the current inventory snapshot, the selected movement period and cutoff, and forecast coverage. Do not invent facts or identifying details, combine unlike units, request records, or call tools. Return only valid JSON with summary, recommendations, risks, and confidence.',
+        content: `Interpret only the aggregate SmartStock analytics supplied in the request. Speak plainly to a shop owner with everyday words, short sentences, and practical advice. Explain selected date-range bases, separate units and movement directions, the current inventory snapshot, the selected movement period and cutoff, and forecast coverage. Do not invent facts or identifying details, combine unlike units, request records, or call tools. Return only valid JSON with exactly these top-level keys: summary, interpretations, recommendations, risks, confidence. The interpretations object must contain exactly these keys and no others: ${INSIGHT_SECTION_KEYS.join(', ')}. Each interpretation must be a non-empty string no longer than 500 characters.`,
       },
       { role: 'user', content: buildInsightPrompt(payload as SafeInsightPayload) },
     ],
     temperature: 0.2,
-    response_format: { type: 'json_object' },
+    response_format: {
+      type: 'json_schema',
+      json_schema: { name: 'smartstock_analytics_insight', strict: true, schema: INSIGHT_RESPONSE_SCHEMA },
+    },
     tools: [],
     tool_choice: 'none',
   };
-  const idempotencyKey = createHash('sha256').update(JSON.stringify(body)).digest('hex');
+  const idempotencyKey = randomUUID();
 
   const response = await fetchImpl(endpoint, {
     method: 'POST',

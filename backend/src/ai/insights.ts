@@ -1,5 +1,5 @@
 /**
- * AI insights — aggregate analytics interpretation with local fallback.
+ * AI insights — aggregate analytics interpreted by Hermes only.
  *
  * Author: Hermes Agent
  * Last touched: 2026-07-17
@@ -9,7 +9,7 @@ import { getAnalyticsOrderSummary, getInsightAnnualMaterialSummary, getInsightIn
 import type { SalesDirection } from './types.js';
 import { getHermesConfig } from './config.js';
 import { callHermesInsight } from './hermes.js';
-import { INSIGHT_SECTION_KEYS, type AiInsight, type AiInsightContent, type InsightInterpretations, type InsightRequestOptions, type SafeInsightPayload } from './types.js';
+import { INSIGHT_SECTION_KEYS, type AiInsight, type InsightRequestOptions, type SafeInsightPayload } from './types.js';
 
 const INSIGHT_HISTORY_MONTHS = 12;
 const FORECAST_PAGE_SIZE = 100;
@@ -172,101 +172,12 @@ export async function buildSafeInsightPayload(options: InsightRequestOptions = {
   };
 }
 
-function formatUnitTotals(rows: Array<{ unit: string; quantity: number }>): string {
-  return rows.length ? rows.map((row) => `${roundTwo(row.quantity)} ${row.unit}`).join(' and ') : 'no unit-specific estimate is available';
-}
-
-export function generateFallbackInsight(payload: SafeInsightPayload): AiInsightContent {
-  const { sales, purchases, movement, inventory, forecast } = payload;
-  const trend = sales.trend;
-  const direction = trend.direction;
-  const salesLine = `The selected delivery-date range contains ${sales.orderCount} order records, ${sales.grossSales} in gross sales, and an average gross order value of ${sales.averageOrderValue}`;
-  const trendSummary = direction === 'rising' || direction === 'falling'
-    ? `latest-interval gross sales were ${Math.abs(trend.changePercent ?? 0)}% ${direction} than the previous interval`
-    : direction === 'new_activity' ? 'gross sales started in the latest chart interval after none in the previous one'
-      : direction === 'no_sales' ? 'no gross sales were recorded in the selected delivery-date range'
-        : direction === 'steady' ? 'gross sales were unchanged between the latest chart intervals' : 'there is only one chart interval, so a sales trend cannot be compared';
-  const classification = movement.classification;
-  const classificationPeriod = classification.fromDate || classification.toDate
-    ? `${classification.fromDate ?? 'any date'} to ${classification.toDate ?? 'any date'}`
-    : 'all recorded movement history';
-  const cutoff = classification.threshold === 0 ? 'any recorded outbound movement' : `at least ${classification.threshold} ${classification.threshold === 1 ? 'unit' : 'units'} sent out`;
-  const summary = `${salesLine}; ${trendSummary}. During ${classificationPeriod}, ${classification.fastMovingCount} of ${classification.productCount} products met the fast-moving cutoff (${cutoff}) and ${classification.slowMovingCount} did not; next-month estimates total ${formatUnitTotals(forecast.estimatesByUnit)} for ${forecast.productsWithEstimate} of ${forecast.totalProducts} products.`;
-  const selected = movement.selectedTotalsByUnit.map((row) => `${row.inbound} ${row.unit} received and ${row.outbound} ${row.unit} sent out`).join('; ') || 'no recorded movement';
-  const monthlyTotals = new Map<string, { unit: string; inbound: number; outbound: number }>();
-  for (const month of movement.monthlyWindow.months) {
-    for (const row of month.byUnit) {
-      const total = monthlyTotals.get(row.unit) ?? { unit: row.unit, inbound: 0, outbound: 0 };
-      total.inbound += row.inbound;
-      total.outbound += row.outbound;
-      monthlyTotals.set(row.unit, total);
-    }
-  }
-  const monthly = [...monthlyTotals.values()].map((row) => `${row.inbound} ${row.unit} received and ${row.outbound} ${row.unit} sent out`).join('; ') || 'no recorded movement';
-  const receiptLabel = (count: number) => `${count} ${count === 1 ? 'receipt' : 'receipts'}`;
-  const costRisk = purchases.unpricedReceipts > 0
-    ? `Recorded purchase costs total ${purchases.recordedCost} across ${receiptLabel(purchases.pricedReceipts)} with a cost; ${purchases.unpricedReceipts} ${purchases.unpricedReceipts === 1 ? 'receipt has' : 'receipts have'} no cost recorded.`
-    : purchases.pricedReceipts > 0
-      ? `Recorded purchase costs total ${purchases.recordedCost} across ${receiptLabel(purchases.pricedReceipts)}.`
-      : 'No purchase receipts were recorded in the selected period.';
-  const movementPeriodLabel = movement.selectedPeriod.basis === 'all_time' ? 'all recorded history' : 'the selected event-date range';
-  const salesByMonth = payload.monthlySales.byMonth;
-  const annualMaterial = payload.annualMaterials;
-  const rankingText = (groups: SafeInsightPayload['orderRankings']['allTimeMostByUnit'], empty: string, omitted: number) => {
-    const listing = groups.length
-      ? groups.map((group) => `${group.unit}: ${group.items.map((item) => `${item.label} (${item.orderedQuantity})`).join(', ')}`).join('; ')
-      : empty;
-    return omitted ? `${listing}; ${omitted} additional unit ${omitted === 1 ? 'group omitted' : 'groups omitted'} by the five-group limit` : listing;
-  };
-  const byMonthText = salesByMonth.length
-    ? salesByMonth.map((row) => `${row.month}: ${row.orderRecords} records and ${row.grossOrderValue} gross`).join('; ')
-    : 'no monthly order activity is available';
-  const materialText = annualMaterial.byCategory.length
-    ? annualMaterial.byCategory.map((row) => `${row.category}: ${row.recordedCost} recorded cost across ${row.pricedReceipts} priced and ${row.unpricedReceipts} unpriced receipts`).join('; ')
-    : 'no annual purchase receipts are recorded';
-  const quantityText = annualMaterial.quantityByCategoryAndUnit.length
-    ? annualMaterial.quantityByCategoryAndUnit.map((row) => `${row.category}: ${row.quantity} ${row.unit}`).join('; ')
-    : 'no inbound quantities are recorded';
-  const activeAlerts = `${inventory.activeOutOfStockCount} out of stock, ${inventory.activeCriticalStockCount} critical, and ${inventory.activeLowAlertCount} low`;
-  const interpretations: InsightInterpretations = {
-    monthlySalesTransactions: `${byMonthText}. Gross value and transaction count describe different things; the monthly series shows ${payload.monthlySales.monthlyWindow.includedMonths} included months and omits ${payload.monthlySales.monthlyWindow.omittedMonths}.`,
-    annualPurchasedMaterials: `${annualMaterial.year} UTC year-to-date inbound purchases: ${materialText}; quantities by category and unit: ${quantityText}. Unpriced receipt costs are not included.`,
-    inventoryMovement: `For ${movementPeriodLabel}, ${selected}. In the monthly UTC movement window (current month to date), ${monthly}; keep inbound and outbound separate and do not infer individual-product demand from totals.`,
-    demandForecast: `${forecast.productsWithEstimate} of ${forecast.totalProducts} products have enough recent history for an estimate; ${forecast.productsWithoutEstimate} do not. Missing history is unavailable, not zero demand; ${forecast.belowReorderPoint} estimated products are at or below their reorder point.`,
-    orderRecordsPerMonth: `${byMonthText}. These monthly delivery-date record counts include cancelled orders.`,
-    monthlyGrossOrderValue: `${salesByMonth.map((row) => `${row.month}: ${row.grossOrderValue}`).join('; ') || 'No monthly gross value is recorded'}. This is gross order value, not profit; cancelled orders are excluded, unpaid or partly paid orders are included, and refunds are not deducted.`,
-    topOrderedProducts: `Selected delivery-date range, non-cancelled order quantities ranked within unit: ${rankingText(payload.orderRankings.selectedRangeTopByUnit, 'no ranked products', payload.orderRankings.omittedUnitGroups.selectedRangeTop)}.`,
-    stockStatus: `Current stock status across ${inventory.productCount} non-deleted products: ${inventory.healthyStockCount} healthy, ${inventory.lowStockStatusCount} low, ${inventory.criticalStockCount} critical, and ${inventory.outOfStockCount} out of stock.`,
-    stockAtListedPricesByCategory: `Current stock at listed selling prices is ${inventory.glassInventoryValue} for glass and ${inventory.aluminumInventoryValue} for aluminum (total ${inventory.totalInventoryValue}); this is not purchase cost or realized sales.`,
-    mostOrderedProducts: `All-time non-cancelled order quantities, independent of the selected date range and ranked within unit: ${rankingText(payload.orderRankings.allTimeMostByUnit, 'no ranked products', payload.orderRankings.omittedUnitGroups.allTimeMost)}.`,
-    fewestOrderedProducts: `All-time bottom-five products within each unit, including zero recorded orders: ${rankingText(payload.orderRankings.allTimeFewestByUnit, 'no ranked products', payload.orderRankings.omittedUnitGroups.allTimeFewest)}. Zero orders are not the same as unavailable history.`,
-    salesEstimateNextMonth: `Next-month planning estimates total ${formatUnitTotals(forecast.estimatesByUnit)} for ${forecast.productsWithEstimate} of ${forecast.totalProducts} products; suggested restock quantities by unit are ${formatUnitTotals(forecast.recommendedOrderByUnit)}. These are estimates, not promised sales.`,
-    stockAlerts: `Active-product alerts: ${activeAlerts}. Review out-of-stock and critical items first, then plan replenishment for low stock.`,
-  };
-  for (const key of INSIGHT_SECTION_KEYS) {
-    if (!interpretations[key]) throw new Error(`Missing fallback interpretation: ${key}`);
-    if (interpretations[key].length > 500) interpretations[key] = `${interpretations[key].slice(0, 497).trimEnd()}...`;
-  }
-  return {
-    summary,
-    interpretations,
-    recommendations: [`Review products meeting the fast-moving cutoff during ${classificationPeriod} before replenishing.`,
-      'Check current inventory and keep different units separate.', `Use estimates as a guide; they cover ${forecast.productsWithEstimate} of ${forecast.totalProducts} products.`],
-    risks: [costRisk, `Current inventory: ${inventory.productCount} products, ${inventory.activeProductCount} active, ${inventory.activeLowStockCount} active low-stock, ${inventory.criticalStockCount} critical, ${inventory.outOfStockCount} out of stock; listed value ${inventory.totalInventoryValue}. Movement in ${movementPeriodLabel}: ${selected}. Monthly chart totals (${movement.monthlyWindow.startMonth}–${movement.monthlyWindow.endMonth}): ${monthly}.`],
-    confidence: sales.bucketsWithSales < 2 || forecast.productsWithEstimate === 0 ? 'low' : purchases.unpricedReceipts > 0 || forecast.productsWithoutEstimate > 0 ? 'medium' : 'high',
-  };
-}
-
 export async function getAnalyticsInsight(options: InsightRequestOptions = {}, now = new Date()): Promise<AiInsight> {
-  const payload = await buildSafeInsightPayload(options, now);
-  const fallback = (): AiInsight => ({ ...generateFallbackInsight(payload), source: 'fallback' });
   const config = getHermesConfig();
-  if (!config.apiKey || !config.baseUrl) return fallback();
-
-  try {
-    const ai = await callHermesInsight(payload, { apiKey: config.apiKey, baseUrl: config.baseUrl, model: config.model });
-    return { ...ai, source: 'hermes' };
-  } catch {
-    return fallback();
+  if (!config.apiKey || !config.baseUrl) {
+    throw new Error('Hermes AI is not configured. Check the backend AI settings.');
   }
+  const payload = await buildSafeInsightPayload(options, now);
+  const ai = await callHermesInsight(payload, { apiKey: config.apiKey, baseUrl: config.baseUrl, model: config.model });
+  return { ...ai, source: 'hermes' };
 }

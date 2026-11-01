@@ -370,9 +370,9 @@ export interface AnalyticsInsightsResponse {
   summary: string
   recommendations: string[]
   risks: string[]
-  interpretations?: Partial<Record<AnalyticsInsightKey, string>>
+  interpretations: Record<AnalyticsInsightKey, string>
   confidence: 'low' | 'medium' | 'high'
-  source: 'hermes' | 'deepseek' | 'fallback'
+  source: 'hermes'
 }
 
 export function getDashboardOrderSummary(): Promise<DashboardOrderSummary> {

@@ -6,7 +6,7 @@
  */
 
 export type InsightConfidence = 'low' | 'medium' | 'high';
-export type InsightSource = 'hermes' | 'fallback';
+export type InsightSource = 'hermes';
 
 export const INSIGHT_SECTION_KEYS = [
   'monthlySalesTransactions', 'annualPurchasedMaterials', 'inventoryMovement', 'demandForecast',

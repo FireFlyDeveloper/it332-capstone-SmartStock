@@ -241,7 +241,12 @@ analyticsRoutes.get('/insights', requireRole('admin'), async (c) => {
   if (rawMonth !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(rawMonth)) return c.json({ error: 'movementMonth must be YYYY-MM' }, 400);
   if (!Number.isFinite(threshold) || threshold < 0) return c.json({ error: 'threshold must be a non-negative number' }, 400);
   const legacyMovementRange = rawMonth ? monthDateRange(rawMonth) : undefined;
-  return c.json(await getAnalyticsInsight({ fromDate, toDate, movementFromDate: legacyMovementRange?.fromDate, movementToDate: legacyMovementRange?.toDate, threshold }));
+  try {
+    return c.json(await getAnalyticsInsight({ fromDate, toDate, movementFromDate: legacyMovementRange?.fromDate, movementToDate: legacyMovementRange?.toDate, threshold }));
+  } catch (error) {
+    console.error('[analytics/insights] Hermes request failed:', error instanceof Error ? error.message : 'unknown error');
+    return c.json({ error: 'The AI could not prepare the analytics summary. Check the AI service configuration and try again.' }, 502);
+  }
 });
 
 analyticsRoutes.post('/forecast', requireRole('admin'), async (c) => {

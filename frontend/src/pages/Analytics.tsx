@@ -365,8 +365,10 @@ export const Analytics: React.FC = () => {
         setAiInsight(result);
         setAiInsightCriteria(criteria);
       }
-    } catch {
-      if (requestId === aiInsightRequestRef.current) setAiInsightError('We could not prepare the summary. Please try again.');
+    } catch (error) {
+      if (requestId === aiInsightRequestRef.current) {
+        setAiInsightError(error instanceof Error ? error.message : 'The AI could not prepare the analytics summary. Please try again.');
+      }
     } finally {
       if (requestId === aiInsightRequestRef.current) setAiInsightLoading(false);
     }
@@ -691,7 +693,7 @@ export const Analytics: React.FC = () => {
           {aiInsightLoading && <p role="status" className="text-sm text-slate-500">Reviewing sales, purchases, and stock activity…</p>}
           {aiInsight && <div aria-live="polite" className="space-y-4 rounded-2xl bg-indigo-50/60 p-4">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">{aiInsight.source === 'fallback' ? 'SmartStock summary' : 'AI summary'}</span>
+              <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">AI summary</span>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold capitalize text-slate-600">How sure: {aiInsight.confidence}</span>
               {aiInsightCriteria && <span className="text-xs text-slate-500">Selected dates: {formatAnalyticsDateRange(aiInsightCriteria.fromDate, aiInsightCriteria.toDate)} · Orders use delivery dates; stock movement uses UTC event dates · Fast-moving cutoff: {describeFastMovingCutoff(aiInsightCriteria.threshold)}</span>}
             </div>

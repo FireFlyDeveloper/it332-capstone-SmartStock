@@ -1,12 +1,11 @@
 /**
- * AI insight tests — Hermes-backed interpretation and local fallback.
+ * AI insight tests — Hermes-backed interpretation and failure handling.
  *
  * Author: Hermes Agent
  * Last touched: 2026-07-17
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createHash } from 'node:crypto';
 import { Hono } from 'hono';
 import { authRoutes } from '../auth/routes.js';
 import { createUser, _resetUserStore, type Role } from '../auth/users.js';
@@ -14,10 +13,11 @@ import { hashPassword } from '../auth/hash.js';
 import { _resetOrderStore, createOrder } from '../orders/store.js';
 import { _resetInventoryStore, createProduct, listProducts, recordInboundStock, recordOutboundStock } from '../inventory/store.js';
 import { analyticsRoutes } from '../analytics/routes.js';
-import { generateFallbackInsight, getAnalyticsInsight, buildSafeInsightPayload } from './insights.js';
+import { getAnalyticsInsight, buildSafeInsightPayload } from './insights.js';
 import { INSIGHT_SECTION_KEYS, type SafeInsightPayload } from './types.js';
 import { validateAiInsightResponse } from './validator.js';
 import { callHermesInsight } from './hermes.js';
+import { setDbSyncActive } from '../db/syncState.js';
 
 function buildApp() {
   const app = new Hono();
@@ -43,7 +43,7 @@ async function login(app: Hono, email: string) {
 
 async function seedAiAnalyticsData() {
   const monthAt = (monthsAgo: number) => {
-    const now = new Date();
+    const now = TEST_NOW;
     return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - monthsAgo, 15)).toISOString();
   };
   const glass = await createProduct({ sku: 'AI-GLASS', name: 'AI Glass', category: 'glass', unit: 'sqm', stock: 3, price: 100, threshold: 5 });
@@ -86,10 +86,11 @@ const ADMIN = 'ai-admin' + AT + 'smartstock.local';
 const STAFF = 'ai-staff' + AT + 'smartstock.local';
 const VALID_INTERPRETATIONS = Object.fromEntries(INSIGHT_SECTION_KEYS.map((key) => [key, `Plain-language interpretation for ${key}.`])) as Record<(typeof INSIGHT_SECTION_KEYS)[number], string>;
 
-describe('AI insight fallback layer', () => {
+describe('AI insight generation', () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
     process.env = { ...ORIGINAL_ENV };
+    setDbSyncActive(false);
     delete process.env.HERMES_API_KEY;
     delete process.env.HERMES_API_BASE_URL;
     delete process.env.HERMES_MODEL;
@@ -104,34 +105,6 @@ describe('AI insight fallback layer', () => {
     process.env = { ...ORIGINAL_ENV };
   });
 
-  it('returns a deterministic local insight when Hermes is not configured', async () => {
-    const first = await getAnalyticsInsight({ movementFromDate: '2026-02-01', movementToDate: '2026-02-28', threshold: 5 }, TEST_NOW);
-    const second = await getAnalyticsInsight({ movementFromDate: '2026-02-01', movementToDate: '2026-02-28', threshold: 5 }, TEST_NOW);
-
-    expect(first).toEqual(second);
-    expect(first.source).toBe('fallback');
-    expect(first.summary).toContain('gross sales');
-    expect(first.summary).toContain('2026-02');
-    expect(first.summary).toContain('at least 5 units sent out');
-    expect(first.summary).toContain('1 of 3 products met the fast-moving cutoff');
-    expect(first.summary).toContain('next-month estimates total');
-    expect(first.recommendations).toHaveLength(3);
-    expect(first.risks).toHaveLength(2);
-    expect(Object.keys(first.interpretations)).toEqual(INSIGHT_SECTION_KEYS);
-    expect(Object.values(first.interpretations).every((text) => text.trim().length > 0 && text.length <= 500)).toBe(true);
-    expect(first.interpretations.monthlyGrossOrderValue).toContain('cancelled');
-    expect(first.interpretations.annualPurchasedMaterials).toContain('unpriced');
-    expect(first.interpretations.fewestOrderedProducts).toContain('zero');
-    expect(first.risks[0]).toContain('Recorded purchase costs total 0 across 0 receipts with a cost; 1 receipt has no cost recorded.');
-    expect(first.risks[1]).toContain('Current inventory:');
-    expect(first.risks[1]).toContain('20 sqm received and 8 sqm sent out');
-    expect(first.risks[1]).toContain('0 pcs received and 5 pcs sent out');
-    expect(first.interpretations.stockAlerts).toContain('1 low');
-    expect(first.confidence).toBe('medium');
-    const output = [first.summary, ...first.recommendations, ...first.risks].join(' ');
-    expect(output).not.toMatch(/simple_exponential_smoothing|alpha|horizon|coverage|category\/unit groups/i);
-    expect(output).toContain('different units');
-  });
 
   it('rejects incomplete AI responses with missing required fields', () => {
     expect(validateAiInsightResponse({ summary: 'Only summary' })).toBeNull();
@@ -193,11 +166,6 @@ describe('AI insight fallback layer', () => {
     expect(payload.monthlySales.rangeTotals).toMatchObject({ orderRecords: 3, grossOrderValue: 900 });
     expect(payload.annualMaterials.periodBasis).toBe('occurredAt_utc_calendar_year_to_date');
     expect(payload.orderRankings.omittedUnitGroups).toEqual({ selectedRangeTop: 0, allTimeMost: 0, allTimeFewest: 0 });
-    const omittedFallback = generateFallbackInsight({ ...payload, orderRankings: { ...payload.orderRankings,
-      omittedUnitGroups: { selectedRangeTop: 2, allTimeMost: 1, allTimeFewest: 3 } } });
-    expect(omittedFallback.interpretations.topOrderedProducts).toContain('2 additional unit groups omitted');
-    expect(omittedFallback.interpretations.mostOrderedProducts).toContain('1 additional unit group omitted');
-    expect(omittedFallback.interpretations.fewestOrderedProducts).toContain('3 additional unit groups omitted');
     for (const ranking of [payload.orderRankings.selectedRangeTopByUnit, payload.orderRankings.allTimeMostByUnit, payload.orderRankings.allTimeFewestByUnit]) {
       expect(ranking.length).toBeLessThanOrEqual(5);
       expect(ranking.every((group) => group.items.length <= 5)).toBe(true);
@@ -289,11 +257,18 @@ describe('AI insight fallback layer', () => {
     expect(endpoint).toBe('http://172.29.0.1:8643/v1/chat/completions');
     expect(init.headers.authorization).toBe('Bearer test-hermes-api-key');
     const requestBody = JSON.parse(init.body);
-    expect(init.headers['idempotency-key']).toBe(`smartstock-${createHash('sha256').update(JSON.stringify(requestBody)).digest('hex')}`);
+    expect(init.headers['idempotency-key']).toMatch(/^smartstock-[\da-f-]{36}$/);
     expect(requestBody.model).toBe('smartstockanalytics');
+    expect(requestBody.response_format).toMatchObject({
+      type: 'json_schema',
+      json_schema: { name: 'smartstock_analytics_insight', strict: true },
+    });
+    expect(requestBody.response_format.json_schema.schema.properties.interpretations.required).toEqual(INSIGHT_SECTION_KEYS);
     expect(requestBody.tools).toEqual([]);
     expect(requestBody.tool_choice).toBe('none');
     expect(requestBody.messages[0].content).toContain('Speak plainly to a shop owner');
+    expect(requestBody.messages[0].content).toContain('interpretations object must contain exactly these keys');
+    for (const key of INSIGHT_SECTION_KEYS) expect(requestBody.messages[0].content).toContain(key);
     expect(requestBody.messages[1].content).toContain('aggregate computations only');
     expect(requestBody.messages[1].content).toContain('delivery-date range');
     expect(requestBody.messages[1].content).toContain('occurr');
@@ -317,17 +292,15 @@ describe('AI insight fallback layer', () => {
     expect(result.summary).toContain('latest chart interval');
   });
 
-  it('falls back after an Hermes request or response validation failure', async () => {
+  it('fails visibly when Hermes returns an invalid response instead of synthesizing a fallback', async () => {
     process.env.HERMES_API_KEY = 'test-hermes-api-key';
     process.env.HERMES_API_BASE_URL = 'https://hermes.example/v1';
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: '{"summary":"missing fields"}' } }] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await getAnalyticsInsight({ movementFromDate: '2026-02-01', movementToDate: '2026-02-28', threshold: 5 }, TEST_NOW);
-
+    await expect(getAnalyticsInsight({ movementFromDate: '2026-02-01', movementToDate: '2026-02-28', threshold: 5 }, TEST_NOW))
+      .rejects.toThrow('Hermes API response failed validation');
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(result.source).toBe('fallback');
-    expect(result.summary).toContain('at least 5 units sent out');
   });
 
   it('rejects public plain-HTTP Hermes endpoints before making a network call', async () => {
@@ -340,7 +313,7 @@ describe('AI insight fallback layer', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('restricts GET /analytics/insights to admins and returns deterministic fallback', async () => {
+  it('restricts GET /analytics/insights to admins and returns an error when Hermes is unavailable', async () => {
     const app = buildApp();
     await seedUser(STAFF, 'staff');
     await seedUser(ADMIN, 'admin');
@@ -358,10 +331,11 @@ describe('AI insight fallback layer', () => {
     const res = await app.request('/analytics/insights?fromDate=2026-02-01&toDate=2026-02-28&threshold=5', {
       headers: { authorization: 'Bearer ' + adminToken },
     });
-    expect(res.status).toBe(200);
-    const json = await res.json() as ReturnType<typeof generateFallbackInsight> & { source: string };
-    expect(json.source).toBe('fallback');
-    expect(json.recommendations.length).toBeGreaterThan(0);
+    expect(res.status).toBe(502);
+    const json = await res.json() as { error: string; source?: string; summary?: string };
+    expect(json.error).toContain('AI could not prepare');
+    expect(json.source).toBeUndefined();
+    expect(json.summary).toBeUndefined();
     for (const query of [
       'fromDate=2026-02-30',
       'fromDate=2026-03-01&toDate=2026-02-01',
