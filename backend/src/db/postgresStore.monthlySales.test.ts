@@ -17,21 +17,27 @@ describe('PostgreSQL monthly sales trend query', () => {
   it('maps grouped months and applies the selected range and fixed clock', async () => {
     const now = new Date('2026-03-15T12:00:00.000Z');
     database.query.mockResolvedValue({ rows: [
-      { month: '2025-10', transaction_count: 0, gross_sales: 0 },
-      { month: '2025-11', transaction_count: 2, gross_sales: '250.5' },
-      { month: '2025-12', transaction_count: 0, gross_sales: 0 },
-      { month: '2026-03', transaction_count: 1, gross_sales: '100' },
+      { month: '2025-10', transaction_count: 0, cancelled_transaction_count: 0, non_cancelled_transaction_count: 0, gross_order_value: 0, gross_sales: 0 },
+      { month: '2025-11', transaction_count: 2, cancelled_transaction_count: 1, non_cancelled_transaction_count: 1, gross_order_value: '250.5', gross_sales: '100' },
+      { month: '2025-12', transaction_count: 0, cancelled_transaction_count: 0, non_cancelled_transaction_count: 0, gross_order_value: 0, gross_sales: 0 },
+      { month: '2026-01', transaction_count: 0, cancelled_transaction_count: 0, non_cancelled_transaction_count: 0, gross_order_value: 0, gross_sales: 0 },
+      { month: '2026-02', transaction_count: 0, cancelled_transaction_count: 0, non_cancelled_transaction_count: 0, gross_order_value: 0, gross_sales: 0 },
+      { month: '2026-03', transaction_count: 1, cancelled_transaction_count: 0, non_cancelled_transaction_count: 1, gross_order_value: '100', gross_sales: '100' },
     ] });
 
     await expect(listMonthlySalesTrendDb('6M', now)).resolves.toEqual([
-      { month: '2025-10', transactionCount: 0, grossSales: 0 },
-      { month: '2025-11', transactionCount: 2, grossSales: 250.5 },
-      { month: '2025-12', transactionCount: 0, grossSales: 0 },
-      { month: '2026-03', transactionCount: 1, grossSales: 100 },
+      { month: '2025-10', transactionCount: 0, cancelledTransactionCount: 0, nonCancelledTransactionCount: 0, grossOrderValue: 0, grossSales: 0 },
+      { month: '2025-11', transactionCount: 2, cancelledTransactionCount: 1, nonCancelledTransactionCount: 1, grossOrderValue: 250.5, grossSales: 100 },
+      { month: '2025-12', transactionCount: 0, cancelledTransactionCount: 0, nonCancelledTransactionCount: 0, grossOrderValue: 0, grossSales: 0 },
+      { month: '2026-01', transactionCount: 0, cancelledTransactionCount: 0, nonCancelledTransactionCount: 0, grossOrderValue: 0, grossSales: 0 },
+      { month: '2026-02', transactionCount: 0, cancelledTransactionCount: 0, nonCancelledTransactionCount: 0, grossOrderValue: 0, grossSales: 0 },
+      { month: '2026-03', transactionCount: 1, cancelledTransactionCount: 0, nonCancelledTransactionCount: 1, grossOrderValue: 100, grossSales: 100 },
     ]);
     const [sql, values] = database.query.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain("date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))");
-    expect(sql).toContain("o.order_status <> 'cancelled'");
+    expect(sql).toContain("date_trunc('month', o.delivery_date::timestamp)");
+    expect(sql).toContain("o.order_status = 'delivered'");
+    expect(sql).toContain("o.order_status = 'cancelled'");
     expect(sql).toContain("WHEN '6M' THEN current_month - INTERVAL '5 months'");
     expect(sql).toContain("WHEN '1Y' THEN current_month - INTERVAL '11 months'");
     expect(sql).toContain('generate_series(');

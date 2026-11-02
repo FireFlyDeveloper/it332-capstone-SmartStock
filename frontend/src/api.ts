@@ -220,6 +220,9 @@ export async function logoutRequest(): Promise<void> {
 export interface AnalyticsSalesTrend {
   month: string
   transactionCount: number
+  cancelledTransactionCount: number
+  nonCancelledTransactionCount: number
+  grossOrderValue: number
   grossSales: number
 }
 
@@ -274,7 +277,15 @@ export interface AnalyticsOrderSummary {
   mostOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>
   leastOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>
   orderedQuantities: Record<string, number>
-  salesTrendData: Array<{ month: string; sales: number; orders: number }>
+  salesTrendData: Array<{
+    month: string
+    sales: number
+    orders: number
+    grossOrderValue: number
+    grossSales: number
+    cancelledOrders: number
+    nonCancelledOrders: number
+  }>
 }
 
 export function getAnalyticsOrderSummary(options: { fromDate?: string | null; toDate?: string | null } = {}): Promise<AnalyticsOrderSummary> {

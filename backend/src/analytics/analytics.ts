@@ -14,6 +14,15 @@ export interface MonthlySalesTrendRow {
   grossSales: number;
 }
 
+export interface DashboardMonthlySalesTrendRow {
+  month: string;
+  transactionCount: number;
+  cancelledTransactionCount: number;
+  nonCancelledTransactionCount: number;
+  grossOrderValue: number;
+  grossSales: number;
+}
+
 export type DashboardSalesRange = '6M' | '1Y' | 'ALL';
 
 export interface AnalyticsOrderSummary {
@@ -23,7 +32,15 @@ export interface AnalyticsOrderSummary {
   mostOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>;
   leastOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>;
   orderedQuantities: Record<string, number>;
-  salesTrendData: Array<{ month: string; sales: number; orders: number }>;
+  salesTrendData: Array<{
+    month: string;
+    sales: number;
+    orders: number;
+    grossOrderValue: number;
+    grossSales: number;
+    cancelledOrders: number;
+    nonCancelledOrders: number;
+  }>;
   deliveryDateMonthlySeries: {
     months: Array<{ month: string; orderCount: number; grossSales: number }>;
     omittedMonthCount: number;
@@ -147,7 +164,17 @@ export function buildYtdInboundPurchaseSummary(movements: StockMovement[], produ
   return { year, categories: sort([...category.values()]), categoryUnits: sort([...categoryUnit.values()]).sort((a, b) => a.category.localeCompare(b.category) || a.unit.localeCompare(b.unit)) };
 }
 
-export function buildAnalyticsOrderSummary(orders: Order[], products: Product[], fromDate?: string, toDate?: string): AnalyticsOrderSummary {
+function monthOrdinal(month: string): number {
+  return Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1;
+}
+
+function monthFromOrdinal(ordinal: number): string {
+  return `${Math.floor(ordinal / 12).toString().padStart(4, '0')}-${String(ordinal % 12 + 1).padStart(2, '0')}`;
+}
+
+export function buildAnalyticsOrderSummary(
+  orders: Order[], products: Product[], fromDate?: string, toDate?: string, now = new Date(),
+): AnalyticsOrderSummary {
   const filtered = orders.filter((order) => (!fromDate || order.deliveryDate >= fromDate) && (!toDate || order.deliveryDate <= toDate));
   const productById = new Map(products.map((product) => [product.id, product]));
   const rangedQuantities = new Map<string, { productId: string; name: string; quantity: number; category: string }>();
@@ -196,24 +223,44 @@ export function buildAnalyticsOrderSummary(orders: Order[], products: Product[],
   const leastOrderedItems = [...rankings]
     .sort((left, right) => left.unitsOrdered - right.unitsOrdered || left.name.localeCompare(right.name)).slice(0, 5);
 
-  const dates = filtered.map((order) => order.deliveryDate).filter(Boolean).sort();
-  const useDayBuckets = dates.length > 0 && (Boolean(fromDate || toDate))
-    && (new Date(`${dates[dates.length - 1]}T00:00:00.000Z`).getTime() - new Date(`${dates[0]}T00:00:00.000Z`).getTime()) / 86_400_000 <= 31;
-  const trendBuckets = new Map<string, { month: string; sales: number; orders: number }>();
+  const trendBuckets = new Map<string, AnalyticsOrderSummary['salesTrendData'][number]>();
   for (const order of filtered) {
-    const key = useDayBuckets ? order.deliveryDate : order.deliveryDate.slice(0, 7);
-    if (!key) continue;
-    const bucket = trendBuckets.get(key) ?? {
-      month: useDayBuckets
-        ? new Date(`${key}T00:00:00.000Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
-        : new Date(`${key}-01T00:00:00.000Z`).toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' }),
+    const month = order.deliveryDate.slice(0, 7);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) continue;
+    const bucket = trendBuckets.get(month) ?? {
+      month,
       sales: 0,
       orders: 0,
+      grossOrderValue: 0,
+      grossSales: 0,
+      cancelledOrders: 0,
+      nonCancelledOrders: 0,
     };
-    if (order.orderStatus !== 'cancelled') bucket.sales += order.total;
+    if (order.orderStatus === 'cancelled') bucket.cancelledOrders += 1;
+    else {
+      bucket.nonCancelledOrders += 1;
+      bucket.sales += order.total;
+      bucket.grossOrderValue += order.total;
+    }
+    if (order.orderStatus === 'delivered') bucket.grossSales += order.total;
     bucket.orders += 1;
-    trendBuckets.set(key, bucket);
+    trendBuckets.set(month, bucket);
   }
+
+  const observedMonths = [...trendBuckets.keys()].sort();
+  const currentMonth = now.toISOString().slice(0, 7);
+  const firstMonth = fromDate?.slice(0, 7) ?? observedMonths[0] ?? toDate?.slice(0, 7) ?? currentMonth;
+  const lastMonth = toDate?.slice(0, 7) ?? [observedMonths.at(-1), currentMonth, fromDate?.slice(0, 7)].filter(Boolean).sort().at(-1)!;
+  const firstOrdinal = monthOrdinal(firstMonth);
+  const lastOrdinal = monthOrdinal(lastMonth);
+  const monthlyTrend = firstOrdinal <= lastOrdinal
+    ? Array.from({ length: lastOrdinal - firstOrdinal + 1 }, (_, index) => {
+      const month = monthFromOrdinal(firstOrdinal + index);
+      return trendBuckets.get(month) ?? {
+        month, sales: 0, orders: 0, grossOrderValue: 0, grossSales: 0, cancelledOrders: 0, nonCancelledOrders: 0,
+      };
+    })
+    : [];
 
   return {
     totalOrderCount: filtered.length,
@@ -222,7 +269,7 @@ export function buildAnalyticsOrderSummary(orders: Order[], products: Product[],
     mostOrderedItems,
     leastOrderedItems,
     orderedQuantities,
-    salesTrendData: [...trendBuckets.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, row]) => row),
+    salesTrendData: monthlyTrend,
     deliveryDateMonthlySeries: buildDeliveryDateMonthlySeries(filtered, fromDate, toDate),
     aiProductRankings: buildInsightProductRankings(orders, products, fromDate, toDate),
   };
@@ -436,6 +483,65 @@ function yearValue(isoDate: string): number {
 
 function roundTwo(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export function buildDashboardMonthlySalesTrend(
+  orders: Order[],
+  range?: DashboardSalesRange,
+  now = new Date(),
+): DashboardMonthlySalesTrendRow[] {
+  const byMonth = new Map<string, DashboardMonthlySalesTrendRow>();
+  const rowFor = (month: string) => {
+    const existing = byMonth.get(month);
+    if (existing) return existing;
+    const created = {
+      month, transactionCount: 0, cancelledTransactionCount: 0, nonCancelledTransactionCount: 0,
+      grossOrderValue: 0, grossSales: 0,
+    };
+    byMonth.set(month, created);
+    return created;
+  };
+
+  for (const order of orders) {
+    const recordedMonth = monthKey(order.createdAt);
+    const recorded = rowFor(recordedMonth);
+    recorded.transactionCount += 1;
+    if (order.orderStatus === 'cancelled') recorded.cancelledTransactionCount += 1;
+    else {
+      recorded.nonCancelledTransactionCount += 1;
+      recorded.grossOrderValue = roundTwo(recorded.grossOrderValue + order.total);
+    }
+    if (order.orderStatus === 'delivered' && order.deliveryDate) {
+      const deliveryMonth = order.deliveryDate.slice(0, 7);
+      if (/^\d{4}-(0[1-9]|1[0-2])$/.test(deliveryMonth)) {
+        const delivered = rowFor(deliveryMonth);
+        delivered.grossSales = roundTwo(delivered.grossSales + order.total);
+      }
+    }
+  }
+
+  if (!range) return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
+
+  const currentMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const currentKey = currentMonth.toISOString().slice(0, 7);
+  const observedMonths = [...byMonth.keys()].filter((month) => month <= currentKey);
+  if (range === 'ALL' && observedMonths.length === 0) return [];
+
+  const monthCount = range === '6M' ? 6 : range === '1Y' ? 12 : undefined;
+  const firstMonth = monthCount
+    ? new Date(Date.UTC(currentMonth.getUTCFullYear(), currentMonth.getUTCMonth() - monthCount + 1, 1))
+    : new Date(`${observedMonths.sort()[0]}-01T00:00:00.000Z`);
+  const rows: DashboardMonthlySalesTrendRow[] = [];
+  const cursor = new Date(firstMonth);
+  while (cursor <= currentMonth) {
+    const month = cursor.toISOString().slice(0, 7);
+    rows.push(byMonth.get(month) ?? {
+      month, transactionCount: 0, cancelledTransactionCount: 0, nonCancelledTransactionCount: 0,
+      grossOrderValue: 0, grossSales: 0,
+    });
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return rows;
 }
 
 export function buildMonthlySalesTrend(

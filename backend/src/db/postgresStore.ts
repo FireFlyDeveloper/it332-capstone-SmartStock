@@ -1391,7 +1391,7 @@ export async function getNotificationPageDb(input: NotificationPageInput = {}): 
   };
 }
 
-export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: string): Promise<AnalyticsOrderSummary | null> {
+export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: string, now = new Date()): Promise<AnalyticsOrderSummary | null> {
   const pool = getPool();
   if (!pool) return null;
   const { rows } = await pool.query(`
@@ -1434,32 +1434,27 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
       FROM products p
       LEFT JOIN all_item_quantities q ON q.product_id = p.id::text
       WHERE p.deleted_at IS NULL
-    ), date_meta AS (
-      SELECT CASE WHEN ($1::date IS NOT NULL OR $2::date IS NOT NULL)
-          AND MAX(delivery_date) - MIN(delivery_date) <= 31 THEN TRUE ELSE FALSE END AS use_day_buckets
-      FROM filtered_orders WHERE delivery_date IS NOT NULL
-    ), trends AS (
-      SELECT CASE WHEN d.use_day_buckets THEN o.delivery_date
-          ELSE date_trunc('month', o.delivery_date::timestamp)::date END AS bucket,
-        d.use_day_buckets,
-        COALESCE(SUM(o.total_amount) FILTER (WHERE o.order_status <> 'cancelled'), 0)::double precision AS sales,
-        COUNT(*)::int AS orders
-      FROM filtered_orders o CROSS JOIN date_meta d
-      WHERE o.delivery_date IS NOT NULL
-      GROUP BY 1, d.use_day_buckets
     ), monthly_base AS (
       SELECT date_trunc('month', delivery_date::timestamp)::date AS month,
         COUNT(*)::int AS order_count,
-        COALESCE(SUM(total_amount) FILTER (WHERE order_status <> 'cancelled'), 0)::double precision AS gross_sales
+        COUNT(*) FILTER (WHERE order_status = 'cancelled')::int AS cancelled_order_count,
+        COUNT(*) FILTER (WHERE order_status <> 'cancelled')::int AS non_cancelled_order_count,
+        COALESCE(SUM(total_amount) FILTER (WHERE order_status <> 'cancelled'), 0)::double precision AS gross_order_value,
+        COALESCE(SUM(total_amount) FILTER (WHERE order_status = 'delivered'), 0)::double precision AS gross_sales
       FROM filtered_orders WHERE delivery_date IS NOT NULL GROUP BY 1
     ), month_bounds AS (
-      SELECT COALESCE(date_trunc('month', $1::date)::date, MIN(month), date_trunc('month', $2::date)::date) AS first_month,
-        COALESCE(date_trunc('month', $2::date)::date, MAX(month),
-          CASE WHEN $1::date IS NOT NULL THEN date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date END,
-          date_trunc('month', $1::date)::date) AS last_month
+      SELECT COALESCE(date_trunc('month', $1::date)::date, MIN(month), date_trunc('month', $2::date)::date,
+          date_trunc('month', $3::timestamptz AT TIME ZONE 'UTC')::date) AS first_month,
+        COALESCE(date_trunc('month', $2::date)::date,
+          GREATEST(COALESCE(MAX(month), date_trunc('month', $3::timestamptz AT TIME ZONE 'UTC')::date),
+            date_trunc('month', $3::timestamptz AT TIME ZONE 'UTC')::date,
+            COALESCE(date_trunc('month', $1::date)::date, date_trunc('month', $3::timestamptz AT TIME ZONE 'UTC')::date))) AS last_month
       FROM monthly_base
     ), monthly_series AS (
       SELECT gs.month::date AS month, COALESCE(m.order_count, 0)::int AS order_count,
+        COALESCE(m.cancelled_order_count, 0)::int AS cancelled_order_count,
+        COALESCE(m.non_cancelled_order_count, 0)::int AS non_cancelled_order_count,
+        COALESCE(m.gross_order_value, 0)::double precision AS gross_order_value,
         COALESCE(m.gross_sales, 0)::double precision AS gross_sales
       FROM month_bounds b CROSS JOIN LATERAL generate_series(b.first_month, b.last_month, interval '1 month') gs(month)
       LEFT JOIN monthly_base m ON m.month = gs.month::date
@@ -1520,10 +1515,11 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
         'unitsOrdered', r.units_ordered, 'status', r.status) ORDER BY r.units_ordered ASC, r.name COLLATE "C", r.product_id COLLATE "C")
         FROM (SELECT * FROM rankings ORDER BY units_ordered ASC, name COLLATE "C", product_id COLLATE "C" LIMIT 5) r), '[]'::jsonb) AS least_ordered_items,
       COALESCE((SELECT jsonb_object_agg(product_id, quantity) FROM range_item_quantities), '{}'::jsonb) AS ordered_quantities,
-      COALESCE((SELECT jsonb_agg(jsonb_build_object(
-        'month', CASE WHEN use_day_buckets THEN to_char(bucket, 'FMMon FMDD') ELSE to_char(bucket, 'FMMon YY') END,
-        'sales', sales, 'orders', orders) ORDER BY bucket ASC) FROM trends), '[]'::jsonb) AS sales_trend_data,
-      COALESCE((SELECT jsonb_agg(jsonb_build_object('month', to_char(month, 'YYYY-MM'), 'orderCount', order_count, 'grossSales', gross_sales) ORDER BY month)
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('month', to_char(month, 'YYYY-MM'),
+        'sales', gross_order_value, 'orders', order_count, 'grossOrderValue', gross_order_value,
+        'grossSales', gross_sales, 'cancelledOrders', cancelled_order_count, 'nonCancelledOrders', non_cancelled_order_count)
+        ORDER BY month) FROM monthly_series), '[]'::jsonb) AS sales_trend_data,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('month', to_char(month, 'YYYY-MM'), 'orderCount', order_count, 'grossSales', gross_order_value) ORDER BY month)
         FROM (SELECT * FROM monthly_series ORDER BY month DESC LIMIT 12) capped), '[]'::jsonb) AS delivery_monthly_series,
       GREATEST((SELECT COUNT(*) FROM monthly_series) - 12, 0)::int AS omitted_month_count,
       CASE WHEN (SELECT COUNT(*) FROM monthly_series) > 12 THEN (SELECT to_char(MIN(month), 'YYYY-MM') FROM monthly_series) ELSE NULL END AS omitted_before,
@@ -1537,7 +1533,7 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
       GREATEST((SELECT COUNT(*) FROM unit_groups WHERE scope = 'allTime') - 5, 0)::int AS ai_omitted_unit_groups_all_time,
       GREATEST((SELECT COUNT(*) FROM unit_groups WHERE scope = 'selectedRange') - 5, 0)::int AS ai_omitted_unit_groups_selected_range,
       GREATEST((SELECT COUNT(*) FROM fewest_unit_groups) - 5, 0)::int AS ai_omitted_unit_groups_all_time_fewest
-  `, [fromDate ?? null, toDate ?? null]);
+  `, [fromDate ?? null, toDate ?? null, now]);
   const row = rows[0];
   if (!row) return null;
   const decode = (value: unknown): unknown => typeof value === 'string' ? JSON.parse(value) : value;
@@ -1565,7 +1561,13 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
     })),
     orderedQuantities: quantities,
     salesTrendData: array(row.sales_trend_data).map((item) => ({
-      month: String(item.month), sales: Number(item.sales ?? 0), orders: Number(item.orders ?? 0),
+      month: String(item.month),
+      sales: Number(item.sales ?? 0),
+      orders: Number(item.orders ?? 0),
+      grossOrderValue: Number(item.grossOrderValue ?? 0),
+      grossSales: Number(item.grossSales ?? 0),
+      cancelledOrders: Number(item.cancelledOrders ?? 0),
+      nonCancelledOrders: Number(item.nonCancelledOrders ?? 0),
     })),
     deliveryDateMonthlySeries: {
       months: array(row.delivery_monthly_series).map((item) => ({ month: String(item.month), orderCount: Number(item.orderCount ?? 0), grossSales: Number(item.grossSales ?? 0) })),
@@ -1663,6 +1665,9 @@ export async function listRecentActivityDb(limit: number): Promise<RecentActivit
 export interface MonthlySalesTrendDbRow {
   month: string;
   transactionCount: number;
+  cancelledTransactionCount: number;
+  nonCancelledTransactionCount: number;
+  grossOrderValue: number;
   grossSales: number;
 }
 
@@ -1678,17 +1683,36 @@ export async function listMonthlySalesTrendDb(range: '6M' | '1Y' | 'ALL' | undef
         CASE range WHEN '6M' THEN current_month - INTERVAL '5 months'
           WHEN '1Y' THEN current_month - INTERVAL '11 months' END::date AS first_month
       FROM params
-    ), monthly_sales AS (
+    ), transactions AS (
       SELECT date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))::date AS month,
         COUNT(*)::int AS transaction_count,
-        ROUND(SUM(o.total_amount)::numeric, 2)::double precision AS gross_sales
+        COUNT(*) FILTER (WHERE o.order_status = 'cancelled')::int AS cancelled_transaction_count,
+        COUNT(*) FILTER (WHERE o.order_status <> 'cancelled')::int AS non_cancelled_transaction_count,
+        ROUND(COALESCE(SUM(o.total_amount) FILTER (WHERE o.order_status <> 'cancelled'), 0)::numeric, 2)::double precision AS gross_order_value
       FROM orders o CROSS JOIN bounds b
-      WHERE o.deleted_at IS NULL AND o.order_status <> 'cancelled'
-        AND (b.range IS NULL OR (
-          o.created_at < ((b.current_month + INTERVAL '1 month')::timestamp AT TIME ZONE 'UTC')
-          AND (b.range = 'ALL' OR o.created_at >= (b.first_month::timestamp AT TIME ZONE 'UTC'))
-        ))
+      WHERE o.deleted_at IS NULL AND (b.range IS NULL OR (
+        o.created_at < ((b.current_month + INTERVAL '1 month')::timestamp AT TIME ZONE 'UTC')
+        AND (b.range = 'ALL' OR o.created_at >= (b.first_month::timestamp AT TIME ZONE 'UTC'))
+      ))
       GROUP BY date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))::date
+    ), delivered_sales AS (
+      SELECT date_trunc('month', o.delivery_date::timestamp)::date AS month,
+        ROUND(COALESCE(SUM(o.total_amount), 0)::numeric, 2)::double precision AS gross_sales
+      FROM orders o CROSS JOIN bounds b
+      WHERE o.deleted_at IS NULL AND o.order_status = 'delivered'
+        AND (b.range IS NULL OR (
+          o.delivery_date < (b.current_month + INTERVAL '1 month')::date
+          AND (b.range = 'ALL' OR o.delivery_date >= b.first_month)
+        ))
+      GROUP BY date_trunc('month', o.delivery_date::timestamp)::date
+    ), monthly_sales AS (
+      SELECT COALESCE(t.month, d.month) AS month,
+        COALESCE(t.transaction_count, 0)::int AS transaction_count,
+        COALESCE(t.cancelled_transaction_count, 0)::int AS cancelled_transaction_count,
+        COALESCE(t.non_cancelled_transaction_count, 0)::int AS non_cancelled_transaction_count,
+        COALESCE(t.gross_order_value, 0)::double precision AS gross_order_value,
+        COALESCE(d.gross_sales, 0)::double precision AS gross_sales
+      FROM transactions t FULL JOIN delivered_sales d ON d.month = t.month
     ), calendar AS (
       SELECT generate_series(
         CASE WHEN b.range = 'ALL' THEN (SELECT MIN(month) FROM monthly_sales) ELSE b.first_month END,
@@ -1698,18 +1722,23 @@ export async function listMonthlySalesTrendDb(range: '6M' | '1Y' | 'ALL' | undef
       FROM bounds b
       WHERE b.range IS NOT NULL AND (b.range <> 'ALL' OR EXISTS (SELECT 1 FROM monthly_sales))
     ), result AS (
-      SELECT m.month, m.transaction_count, m.gross_sales
-      FROM monthly_sales m CROSS JOIN bounds b WHERE b.range IS NULL
+      SELECT m.* FROM monthly_sales m CROSS JOIN bounds b WHERE b.range IS NULL
       UNION ALL
-      SELECT c.month, COALESCE(m.transaction_count, 0)::int, COALESCE(m.gross_sales, 0)::double precision
+      SELECT c.month, COALESCE(m.transaction_count, 0)::int, COALESCE(m.cancelled_transaction_count, 0)::int,
+        COALESCE(m.non_cancelled_transaction_count, 0)::int, COALESCE(m.gross_order_value, 0)::double precision,
+        COALESCE(m.gross_sales, 0)::double precision
       FROM calendar c LEFT JOIN monthly_sales m ON m.month = c.month
     )
-    SELECT to_char(month, 'YYYY-MM') AS month, transaction_count, gross_sales
+    SELECT to_char(month, 'YYYY-MM') AS month, transaction_count, cancelled_transaction_count,
+      non_cancelled_transaction_count, gross_order_value, gross_sales
     FROM result ORDER BY month ASC
   `, [range ?? null, now]);
   return rows.map((row) => ({
     month: String(row.month),
     transactionCount: Number(row.transaction_count ?? 0),
+    cancelledTransactionCount: Number(row.cancelled_transaction_count ?? 0),
+    nonCancelledTransactionCount: Number(row.non_cancelled_transaction_count ?? 0),
+    grossOrderValue: Number(row.gross_order_value ?? 0),
     grossSales: Number(row.gross_sales ?? 0),
   }));
 }

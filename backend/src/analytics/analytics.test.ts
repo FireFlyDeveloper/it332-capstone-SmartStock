@@ -21,6 +21,7 @@ import {
   buildYtdInboundPurchaseSummary,
   buildDashboardOrderSummary,
   buildMonthlySalesTrend,
+  buildDashboardMonthlySalesTrend,
   buildMonthlyStockMovementByUnit,
   buildDemandForecast,
   paginateDemandForecast,
@@ -104,13 +105,13 @@ async function seedDeterministicInventory() {
 }
 
 describe('analytics pure functions', () => {
-  it('groups monthly sales trend by UTC month with transaction counts and gross sales', () => {
+  it('groups gross order value by order month while separating delivered sales and all transactions', () => {
     _resetOrderStore(false);
     seedDeterministicOrders();
 
-    expect(buildMonthlySalesTrend(listOrders())).toEqual([
-      { month: '2026-01', transactionCount: 1, grossSales: 200 },
-      { month: '2026-02', transactionCount: 1, grossSales: 300 },
+    expect(buildDashboardMonthlySalesTrend(listOrders())).toEqual([
+      { month: '2026-01', transactionCount: 1, cancelledTransactionCount: 0, nonCancelledTransactionCount: 1, grossOrderValue: 200, grossSales: 0 },
+      { month: '2026-02', transactionCount: 2, cancelledTransactionCount: 1, nonCancelledTransactionCount: 1, grossOrderValue: 300, grossSales: 0 },
     ]);
   });
 
@@ -196,8 +197,10 @@ describe('analytics pure functions', () => {
   it('builds compact Analytics order metrics and honors delivery-date filters', () => {
     _resetOrderStore(false);
     seedDeterministicOrders();
+    const fixedNow = new Date('2026-03-15T12:00:00.000Z');
+    listOrders()[0].orderStatus = 'delivered';
 
-    const all = buildAnalyticsOrderSummary(listOrders(), []);
+    const all = buildAnalyticsOrderSummary(listOrders(), [], undefined, undefined, fixedNow);
     expect(all).toMatchObject({
       totalOrderCount: 3,
       averageOrderValue: 250,
@@ -206,35 +209,54 @@ describe('analytics pure functions', () => {
         { productId: 'GLS-1', name: 'Glass', quantity: 2, category: 'Unclassified' },
       ],
       orderedQuantities: { 'ALU-1': 3, 'GLS-1': 2 },
-      salesTrendData: [{ sales: 200, orders: 1 }, { sales: 300, orders: 2 }],
+      salesTrendData: [
+        { month: '2026-01', sales: 200, orders: 1, grossOrderValue: 200, grossSales: 200, cancelledOrders: 0, nonCancelledOrders: 1 },
+        { month: '2026-02', sales: 300, orders: 2, grossOrderValue: 300, grossSales: 0, cancelledOrders: 1, nonCancelledOrders: 1 },
+        { month: '2026-03', sales: 0, orders: 0, grossOrderValue: 0, grossSales: 0, cancelledOrders: 0, nonCancelledOrders: 0 },
+      ],
       mostOrderedItems: [],
       leastOrderedItems: [],
     });
 
-    expect(buildAnalyticsOrderSummary(listOrders(), [], '2026-01-20', '2026-01-20')).toMatchObject({
+    expect(buildAnalyticsOrderSummary(listOrders(), [], '2026-01-20', '2026-01-20', fixedNow)).toMatchObject({
       totalOrderCount: 1,
       averageOrderValue: 200,
-      salesTrendData: [{ sales: 200, orders: 1 }],
+      salesTrendData: [{ month: '2026-01', sales: 200, orders: 1, grossOrderValue: 200, grossSales: 200, cancelledOrders: 0, nonCancelledOrders: 1 }],
     });
+  });
+
+  it('uses the delivery month for delivered sales and splits cancelled transactions', () => {
+    _resetOrderStore(false);
+    seedDeterministicOrders();
+    const januaryOrder = listOrders()[0];
+    januaryOrder.orderStatus = 'delivered';
+    januaryOrder.deliveryDate = '2026-02-02';
+    const summary = buildAnalyticsOrderSummary(listOrders(), [], '2026-02-01', '2026-02-28', new Date('2026-03-15T12:00:00.000Z'));
+    expect(summary.salesTrendData).toEqual([
+      { month: '2026-02', sales: 500, orders: 3, grossOrderValue: 500, grossSales: 200, cancelledOrders: 1, nonCancelledOrders: 2 },
+    ]);
   });
 
   it('zero-fills a selected calendar range and includes the current month', () => {
     _resetOrderStore(false);
     seedDeterministicOrders();
     const now = new Date('2026-03-15T12:00:00.000Z');
+    const dashboardOrders = listOrders();
+    dashboardOrders[0].orderStatus = 'delivered';
+    dashboardOrders[0].deliveryDate = '2026-02-20';
 
-    expect(buildMonthlySalesTrend(listOrders(), '6M', now)).toEqual([
-      { month: '2025-10', transactionCount: 0, grossSales: 0 },
-      { month: '2025-11', transactionCount: 0, grossSales: 0 },
-      { month: '2025-12', transactionCount: 0, grossSales: 0 },
-      { month: '2026-01', transactionCount: 1, grossSales: 200 },
-      { month: '2026-02', transactionCount: 1, grossSales: 300 },
-      { month: '2026-03', transactionCount: 0, grossSales: 0 },
+    expect(buildDashboardMonthlySalesTrend(dashboardOrders, '6M', now)).toEqual([
+      { month: '2025-10', transactionCount: 0, cancelledTransactionCount: 0, nonCancelledTransactionCount: 0, grossOrderValue: 0, grossSales: 0 },
+      { month: '2025-11', transactionCount: 0, cancelledTransactionCount: 0, nonCancelledTransactionCount: 0, grossOrderValue: 0, grossSales: 0 },
+      { month: '2025-12', transactionCount: 0, cancelledTransactionCount: 0, nonCancelledTransactionCount: 0, grossOrderValue: 0, grossSales: 0 },
+      { month: '2026-01', transactionCount: 1, cancelledTransactionCount: 0, nonCancelledTransactionCount: 1, grossOrderValue: 200, grossSales: 0 },
+      { month: '2026-02', transactionCount: 2, cancelledTransactionCount: 1, nonCancelledTransactionCount: 1, grossOrderValue: 300, grossSales: 200 },
+      { month: '2026-03', transactionCount: 0, cancelledTransactionCount: 0, nonCancelledTransactionCount: 0, grossOrderValue: 0, grossSales: 0 },
     ]);
-    expect(buildMonthlySalesTrend(listOrders(), 'ALL', now)).toEqual([
-      { month: '2026-01', transactionCount: 1, grossSales: 200 },
-      { month: '2026-02', transactionCount: 1, grossSales: 300 },
-      { month: '2026-03', transactionCount: 0, grossSales: 0 },
+    expect(buildDashboardMonthlySalesTrend(dashboardOrders, 'ALL', now)).toEqual([
+      { month: '2026-01', transactionCount: 1, cancelledTransactionCount: 0, nonCancelledTransactionCount: 1, grossOrderValue: 200, grossSales: 0 },
+      { month: '2026-02', transactionCount: 2, cancelledTransactionCount: 1, nonCancelledTransactionCount: 1, grossOrderValue: 300, grossSales: 200 },
+      { month: '2026-03', transactionCount: 0, cancelledTransactionCount: 0, nonCancelledTransactionCount: 0, grossOrderValue: 0, grossSales: 0 },
     ]);
   });
 
@@ -476,7 +498,7 @@ describe('analytics routes', () => {
       totalOrderCount: 1,
       averageOrderValue: 200,
       orderedQuantities: { 'GLS-1': 2 },
-      salesTrendData: [{ sales: 200, orders: 1 }],
+      salesTrendData: [{ month: '2026-01', sales: 200, orders: 1, grossOrderValue: 200, grossSales: 0, cancelledOrders: 0, nonCancelledOrders: 1 }],
     });
 
     expect((await app.request('/analytics/orders/summary?fromDate=2026-02-31', { headers })).status).toBe(400);
@@ -512,8 +534,8 @@ describe('analytics routes', () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([
-      { month: '2026-01', transactionCount: 1, grossSales: 200 },
-      { month: '2026-02', transactionCount: 1, grossSales: 300 },
+      { month: '2026-01', transactionCount: 1, cancelledTransactionCount: 0, nonCancelledTransactionCount: 1, grossOrderValue: 200, grossSales: 0 },
+      { month: '2026-02', transactionCount: 2, cancelledTransactionCount: 1, nonCancelledTransactionCount: 1, grossOrderValue: 300, grossSales: 0 },
     ]);
   });
 

@@ -38,6 +38,7 @@ import {
   BarChart,
   Bar,
   Cell,
+  Legend,
 } from 'recharts';
 
 interface KpiCardProps {
@@ -194,12 +195,19 @@ export const Dashboard: React.FC = () => {
   const activeOrders = orderSummary?.activeOrderCount ?? 0;
   const inTransitDeliveries = deliverySummary.inTransitCount;
 
+  const currentMonthKey = new Date().toISOString().slice(0, 7);
   const monthlySales = useMemo(
-    () => salesTrend.map((row) => ({ ...row, month: formatMonthLabel(row.month) })),
-    [salesTrend],
+    () => salesTrend.map((row) => ({
+      ...row,
+      monthKey: row.month,
+      month: `${formatMonthLabel(row.month)}${row.month === currentMonthKey ? ' (MTD)' : ''}`,
+    })),
+    [salesTrend, currentMonthKey],
   );
-  const currentMonthOrderValue = monthlySales.at(-1)?.grossSales ?? 0;
-  const totalOrderValueInRange = monthlySales.reduce((sum, row) => sum + row.grossSales, 0);
+  const currentMonth = monthlySales.find((row) => row.monthKey === currentMonthKey);
+  const currentMonthOrderValue = currentMonth?.grossOrderValue ?? 0;
+  const currentMonthGrossSales = currentMonth?.grossSales ?? 0;
+  const totalOrderValueInRange = monthlySales.reduce((sum, row) => sum + row.grossOrderValue, 0);
   const averageMonthlyOrderValue = monthlySales.length > 0
     ? Math.round(totalOrderValueInRange / monthlySales.length)
     : 0;
@@ -220,7 +228,7 @@ export const Dashboard: React.FC = () => {
     ['delivered', deliverySummary.deliveredCount],
   ] as [string, number][]).filter(([, count]) => count > 0).sort(([a], [b]) => a.localeCompare(b));
 
-  const customTooltipFormatter = (value: number) => [formatCurrency(value), 'Gross order value'];
+  const customTooltipFormatter = (value: number, name: string) => [formatCurrency(value), name];
 
   const retryDashboard = () => {
     setDashboardRefreshKey((current) => current + 1);
@@ -274,7 +282,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* ── 2. 5-Column KPI Row ─────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3.5 sm:gap-4 2xl:gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4 2xl:gap-5">
         {/* KPI 1: Current stock at listed unit prices */}
         <KpiCard
           label="STOCK AT LIST PRICE"
@@ -286,11 +294,19 @@ export const Dashboard: React.FC = () => {
 
         {/* KPI 2: Current-month gross order value */}
         <KpiCard
-          label="THIS MONTH'S ORDER TOTAL"
+          label="THIS MONTH'S GROSS ORDER VALUE (MTD)"
           value={salesTrendLoading ? 'Loading…' : salesTrendError ? 'Unavailable' : formatCurrencyWhole(currentMonthOrderValue)}
           icon={TrendingUp}
           iconBoxBg="bg-emerald-50"
           iconColor="text-[#10b981]"
+        />
+
+        <KpiCard
+          label="THIS MONTH'S GROSS SALES (MTD)"
+          value={salesTrendLoading ? 'Loading…' : salesTrendError ? 'Unavailable' : formatCurrencyWhole(currentMonthGrossSales)}
+          icon={TrendingUp}
+          iconBoxBg="bg-teal-50"
+          iconColor="text-teal-600"
         />
 
         {/* KPI 3: Active Orders (Blue/Info) */}
@@ -337,12 +353,12 @@ export const Dashboard: React.FC = () => {
                     FINANCIAL OVERVIEW
                   </span>
                   <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em]">
-                    Monthly Order Value
+                    Monthly Gross Sales &amp; Gross Order Value
                   </h3>
                 </div>
 
                 <select
-                  aria-label="Monthly order value date range"
+                  aria-label="Monthly sales date range"
                   value={timeRange}
                   onChange={(event) => setTimeRange(event.target.value as DashboardSalesRange)}
                   className="input w-auto self-start"
@@ -362,7 +378,7 @@ export const Dashboard: React.FC = () => {
                     <span>Could not load sales trend: {salesTrendError}</span>
                     <button type="button" onClick={retryDashboard} className="font-semibold text-indigo-600">Retry</button>
                   </div>
-                ) : monthlySales.length === 0 || monthlySales.every((row) => row.transactionCount === 0) ? (
+                ) : monthlySales.length === 0 ? (
                   <div className="flex h-full items-center justify-center text-sm text-slate-500">No order records in this range.</div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
@@ -374,6 +390,10 @@ export const Dashboard: React.FC = () => {
                       <linearGradient id="indigoTrendGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.25} />
                         <stop offset="95%" stopColor="#4f46e5" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="tealTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#0d9488" stopOpacity={0.18} />
+                        <stop offset="95%" stopColor="#0d9488" stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -402,9 +422,11 @@ export const Dashboard: React.FC = () => {
                         fontWeight: '600',
                       }}
                     />
+                    <Legend />
                     <Area
                       type="monotone"
-                      dataKey="grossSales"
+                      dataKey="grossOrderValue"
+                      name="Gross Order Value"
                       stroke="#4f46e5"
                       strokeWidth={3}
                       fillOpacity={1}
@@ -416,6 +438,15 @@ export const Dashboard: React.FC = () => {
                         strokeWidth: 3,
                       }}
                     />
+                    <Area
+                      type="monotone"
+                      dataKey="grossSales"
+                      name="Gross Sales (delivered)"
+                      stroke="#0d9488"
+                      strokeWidth={2.5}
+                      fill="url(#tealTrendGrad)"
+                      fillOpacity={1}
+                    />
                   </AreaChart>
                   </ResponsiveContainer>
                   )}
@@ -423,7 +454,7 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500">
-              Total value of orders that were not cancelled. Includes unpaid or partly paid orders; refunds are not subtracted.
+              Gross Order Value uses order-record month and excludes cancelled orders. Gross Sales includes delivered orders only, grouped by recorded delivery date because a separate completion timestamp is not stored. Current month is month-to-date.
             </div>
           </div>
 
@@ -528,7 +559,7 @@ export const Dashboard: React.FC = () => {
                     OVERALL PERFORMANCE
                   </span>
                   <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Order total in selected range
+                    Gross Order Value in selected range
                   </p>
                   {/* Large Currency Total */}
                   <div className="mt-2">
@@ -545,7 +576,7 @@ export const Dashboard: React.FC = () => {
                   <div role="status" className="flex h-full items-center justify-center text-sm text-slate-500">Loading order values…</div>
                 ) : salesTrendError ? (
                   <div role="alert" className="flex h-full items-center justify-center text-center text-sm text-rose-700">Could not load order values: {salesTrendError}</div>
-                ) : monthlySales.length === 0 || monthlySales.every((row) => row.transactionCount === 0) ? (
+                ) : monthlySales.length === 0 ? (
                   <div className="flex h-full items-center justify-center text-sm text-slate-500">No order records in this range.</div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
@@ -579,7 +610,7 @@ export const Dashboard: React.FC = () => {
                         fontWeight: '600',
                       }}
                     />
-                    <Bar dataKey="grossSales" radius={[8, 8, 0, 0]}>
+                    <Bar dataKey="grossOrderValue" name="Gross Order Value" radius={[8, 8, 0, 0]}>
                       {monthlySales.map((_, idx) => (
                         <Cell
                           key={`bar-${idx}`}
@@ -594,7 +625,7 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span>Monthly average (zero-sales months included): {salesTrendLoading || salesTrendError ? '—' : formatCurrency(averageMonthlyOrderValue)}</span>
+              <span>Monthly average gross order value (zero-transaction months included; current month is MTD): {salesTrendLoading || salesTrendError ? '—' : formatCurrency(averageMonthlyOrderValue)}</span>
               <span className="font-extrabold text-slate-800">{salesTrendLoading || salesTrendError ? '—' : `${monthlySales.length} months in range`}</span>
             </div>
           </div>

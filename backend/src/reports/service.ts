@@ -59,7 +59,14 @@ export async function buildOrderSummaryReport(fromDate?: string, toDate?: string
 }
 
 export async function buildMonthlySalesReport() {
-  const rows = await getSalesTrends();
+  const monthlyTrend = await getSalesTrends();
+  const rows = monthlyTrend
+    .filter((row) => row.nonCancelledTransactionCount > 0)
+    .map(({ month, nonCancelledTransactionCount, grossOrderValue }) => ({
+      month,
+      transactionCount: nonCancelledTransactionCount,
+      grossSales: grossOrderValue,
+    }));
   return {
     report: 'monthly_sales' as const,
     totals: {

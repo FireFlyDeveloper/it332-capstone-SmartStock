@@ -19,7 +19,7 @@ import {
   buildMonthlyStockMovementByUnit,
   buildMonthlyStockMovementReport,
   buildOutboundMovementByUnit,
-  buildMonthlySalesTrend,
+  buildDashboardMonthlySalesTrend,
   buildRecentActivity,
   classifyMovement,
   buildItemMovementClassification,
@@ -46,7 +46,7 @@ export async function getSalesTrends(range?: DashboardSalesRange, now = new Date
     if (!rows) throw new Error('PostgreSQL is unavailable for monthly sales trends');
     return rows;
   }
-  return buildMonthlySalesTrend(listOrders(), range, now);
+  return buildDashboardMonthlySalesTrend(listOrders(), range, now);
 }
 
 export async function getDashboardOrderSummary() {
@@ -58,13 +58,13 @@ export async function getDashboardOrderSummary() {
   return buildDashboardOrderSummary(listOrders(), listProducts());
 }
 
-export async function getAnalyticsOrderSummary(fromDate?: string, toDate?: string) {
+export async function getAnalyticsOrderSummary(fromDate?: string, toDate?: string, now = new Date()) {
   if (isDbSyncActive()) {
-    const summary = await getAnalyticsOrderSummaryDb(fromDate, toDate);
+    const summary = await getAnalyticsOrderSummaryDb(fromDate, toDate, now);
     if (!summary) throw new Error('PostgreSQL is unavailable for analytics order summary');
     return summary;
   }
-  return buildAnalyticsOrderSummary(listOrders(), listProducts(), fromDate, toDate);
+  return buildAnalyticsOrderSummary(listOrders(), listProducts(), fromDate, toDate, now);
 }
 
 export async function getRecentActivity(limit = 6) {

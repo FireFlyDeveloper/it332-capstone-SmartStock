@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import { formatCurrency, formatDateInput } from '../utils/helpers';
+import { formatCalendarMonth, latestConsecutiveCompleteMonths } from '../utils/monthlyTrend';
 import InsightBreakdown from '../components/InsightBreakdown';
 import { getAnalyticsInsights, getAnalyticsItemMovementPage, getAnalyticsMonthlyMovement, getAnalyticsOrderSummary, getDemandForecastPage, getProductsPage, type AnalyticsInsightsResponse, type AnalyticsMonthlyMovementResponse, type AnalyticsItemMovementPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse } from '../api';
 import { toast } from 'sonner';
@@ -552,8 +553,20 @@ export const Analytics: React.FC = () => {
 
   const salesTrendData = orderSummary?.salesTrendData ?? [];
   const chartSalesData = salesTrendData;
-  const salesTrendChange = salesTrendData.length >= 2 ? salesTrendData[salesTrendData.length - 1].sales - salesTrendData[salesTrendData.length - 2].sales : null;
-  const orderTrendChange = salesTrendData.length >= 2 ? salesTrendData[salesTrendData.length - 1].orders - salesTrendData[salesTrendData.length - 2].orders : null;
+  const comparableMonths = latestConsecutiveCompleteMonths(salesTrendData, fromDate, toDate);
+  const grossSalesChange = comparableMonths
+    ? comparableMonths.current.grossSales - comparableMonths.previous.grossSales
+    : null;
+  const grossOrderValueChange = comparableMonths
+    ? comparableMonths.current.grossOrderValue - comparableMonths.previous.grossOrderValue
+    : null;
+  const orderTrendChange = comparableMonths
+    ? comparableMonths.current.orders - comparableMonths.previous.orders
+    : null;
+  const comparisonLabel = comparableMonths
+    ? `${formatCalendarMonth(comparableMonths.current.month)} vs ${formatCalendarMonth(comparableMonths.previous.month)}`
+    : '';
+  const hasMonthToDate = salesTrendData.some((row) => row.month === new Date().toISOString().slice(0, 7));
   const monthlyMovementChartRows = monthlyMovement?.months.map((month) => {
     const row = monthlyMovement.rows.find((item) => item.month === month && item.unit === monthlyMovementUnit);
     return { month, inboundQuantity: row?.inboundQuantity ?? 0, outboundQuantity: row?.outboundQuantity ?? 0 };
@@ -753,7 +766,7 @@ export const Analytics: React.FC = () => {
                 >
                   {(orderSummary?.totalOrderCount ?? 0)}
                 </span>
-                <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Includes cancelled order records.</p>
+                <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Counts all recorded order transactions in the selected delivery-date range, including cancelled and non-cancelled orders.</p>
               </div>
             </div>
           </div>
@@ -809,73 +822,70 @@ export const Analytics: React.FC = () => {
         </div>
 
         {/* Charts Row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Monthly Gross Order Value */}
+        <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-950">
+          Charts always use calendar-month buckets. {hasMonthToDate ? 'The current month is marked MTD; month-over-month comparisons use only the latest two complete, consecutive months in the selected range.' : 'Month-over-month comparisons are shown only for complete, consecutive calendar months.'}
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          {/* Delivered sales */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Monthly Gross Order Value {salesTrendChange !== null && <span title="Change from the previous month" className={`ml-2 inline-flex items-center text-xs font-semibold ${salesTrendChange >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{salesTrendChange >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}{formatCurrency(Math.abs(salesTrendChange))} vs prior month</span>}</h3>
-                <p className="text-xs text-slate-500">By delivery date; non-cancelled orders, including unpaid/partial amounts; refunds not deducted.</p>
+                <h3 className="text-lg font-bold text-slate-900">Monthly Gross Sales {grossSalesChange !== null && <span title={`Complete-month change: ${comparisonLabel}`} className={`ml-2 inline-flex items-center text-xs font-semibold ${grossSalesChange >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{grossSalesChange >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}{formatCurrency(Math.abs(grossSalesChange))} vs {comparableMonths ? formatCalendarMonth(comparableMonths.previous.month) : 'prior month'}</span>}</h3>
+                <p className="text-xs text-slate-500">Delivered orders only, by recorded delivery date. No separate completion timestamp is stored; refunds are not deducted.</p>
               </div>
-              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 shadow-2xs">
-                <TrendingUp className="w-4 h-4" />
-              </div>
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 shadow-2xs"><TrendingUp className="w-4 h-4" /></div>
             </div>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={chartSalesData}>
-                <defs>
-                  <linearGradient id="colorSales2" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
+                <defs><linearGradient id="grossSalesGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.28}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient></defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} />
-                <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} tickFormatter={(value) => value >= 1000 ? `₱${Math.round(value/1000)}k` : `₱${value}`} />
-                <Tooltip 
-                  formatter={(value: number) => [formatCurrency(value), 'Gross order value']}
-                  contentStyle={{
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #f1f5f9',
-                    borderRadius: '12px',
-                    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.08)',
-                    fontSize: '12px',
-                    fontWeight: '600',
-                  }}
-                />
-                <Area type="monotone" dataKey="sales" stroke="#0ea5e9" strokeWidth={2.5} fillOpacity={1} fill="url(#colorSales2)" />
+                <XAxis dataKey="month" tickFormatter={(month) => formatCalendarMonth(String(month))} stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} />
+                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} tickFormatter={(value) => value >= 1000 ? `₱${Math.round(value/1000)}k` : `₱${value}`} />
+                <Tooltip labelFormatter={(month) => formatCalendarMonth(String(month))} formatter={(value: number) => [formatCurrency(value), 'Gross sales']} contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #f1f5f9', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.08)', fontSize: '12px', fontWeight: '600' }} />
+                <Area type="monotone" dataKey="grossSales" name="Gross Sales" stroke="#10b981" strokeWidth={2.5} fill="url(#grossSalesGradient)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Orders per Month */}
+          {/* Gross order value */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Order Records per Month {orderTrendChange !== null && <span title="Change from the previous month" className={`ml-2 inline-flex items-center text-xs font-semibold ${orderTrendChange >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{orderTrendChange >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}{Math.abs(orderTrendChange)} orders vs prior month</span>}</h3>
-                <p className="text-xs text-slate-500">By delivery date; count includes cancelled records.</p>
+                <h3 className="text-lg font-bold text-slate-900">Monthly Gross Order Value {grossOrderValueChange !== null && <span title={`Complete-month change: ${comparisonLabel}`} className={`ml-2 inline-flex items-center text-xs font-semibold ${grossOrderValueChange >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{grossOrderValueChange >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}{formatCurrency(Math.abs(grossOrderValueChange))} vs {comparableMonths ? formatCalendarMonth(comparableMonths.previous.month) : 'prior month'}</span>}</h3>
+                <p className="text-xs text-slate-500">By delivery date; all non-cancelled orders, whether delivered or not. Refunds are not deducted.</p>
               </div>
-              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0 shadow-2xs">
-                <Package className="w-4 h-4" />
-              </div>
+              <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0 shadow-2xs"><TrendingUp className="w-4 h-4" /></div>
             </div>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={chartSalesData}>
+                <defs><linearGradient id="grossOrderGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.28}/><stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/></linearGradient></defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="month" tickFormatter={(month) => formatCalendarMonth(String(month))} stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} />
+                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} tickFormatter={(value) => value >= 1000 ? `₱${Math.round(value/1000)}k` : `₱${value}`} />
+                <Tooltip labelFormatter={(month) => formatCalendarMonth(String(month))} formatter={(value: number) => [formatCurrency(value), 'Gross order value']} contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #f1f5f9', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.08)', fontSize: '12px', fontWeight: '600' }} />
+                <Area type="monotone" dataKey="grossOrderValue" name="Gross Order Value" stroke="#0ea5e9" strokeWidth={2.5} fill="url(#grossOrderGradient)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* All recorded order transactions */}
+          <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Monthly Order Transactions {orderTrendChange !== null && <span title={`Complete-month change: ${comparisonLabel}`} className={`ml-2 inline-flex items-center text-xs font-semibold ${orderTrendChange >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{orderTrendChange >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}{Math.abs(orderTrendChange)} vs {comparableMonths ? formatCalendarMonth(comparableMonths.previous.month) : 'prior month'}</span>}</h3>
+                <p className="text-xs text-slate-500">Counts all recorded orders by delivery date, including cancelled and non-cancelled transactions.</p>
+              </div>
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0 shadow-2xs"><Package className="w-4 h-4" /></div>
+            </div>
+            <ResponsiveContainer width="100%" height={260}>
               <BarChart data={chartSalesData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} />
-                <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} />
-                <Tooltip 
-                  formatter={(value: number) => [value, 'Orders']}
-                  contentStyle={{
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #f1f5f9',
-                    borderRadius: '12px',
-                    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.08)',
-                    fontSize: '12px',
-                    fontWeight: '600',
-                  }}
-                />
-                <Bar dataKey="orders" fill="#22c55e" radius={[6, 6, 0, 0]} />
+                <XAxis dataKey="month" tickFormatter={(month) => formatCalendarMonth(String(month))} stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} />
+                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} allowDecimals={false} />
+                <Tooltip labelFormatter={(month) => formatCalendarMonth(String(month))} formatter={(value: number, name: string) => [value, name]} contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #f1f5f9', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.08)', fontSize: '12px', fontWeight: '600' }} />
+                <Legend />
+                <Bar dataKey="nonCancelledOrders" name="Non-cancelled" stackId="transactions" fill="#4f46e5" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="cancelledOrders" name="Cancelled" stackId="transactions" fill="#f97316" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
