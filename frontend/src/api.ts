@@ -142,13 +142,13 @@ export interface DemandForecastProduct {
   policyAssessment: 'below_reorder_point' | 'below_forecast' | 'adequate' | 'insufficient_history'
 }
 export interface DemandForecastResponse {
-  method: 'simple_exponential_smoothing'; alpha: number; horizonMonths: number; minimumPositiveMonths: number; generatedAt: string;
+  method: 'simple_exponential_smoothing'; alpha: number; horizonMonths: number; minimumPositiveMonths: number; generatedAt: string; historyMonths: number; assumption: string;
   products: DemandForecastProduct[]; summary: Record<string, number>
 }
 
 export interface PurchaseAnalyticsResponse {
   year: number; totalSpend: number; pricedReceiptCount: number; unpricedReceiptCount: number; unpricedQuantity: number;
-  groups: { materialType: string; supplier: string; transactionCount: number; totalQuantity: number; totalCost: number; unpricedReceiptCount: number; unpricedQuantity: number }[]
+  groups: { materialType: string; supplier: string; productId: string; productName: string; sku: string; unit: string; transactionCount: number; totalQuantity: number; totalCost: number; unpricedReceiptCount: number; unpricedQuantity: number }[]
 }
 
 export interface PolicyPerformancePeriod {
@@ -607,8 +607,9 @@ export function getAnalyticsMovement(threshold: number): Promise<AnalyticsMoveme
   return apiFetch<AnalyticsMovementMetric[]>(`/analytics/movement?threshold=${encodeURIComponent(String(threshold))}`)
 }
 
-export function getAnalyticsItemMovementPage(options: { fromDate?: string; toDate?: string; allTime?: boolean; threshold?: number; limit?: number; cursor?: string | null } = {}): Promise<AnalyticsItemMovementPage> {
+export function getAnalyticsItemMovementPage(options: { month?: string; fromDate?: string; toDate?: string; allTime?: boolean; threshold?: number; limit?: number; cursor?: string | null } = {}): Promise<AnalyticsItemMovementPage> {
   const params = new URLSearchParams()
+  if (options.month) params.set('month', options.month)
   if (options.fromDate) params.set('fromDate', options.fromDate)
   if (options.toDate) params.set('toDate', options.toDate)
   if (options.allTime) params.set('scope', 'all')

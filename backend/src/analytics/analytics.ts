@@ -341,6 +341,10 @@ export interface RecentActivityRecord {
 export interface AnnualPurchaseSummaryRow {
   materialType: Product['category'] | 'unknown';
   supplier: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  unit: string;
   transactionCount: number;
   totalQuantity: number;
   totalCost: number;
@@ -651,10 +655,15 @@ export function buildAnnualPurchaseSummary(
     const product = productById.get(movement.productId);
     const materialType = product?.category ?? 'unknown';
     const supplier = movement.supplier?.trim() || 'Unspecified';
-    const key = materialType + '\u0000' + supplier;
+    const productId = movement.productId;
+    const key = materialType + '\u0000' + supplier + '\u0000' + productId;
     const current = byGroup.get(key) ?? {
       materialType,
       supplier,
+      productId,
+      productName: product?.name ?? 'Unknown product',
+      sku: product?.sku ?? '—',
+      unit: product?.unit ?? 'unknown',
       transactionCount: 0,
       totalQuantity: 0,
       totalCost: 0,
@@ -673,13 +682,16 @@ export function buildAnnualPurchaseSummary(
   }
 
   return [...byGroup.values()].sort((a, b) => (
-    comparePurchaseKey(a.materialType, b.materialType) || comparePurchaseKey(a.supplier, b.supplier)
+    comparePurchaseKey(a.materialType, b.materialType)
+      || comparePurchaseKey(a.supplier, b.supplier)
+      || comparePurchaseKey(a.productId, b.productId)
   ));
 }
 
 export interface AnnualPurchaseCursor {
   materialType: string;
   supplier: string;
+  productId: string;
 }
 
 export function paginateAnnualPurchaseSummary(
@@ -690,7 +702,8 @@ export function paginateAnnualPurchaseSummary(
   const compare = comparePurchaseKey;
   const filtered = cursor
     ? rows.filter((row) => compare(row.materialType, cursor.materialType) > 0
-      || (row.materialType === cursor.materialType && compare(row.supplier, cursor.supplier) > 0))
+      || (row.materialType === cursor.materialType && compare(row.supplier, cursor.supplier) > 0)
+      || (row.materialType === cursor.materialType && row.supplier === cursor.supplier && compare(row.productId, cursor.productId) > 0))
     : rows;
   const selected = filtered.slice(0, limit + 1);
   const hasMore = selected.length > limit;
@@ -702,7 +715,7 @@ export function paginateAnnualPurchaseSummary(
       limit,
       totalCount: rows.length,
       hasMore,
-      nextCursor: hasMore && last ? { materialType: last.materialType, supplier: last.supplier } : null,
+      nextCursor: hasMore && last ? { materialType: last.materialType, supplier: last.supplier, productId: last.productId } : null,
     },
   };
 }

@@ -15,6 +15,7 @@ import { _resetInventoryStore, createProduct, recordInboundStock, recordOutbound
 import { analyticsRoutes } from './routes.js';
 import {
   buildAnnualPurchaseSummary,
+  paginateAnnualPurchaseSummary,
   buildAnalyticsOrderSummary,
   buildInsightProductRankings,
   buildDeliveryDateMonthlySeries,
@@ -273,16 +274,35 @@ describe('analytics pure functions', () => {
     ];
 
     expect(buildAnnualPurchaseSummary(movements, products, 2026)).toEqual([
-      { materialType: 'aluminum', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 6, totalCost: 300, unpricedReceiptCount: 0, unpricedQuantity: 0 },
-      { materialType: 'glass', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 10, totalCost: 1000, unpricedReceiptCount: 0, unpricedQuantity: 0 },
-      { materialType: 'glass', supplier: 'Supplier B', transactionCount: 1, totalQuantity: 4, totalCost: 400, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+      { materialType: 'aluminum', supplier: 'Supplier A', productId: 'alum-1', productName: 'Aluminum', sku: 'A-1', unit: 'length', transactionCount: 1, totalQuantity: 6, totalCost: 300, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+      { materialType: 'glass', supplier: 'Supplier A', productId: 'glass-1', productName: 'Glass', sku: 'G-1', unit: 'sheet', transactionCount: 1, totalQuantity: 10, totalCost: 1000, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+      { materialType: 'glass', supplier: 'Supplier B', productId: 'glass-1', productName: 'Glass', sku: 'G-1', unit: 'sheet', transactionCount: 1, totalQuantity: 4, totalCost: 400, unpricedReceiptCount: 0, unpricedQuantity: 0 },
     ]);
   });
 
   it('reports receipt costs only when unit cost was recorded', () => {
     const products = [{ id: 'p', name: 'Item', category: 'glass' as const, unit: 'sheet', stock: 0, price: 999, threshold: 1, status: 'active' as const, sku: 'P' }];
     const rows = buildAnnualPurchaseSummary([{ id: 'u', productId: 'p', type: 'inbound', quantity: 3, referenceNo: 'PO-U', supplier: 'S', occurredAt: '2026-01-01T00:00:00.000Z', createdBy: 'test' }], products, 2026);
-    expect(rows[0]).toMatchObject({ totalCost: 0, unpricedReceiptCount: 1, unpricedQuantity: 3 });
+    expect(rows[0]).toMatchObject({ productId: 'p', productName: 'Item', sku: 'P', unit: 'sheet', totalCost: 0, unpricedReceiptCount: 1, unpricedQuantity: 3 });
+  });
+
+  it('keeps product-level purchase groups distinct across pages for the same material and supplier', () => {
+    const products = [
+      { id: 'G-1', name: 'Clear glass', category: 'glass' as const, unit: 'sheet', stock: 0, price: 100, threshold: 1, status: 'active' as const, sku: 'GL-1' },
+      { id: 'G-2', name: 'Tempered glass', category: 'glass' as const, unit: 'sheet', stock: 0, price: 200, threshold: 1, status: 'active' as const, sku: 'GL-2' },
+    ];
+    const movements = products.map((product, index) => ({
+      id: `purchase-${index}`, productId: product.id, type: 'inbound' as const, quantity: index + 1,
+      unitCost: 100, referenceNo: `PO-${index}`, supplier: 'Same Supplier',
+      occurredAt: `2026-01-0${index + 1}T00:00:00.000Z`, createdBy: 'test',
+    }));
+    const rows = buildAnnualPurchaseSummary(movements, products, 2026);
+    const first = paginateAnnualPurchaseSummary(rows, 1, null);
+    const second = paginateAnnualPurchaseSummary(rows, 1, first.page.nextCursor);
+    expect(first.rows.map((row) => row.productId)).toEqual(['G-1']);
+    expect(first.page.nextCursor).toEqual({ materialType: 'glass', supplier: 'Same Supplier', productId: 'G-1' });
+    expect(second.rows.map((row) => row.productId)).toEqual(['G-2']);
+    expect(second.page.nextCursor).toBeNull();
   });
 
   it('classifies monthly movement as fast or slow with deterministic threshold logic', () => {
@@ -572,16 +592,16 @@ describe('analytics routes', () => {
     expect(await valid.json()).toHaveLength(6);
   });
 
-  it('returns annual purchase totals grouped by material and supplier', async () => {
+  it('returns annual purchase totals at product and supplier detail', async () => {
     const token = await login(app, ADMIN);
     const res = await app.request('/analytics/purchases?year=2026', {
       headers: { authorization: 'Bearer ' + token },
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual([
-      { materialType: 'aluminum', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 6, totalCost: 300, unpricedReceiptCount: 0, unpricedQuantity: 0 },
-      { materialType: 'glass', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 10, totalCost: 1000, unpricedReceiptCount: 0, unpricedQuantity: 0 },
-      { materialType: 'glass', supplier: 'Supplier B', transactionCount: 1, totalQuantity: 4, totalCost: 400, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+    expect(await res.json()).toMatchObject([
+      { materialType: 'aluminum', supplier: 'Supplier A', productName: 'Analytics Aluminum', sku: 'ALU-AN-01', unit: 'length', transactionCount: 1, totalQuantity: 6, totalCost: 300, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+      { materialType: 'glass', supplier: 'Supplier A', productName: 'Analytics Glass', sku: 'GLS-AN-01', unit: 'sheet', transactionCount: 1, totalQuantity: 10, totalCost: 1000, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+      { materialType: 'glass', supplier: 'Supplier B', productName: 'Analytics Glass', sku: 'GLS-AN-01', unit: 'sheet', transactionCount: 1, totalQuantity: 4, totalCost: 400, unpricedReceiptCount: 0, unpricedQuantity: 0 },
     ]);
   });
 
@@ -605,6 +625,10 @@ describe('analytics routes', () => {
 
     expect((await app.request('/analytics/purchases/page?limit=101', { headers: { authorization: 'Bearer ' + token } })).status).toBe(400);
     expect((await app.request('/analytics/purchases/page?cursor=invalid!', { headers: { authorization: 'Bearer ' + token } })).status).toBe(400);
+    const missingProductId = Buffer.from(JSON.stringify({ materialType: 'glass', supplier: 'Supplier A' })).toString('base64url');
+    const oversizedProductId = Buffer.from(JSON.stringify({ materialType: 'glass', supplier: 'Supplier A', productId: 'x'.repeat(65) })).toString('base64url');
+    expect((await app.request(`/analytics/purchases/page?cursor=${missingProductId}`, { headers: { authorization: 'Bearer ' + token } })).status).toBe(400);
+    expect((await app.request(`/analytics/purchases/page?cursor=${oversizedProductId}`, { headers: { authorization: 'Bearer ' + token } })).status).toBe(400);
   });
 
   it('returns stable fast and slow movement classification', async () => {

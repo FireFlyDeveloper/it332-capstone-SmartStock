@@ -176,17 +176,17 @@ describe('reports routes', () => {
     });
   });
 
-  it('returns annual purchases report summaries grouped by material and supplier', async () => {
+  it('returns annual purchases report summaries with product and supplier detail', async () => {
     const res = await authedRequest(app, '/reports/purchases/annual?year=2026');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
+    expect(await res.json()).toMatchObject({
       report: 'annual_purchases',
       year: 2026,
       totals: { groups: 3, transactionCount: 3, totalQuantity: 20, totalCost: 1700, unpricedReceiptCount: 0, unpricedQuantity: 0 },
       rows: [
-        { materialType: 'aluminum', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 6, totalCost: 300, unpricedReceiptCount: 0, unpricedQuantity: 0 },
-        { materialType: 'glass', supplier: 'Supplier A', transactionCount: 1, totalQuantity: 10, totalCost: 1000, unpricedReceiptCount: 0, unpricedQuantity: 0 },
-        { materialType: 'glass', supplier: 'Supplier B', transactionCount: 1, totalQuantity: 4, totalCost: 400, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+        { materialType: 'aluminum', supplier: 'Supplier A', productId: expect.any(String), productName: 'Report Aluminum', sku: 'ALU-RP-01', unit: 'length', transactionCount: 1, totalQuantity: 6, totalCost: 300, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+        { materialType: 'glass', supplier: 'Supplier A', productId: expect.any(String), productName: 'Report Glass', sku: 'GLS-RP-01', unit: 'sheet', transactionCount: 1, totalQuantity: 10, totalCost: 1000, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+        { materialType: 'glass', supplier: 'Supplier B', productId: expect.any(String), productName: 'Report Glass', sku: 'GLS-RP-01', unit: 'sheet', transactionCount: 1, totalQuantity: 4, totalCost: 400, unpricedReceiptCount: 0, unpricedQuantity: 0 },
       ],
     });
   });
@@ -218,9 +218,26 @@ describe('reports routes', () => {
       year: 2026,
       totals: { groups: 3, totalSpend: 1700, unpricedReceiptCount: 0, unpricedQuantity: 0 },
       rows: [
-        { materialType: 'aluminum', supplier: 'Supplier A', totalSpend: 300, shareOfSpend: 17.65, unpricedReceiptCount: 0, unpricedQuantity: 0 },
-        { materialType: 'glass', supplier: 'Supplier A', totalSpend: 1000, shareOfSpend: 58.82, unpricedReceiptCount: 0, unpricedQuantity: 0 },
-        { materialType: 'glass', supplier: 'Supplier B', totalSpend: 400, shareOfSpend: 23.53, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+        { materialType: 'aluminum', supplier: 'Supplier A', unit: 'length', totalSpend: 300, shareOfSpend: 17.65, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+        { materialType: 'glass', supplier: 'Supplier A', unit: 'sheet', totalSpend: 1000, shareOfSpend: 58.82, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+        { materialType: 'glass', supplier: 'Supplier B', unit: 'sheet', totalSpend: 400, shareOfSpend: 23.53, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+      ],
+    });
+  });
+
+  it('keeps spending grouped by material, supplier, and unit when purchases are broken down by product', async () => {
+    const secondGlass = await createProduct({ sku: 'GLS-RP-02', name: 'Second Report Glass', category: 'glass', unit: 'piece', stock: 0, price: 80, threshold: 5 });
+    await recordInboundStock(secondGlass.id, { quantity: 2, unitCost: 50, referenceNo: 'PO-RP-004', supplier: 'Supplier A', occurredAt: '2026-02-10T00:00:00.000Z' });
+
+    const res = await authedRequest(app, '/reports/spending?year=2026');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      totals: { groups: 4, totalSpend: 1800, unpricedReceiptCount: 0, unpricedQuantity: 0 },
+      rows: [
+        { materialType: 'aluminum', supplier: 'Supplier A', unit: 'length', totalSpend: 300, shareOfSpend: 16.67 },
+        { materialType: 'glass', supplier: 'Supplier A', unit: 'piece', totalSpend: 100, shareOfSpend: 5.56 },
+        { materialType: 'glass', supplier: 'Supplier A', unit: 'sheet', totalSpend: 1000, shareOfSpend: 55.56 },
+        { materialType: 'glass', supplier: 'Supplier B', unit: 'sheet', totalSpend: 400, shareOfSpend: 22.22 },
       ],
     });
   });

@@ -17,7 +17,7 @@ import {
 import { formatCurrency, formatDateInput } from '../utils/helpers';
 import { formatCalendarMonth, latestConsecutiveCompleteMonths } from '../utils/monthlyTrend';
 import InsightBreakdown from '../components/InsightBreakdown';
-import { getAnalyticsInsights, getAnalyticsItemMovementPage, getAnalyticsMonthlyMovement, getAnalyticsOrderSummary, getDemandForecastPage, getProductsPage, type AnalyticsInsightsResponse, type AnalyticsMonthlyMovementResponse, type AnalyticsItemMovementPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse } from '../api';
+import { getAnalyticsInsights, getAnalyticsItemMovementPage, getAnalyticsMonthlyMovement, getAnalyticsOrderSummary, getAnalyticsPurchasesPage, getDemandForecastPage, getProductsPage, type AnalyticsInsightsResponse, type AnalyticsMonthlyMovementResponse, type AnalyticsItemMovementPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse, type PurchaseAnalyticsPageResponse } from '../api';
 import { toast } from 'sonner';
 import { 
   AreaChart, 
@@ -36,6 +36,7 @@ import {
 } from 'recharts';
 
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
+type MovementPeriodMode = 'month' | 'range';
 
 function formatStockCheck(value: DemandForecastProduct['policyAssessment']): string {
   switch (value) {
@@ -118,11 +119,22 @@ export const Analytics: React.FC = () => {
   const [orderSummaryError, setOrderSummaryError] = useState('');
   const [orderSummaryRetry, setOrderSummaryRetry] = useState(0);
   const orderSummaryRequestRef = useRef(0);
+  const [purchaseYear, setPurchaseYear] = useState(() => String(new Date().getUTCFullYear()));
+  const [purchaseRetry, setPurchaseRetry] = useState(0);
+  const [purchaseData, setPurchaseData] = useState<PurchaseAnalyticsPageResponse | null>(null);
+  const [purchaseRows, setPurchaseRows] = useState<PurchaseAnalyticsPageResponse['groups']>([]);
+  const [purchaseLoading, setPurchaseLoading] = useState(true);
+  const [purchaseLoadingMore, setPurchaseLoadingMore] = useState(false);
+  const [purchaseError, setPurchaseError] = useState('');
+  const [purchaseLoadMoreError, setPurchaseLoadMoreError] = useState('');
+  const purchaseRequestRef = useRef(0);
+  const purchaseLoadingMoreRef = useRef(false);
   const [forecast, setForecast] = useState<DemandForecastProduct[]>([]);
   const [forecastLoading, setForecastLoading] = useState(true);
   const [forecastError, setForecastError] = useState('');
   const [forecastRefreshKey, setForecastRefreshKey] = useState(0);
   const [forecastPage, setForecastPage] = useState<DemandForecastPageResponse['page'] | null>(null);
+  const [forecastMetadata, setForecastMetadata] = useState<Pick<DemandForecastPageResponse, 'method' | 'alpha' | 'horizonMonths' | 'minimumPositiveMonths' | 'historyMonths' | 'assumption'> | null>(null);
   const [forecastLoadingMore, setForecastLoadingMore] = useState(false);
   const [forecastLoadMoreError, setForecastLoadMoreError] = useState('');
   const forecastSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -143,6 +155,8 @@ export const Analytics: React.FC = () => {
   const snapshotRequestRef = useRef(0);
   const snapshotLoadingMoreRef = useRef(false);
   const [movementThreshold, setMovementThreshold] = useState('10');
+  const [movementPeriodMode, setMovementPeriodMode] = useState<MovementPeriodMode>('month');
+  const [movementMonth, setMovementMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [movementRetry, setMovementRetry] = useState(0);
   const [movementRows, setMovementRows] = useState<AnalyticsItemMovementPage['rows']>([]);
   const [movementSummary, setMovementSummary] = useState<AnalyticsItemMovementPage['summary'] | null>(null);
@@ -208,6 +222,61 @@ export const Analytics: React.FC = () => {
       if (requestId === orderSummaryRequestRef.current) orderSummaryRequestRef.current += 1;
     };
   }, [fromDate, toDate, orderSummaryRetry]);
+
+  useEffect(() => {
+    const requestId = ++purchaseRequestRef.current;
+    const year = Number(purchaseYear);
+    setPurchaseData(null);
+    setPurchaseRows([]);
+    setPurchaseError('');
+    setPurchaseLoadMoreError('');
+    setPurchaseLoading(true);
+    setPurchaseLoadingMore(false);
+    purchaseLoadingMoreRef.current = false;
+    if (!/^\d{4}$/.test(purchaseYear) || !Number.isInteger(year) || year < 1900 || year > 3000) {
+      setPurchaseError('Enter a year between 1900 and 3000.');
+      setPurchaseLoading(false);
+      return () => {
+        if (requestId === purchaseRequestRef.current) purchaseRequestRef.current += 1;
+      };
+    }
+    getAnalyticsPurchasesPage({ year, limit: 25 })
+      .then((result) => {
+        if (requestId !== purchaseRequestRef.current) return;
+        setPurchaseData(result);
+        setPurchaseRows(result.groups);
+      })
+      .catch((error) => {
+        if (requestId === purchaseRequestRef.current) setPurchaseError(error instanceof Error ? error.message : 'Could not load annual purchases.');
+      })
+      .finally(() => {
+        if (requestId === purchaseRequestRef.current) setPurchaseLoading(false);
+      });
+    return () => {
+      if (requestId === purchaseRequestRef.current) purchaseRequestRef.current += 1;
+    };
+  }, [purchaseYear, purchaseRetry]);
+
+  const loadMorePurchases = useCallback(async () => {
+    if (!purchaseData?.page.hasMore || !purchaseData.page.nextCursor || purchaseLoading || purchaseLoadingMoreRef.current) return;
+    const requestId = purchaseRequestRef.current;
+    purchaseLoadingMoreRef.current = true;
+    setPurchaseLoadingMore(true);
+    setPurchaseLoadMoreError('');
+    try {
+      const result = await getAnalyticsPurchasesPage({ year: purchaseData.year, limit: 25, cursor: purchaseData.page.nextCursor });
+      if (requestId !== purchaseRequestRef.current) return;
+      setPurchaseRows((current) => [...current, ...result.groups]);
+      setPurchaseData(result);
+    } catch (error) {
+      if (requestId === purchaseRequestRef.current) setPurchaseLoadMoreError(error instanceof Error ? error.message : 'Could not load more annual purchase groups.');
+    } finally {
+      if (requestId === purchaseRequestRef.current) {
+        purchaseLoadingMoreRef.current = false;
+        setPurchaseLoadingMore(false);
+      }
+    }
+  }, [purchaseData, purchaseLoading]);
 
   useEffect(() => {
     const requestId = ++snapshotRequestRef.current;
@@ -288,18 +357,25 @@ export const Analytics: React.FC = () => {
     movementLoadingMoreRef.current = false;
     setMovementLoadingMore(false);
 
-    if ((fromDate && !/^\d{4}-\d{2}-\d{2}$/.test(fromDate))
-      || (toDate && !/^\d{4}-\d{2}-\d{2}$/.test(toDate))
-      || (fromDate && toDate && fromDate > toDate)
+    if ((movementPeriodMode === 'month' && !/^\d{4}-(0[1-9]|1[0-2])$/.test(movementMonth))
+      || (movementPeriodMode === 'range' && fromDate && !/^\d{4}-\d{2}-\d{2}$/.test(fromDate))
+      || (movementPeriodMode === 'range' && toDate && !/^\d{4}-\d{2}-\d{2}$/.test(toDate))
+      || (movementPeriodMode === 'range' && fromDate && toDate && fromDate > toDate)
       || movementThreshold.trim() === '' || !Number.isFinite(threshold) || threshold < 0) {
-      setMovementError('Choose a valid date range and enter a non-negative number of units.');
+      setMovementError('Choose a valid month or date range and enter a non-negative number of units.');
       setMovementLoading(false);
       return () => {
         if (requestId === movementRequestRef.current) movementRequestRef.current += 1;
       };
     }
 
-    getAnalyticsItemMovementPage({ fromDate: fromDate || undefined, toDate: toDate || undefined, allTime: !fromDate && !toDate, threshold, limit: 25 })
+    getAnalyticsItemMovementPage({
+      ...(movementPeriodMode === 'month'
+        ? { month: movementMonth }
+        : { fromDate: fromDate || undefined, toDate: toDate || undefined, allTime: !fromDate && !toDate }),
+      threshold,
+      limit: 25,
+    })
       .then((response) => {
         if (requestId !== movementRequestRef.current) return;
         setMovementRows(response.rows);
@@ -315,7 +391,7 @@ export const Analytics: React.FC = () => {
     return () => {
       if (requestId === movementRequestRef.current) movementRequestRef.current += 1;
     };
-  }, [fromDate, toDate, movementThreshold, movementRetry]);
+  }, [fromDate, toDate, movementThreshold, movementRetry, movementPeriodMode, movementMonth]);
 
   const loadMoreMovement = useCallback(async () => {
     if (!movementPage?.hasMore || !movementPage.nextCursor || movementLoading || movementLoadingMoreRef.current) return;
@@ -325,7 +401,14 @@ export const Analytics: React.FC = () => {
     setMovementLoadingMore(true);
     setMovementLoadMoreError('');
     try {
-      const response = await getAnalyticsItemMovementPage({ fromDate: fromDate || undefined, toDate: toDate || undefined, allTime: !fromDate && !toDate, threshold, limit: 25, cursor: movementPage.nextCursor });
+      const response = await getAnalyticsItemMovementPage({
+        ...(movementPeriodMode === 'month'
+          ? { month: movementMonth }
+          : { fromDate: fromDate || undefined, toDate: toDate || undefined, allTime: !fromDate && !toDate }),
+        threshold,
+        limit: 25,
+        cursor: movementPage.nextCursor,
+      });
       if (requestId !== movementRequestRef.current) return;
       setMovementRows((current) => [...current, ...response.rows]);
       setMovementSummary(response.summary);
@@ -338,7 +421,7 @@ export const Analytics: React.FC = () => {
         setMovementLoadingMore(false);
       }
     }
-  }, [movementPage, movementLoading, fromDate, toDate, movementThreshold]);
+  }, [movementPage, movementLoading, fromDate, toDate, movementThreshold, movementPeriodMode, movementMonth]);
 
   useEffect(() => {
     const sentinel = movementSentinelRef.current;
@@ -415,6 +498,7 @@ export const Analytics: React.FC = () => {
     const requestId = ++forecastRequestRef.current;
     setForecast([]);
     setForecastPage(null);
+    setForecastMetadata(null);
     setForecastLoading(true);
     setForecastError('');
     setForecastLoadMoreError('');
@@ -425,6 +509,14 @@ export const Analytics: React.FC = () => {
         if (requestId !== forecastRequestRef.current) return;
         setForecast(result.products);
         setForecastPage(result.page);
+        setForecastMetadata({
+          method: result.method,
+          alpha: result.alpha,
+          horizonMonths: result.horizonMonths,
+          minimumPositiveMonths: result.minimumPositiveMonths,
+          historyMonths: result.historyMonths,
+          assumption: result.assumption,
+        });
       })
       .catch((error) => {
         if (requestId === forecastRequestRef.current) setForecastError(error instanceof Error ? error.message : 'Could not load demand forecast.');
@@ -571,6 +663,9 @@ export const Analytics: React.FC = () => {
     const row = monthlyMovement.rows.find((item) => item.month === month && item.unit === monthlyMovementUnit);
     return { month, inboundQuantity: row?.inboundQuantity ?? 0, outboundQuantity: row?.outboundQuantity ?? 0 };
   }) ?? [];
+  const movementPeriodLabel = movementPeriodMode === 'month'
+    ? `${formatMonthlyLabel(movementMonth)}${movementMonth === new Date().toISOString().slice(0, 7) ? ' · month-to-date' : ''}`
+    : formatAnalyticsDateRange(fromDate, toDate);
 
   if (inventorySummaryLoading || orderSummaryLoading) {
     return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading your analytics…</div>;
@@ -1102,6 +1197,49 @@ export const Analytics: React.FC = () => {
           </div>
         </div>
 
+        <section className="space-y-4 rounded-[28px] border border-amber-100 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Annual Purchases by Product</h3>
+              <p className="mt-1 max-w-3xl text-xs text-slate-500">Recorded inbound receipts grouped by product and supplier. Spend includes only entered acquisition costs; unpriced receipts are shown separately, and quantity is kept in each product’s own unit.</p>
+            </div>
+            <label className="text-xs font-semibold text-slate-600">Year
+              <input aria-label="Annual purchase year" type="number" min="1900" max="3000" value={purchaseYear} onChange={(event) => setPurchaseYear(event.target.value)} className="input mt-1 block w-32" />
+            </label>
+          </div>
+          {purchaseLoading && <p role="status" className="py-6 text-center text-sm text-slate-500">Loading annual purchases…</p>}
+          {purchaseError && <div role="alert" className="py-4 text-center text-sm text-rose-700"><p>{purchaseError}</p><button type="button" onClick={() => setPurchaseRetry((current) => current + 1)} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
+          {purchaseData && !purchaseLoading && !purchaseError && <>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-800">Recorded purchase spend · {purchaseData.year}</p><p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(purchaseData.totalSpend)}</p></div>
+              <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-600">Priced receipts</p><p className="mt-1 text-xl font-black text-slate-900">{purchaseData.pricedReceiptCount}</p></div>
+              <div className="rounded-2xl bg-orange-50 p-4"><p className="text-xs uppercase text-orange-700">Unpriced receipts</p><p className="mt-1 text-xl font-black text-orange-900">{purchaseData.unpricedReceiptCount}</p></div>
+            </div>
+            {purchaseRows.length === 0 ? <p className="rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">No inbound purchase receipts were recorded for {purchaseData.year}.</p> : <div className="max-h-96 overflow-auto rounded-xl border border-slate-100">
+              <div className="min-w-[980px]"><table className="w-full text-left">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase text-slate-500 shadow-sm"><tr>
+                  <th className="px-4 py-3">Product</th><th className="px-4 py-3">Material type</th><th className="px-4 py-3">Supplier</th>
+                  <th className="px-4 py-3 text-right">Priced receipts</th><th className="px-4 py-3 text-right">Unpriced receipts</th>
+                  <th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Recorded spend</th><th className="px-4 py-3 text-right">Unpriced qty</th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">{purchaseRows.map((row) => <tr key={`${row.productId}-${row.supplier}`}>
+                  <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.productName}<span className="block text-xs font-normal text-slate-500">Code: {row.sku}</span></td>
+                  <td className="px-4 py-3 text-sm capitalize">{row.materialType}</td><td className="px-4 py-3 text-sm">{row.supplier}</td>
+                  <td className="px-4 py-3 text-right text-sm">{Math.max(0, row.transactionCount - row.unpricedReceiptCount)}</td>
+                  <td className="px-4 py-3 text-right text-sm">{row.unpricedReceiptCount}</td><td className="px-4 py-3 text-right text-sm">{row.totalQuantity} {row.unit}</td>
+                  <td className="px-4 py-3 text-right text-sm font-semibold">{formatCurrency(row.totalCost)}</td><td className="px-4 py-3 text-right text-sm">{row.unpricedQuantity} {row.unit}</td>
+                </tr>)}</tbody>
+              </table></div>
+            </div>}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+              <span>Showing {purchaseRows.length} of {purchaseData.page.totalCount} product-and-supplier groups; the totals above cover all groups.</span>
+              {purchaseData.page.hasMore && <button type="button" onClick={() => void loadMorePurchases()} disabled={purchaseLoadingMore} className="rounded-lg border border-amber-200 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50">{purchaseLoadingMore ? 'Loading…' : purchaseLoadMoreError ? 'Retry loading purchases' : 'Load more purchases'}</button>}
+            </div>
+            {purchaseLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more purchase groups…</p>}
+            {purchaseLoadMoreError && <p role="alert" className="text-center text-sm text-rose-700">{purchaseLoadMoreError}</p>}
+          </>}
+        </section>
+
         {/* Monthly stock movement by unit chart */}
         <section className="space-y-4 rounded-[28px] border border-sky-100 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1145,9 +1283,18 @@ export const Analytics: React.FC = () => {
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <h3 className="text-lg font-bold text-slate-900">Movement by Product</h3>
-              <p className="mt-1 max-w-3xl text-xs text-slate-500">Shows units sent out during the selected Delivery Date Range, using each movement’s recorded UTC date. With All time selected, it shows all recorded movement. Products with no recorded movement are marked slow-moving; fast-moving uses the cutoff you choose.</p>
+              <p className="mt-1 max-w-3xl text-xs text-slate-500">Classifies each product’s stock sent out during one UTC calendar month. Products with no recorded movement are slow-moving; the cutoff is applied in each product’s own unit. Switch to the Analytics date range for a custom comparison period.</p>
             </div>
             <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs font-semibold text-slate-600">Classification period
+                <select aria-label="Product classification period" value={movementPeriodMode} onChange={(event) => setMovementPeriodMode(event.target.value as MovementPeriodMode)} className="input mt-1 block min-w-44">
+                  <option value="month">One calendar month</option>
+                  <option value="range">Analytics date range</option>
+                </select>
+              </label>
+              {movementPeriodMode === 'month' && <label className="text-xs font-semibold text-slate-600">Month (UTC)
+                <input aria-label="Product classification month" type="month" value={movementMonth} onChange={(event) => setMovementMonth(event.target.value)} className="input mt-1 block" />
+              </label>}
               <label className="text-xs font-semibold text-slate-600">Movement needed to count as fast-moving (in each item’s unit)
                 <input aria-label="Movement required for fast-moving products" type="number" min="0" step="1" value={movementThreshold} onChange={(event) => setMovementThreshold(event.target.value)} className="input mt-1 block w-36" />
               </label>
@@ -1157,7 +1304,7 @@ export const Analytics: React.FC = () => {
           {movementSummary && <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl bg-emerald-50 p-4"><p className="text-xs uppercase text-emerald-700">Fast-moving items</p><p className="mt-1 text-xl font-black text-emerald-900">{movementSummary.fastMovingCount}</p></div>
             <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-600">Slow-moving items</p><p className="mt-1 text-xl font-black text-slate-900">{movementSummary.slowMovingCount}</p></div>
-            <div className="rounded-2xl bg-sky-50 p-4"><p className="text-xs uppercase text-sky-700">Units sent out · {formatAnalyticsDateRange(fromDate, toDate)}</p><p className="mt-1 text-sm font-black text-sky-900">{movementSummary.outboundByUnit.length ? movementSummary.outboundByUnit.map((item) => `${item.quantity} ${item.unit}`).join(' · ') : 'No stock sent out'}</p></div>
+            <div className="rounded-2xl bg-sky-50 p-4"><p className="text-xs uppercase text-sky-700">Units sent out · {movementPeriodLabel}</p><p className="mt-1 text-sm font-black text-sky-900">{movementSummary.outboundByUnit.length ? movementSummary.outboundByUnit.map((item) => `${item.quantity} ${item.unit}`).join(' · ') : 'No stock sent out'}</p></div>
           </div>}
 
           {movementLoading && <p role="status" className="py-6 text-center text-sm text-slate-500">Loading product movement…</p>}
@@ -1175,7 +1322,7 @@ export const Analytics: React.FC = () => {
           </table></div>
           {movementPage?.hasMore && <div ref={movementSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">More products are available below.</div>}
           </div>}
-          {movementPage && <p className="text-xs text-slate-500">Showing {movementRows.length} of {movementPage.totalCount} products for {formatAnalyticsDateRange(fromDate, toDate)}; stock movement uses its recorded UTC date, and fast-moving means {describeFastMovingCutoff(Number(movementThreshold))}.</p>}
+          {movementPage && <p className="text-xs text-slate-500">Showing {movementRows.length} of {movementPage.totalCount} products for {movementPeriodLabel}; stock movement uses its recorded UTC date, and fast-moving means {describeFastMovingCutoff(Number(movementThreshold))}.</p>}
           {movementPage?.hasMore && <div className="flex justify-center py-3"><button type="button" onClick={() => void loadMoreMovement()} disabled={movementLoadingMore} className="rounded-lg border border-indigo-200 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">{movementLoadingMore ? 'Loading…' : movementLoadMoreError ? 'Retry loading products' : 'Load more products'}</button></div>}
           {movementLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more products…</p>}
           {movementLoadMoreError && <p role="alert" className="text-center text-sm text-rose-700">{movementLoadMoreError}</p>}
@@ -1252,7 +1399,7 @@ export const Analytics: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Sales Estimate for Next Month</h3>
-                <p className="text-xs text-slate-600">Based on completed orders from recent months. We need sales in at least three months to show an estimate.</p>
+                <p className="text-xs text-slate-600">A statistical estimate for the next month, with its method and history window shown below.</p>
               </div>
             </div>
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
@@ -1263,7 +1410,7 @@ export const Analytics: React.FC = () => {
           
           <div className="mb-6 overflow-hidden rounded-2xl border border-violet-100/80 bg-white shadow-2xs">
             <div className="border-b border-violet-100 bg-violet-50/60 p-4 text-xs text-slate-600">
-              Uses completed orders from recent months to estimate next month's sales. An estimate appears after sales are recorded in at least three different months.
+              {forecastMetadata ? <><p className="font-semibold text-slate-700">Method: {forecastMetadata.method === 'simple_exponential_smoothing' ? 'Simple Exponential Smoothing (SES)' : forecastMetadata.method} · α = {forecastMetadata.alpha} · {forecastMetadata.horizonMonths}-month forecast horizon.</p><p className="mt-1">History: up to the previous {forecastMetadata.historyMonths} complete UTC calendar months. Delivered orders are grouped by their order-created month, independent of this page’s delivery-date filter. A product needs sales in at least {forecastMetadata.minimumPositiveMonths} different months.</p><p className="mt-1">{forecastMetadata.assumption}</p></> : <p>Loading forecast method and history details…</p>}
             </div>
             {forecastLoading ? <p className="p-8 text-center text-sm text-slate-500">Preparing sales estimates…</p> : forecastError ? <div role="alert" className="p-8 text-center text-sm text-rose-700"><p>We could not load the sales estimate. Please try again.</p><button type="button" onClick={() => setForecastRefreshKey((current) => current + 1)} className="mt-3 font-semibold text-indigo-600 hover:text-indigo-800">Retry</button></div> : availableForecastRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-600">No products have enough sales history for an estimate yet. We need recorded sales in at least three months.</p> : <div ref={forecastScrollerRef} className="max-h-96 overflow-auto"><div className="overflow-x-auto"><table className="w-full"><thead className="sticky top-0 z-10 bg-violet-50/95 shadow-sm"><tr><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Product</th><th title="Current stock compared with the minimum restock level." className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Stock / reorder point</th><th title="Based on recent completed orders; discrete-item estimates round up to whole pieces." className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Sales estimate</th><th title="Backend suggested restock quantity; whole pieces are shown for discrete units." className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Suggested restock</th><th title="Estimated days current stock may cover demand." className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Days of supply</th><th className="px-4 py-3 text-left text-xs font-bold uppercase text-violet-700">Stock status</th><th title="Number of recent months with recorded sales." className="px-4 py-3 text-right text-xs font-bold uppercase text-violet-700">Months with sales</th></tr></thead><tbody className="divide-y divide-slate-100">{availableForecastRows.map(item => { const stockRatio = item.reorderPoint > 0 ? Math.min(100, item.currentStock / item.reorderPoint * 100) : item.currentStock > 0 ? 100 : 0; const statusClass = item.policyAssessment === 'below_reorder_point' ? 'bg-rose-100 text-rose-700' : item.policyAssessment === 'below_forecast' ? 'bg-amber-100 text-amber-800' : item.policyAssessment === 'adequate' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'; return <tr key={item.productId}><td className="px-4 py-3"><p className="text-sm font-semibold text-slate-800">{item.name}</p><p className="text-xs text-slate-500">Code: {item.sku} · {item.category}</p></td><td className="px-4 py-3 text-right text-sm text-slate-700"><span title="On hand / minimum level">{item.currentStock} / {item.reorderPoint} {item.unit}</span><div className="ml-auto mt-2 h-1.5 w-28 overflow-hidden rounded-full bg-slate-100"><div className={`h-full ${item.currentStock < item.reorderPoint ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${stockRatio}%` }} /></div></td><td className="px-4 py-3 text-right text-sm font-semibold text-slate-700"><span>{formatPlanQuantity(item.forecastQuantity!, item.unit)}</span></td><td className="px-4 py-3 text-right text-sm font-bold text-violet-700">{item.recommendedOrderQuantity === null ? '—' : formatPlanQuantity(item.recommendedOrderQuantity, item.unit)}</td><td className="px-4 py-3 text-right text-sm text-slate-700">{item.stockCoverageDays === null ? '—' : `${item.stockCoverageDays} days`}</td><td className="px-4 py-3 text-sm text-slate-700"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusClass}`}>{formatStockCheck(item.policyAssessment)}</span></td><td className="px-4 py-3 text-right text-sm text-slate-500">{item.positiveMonths} months</td></tr>; })}</tbody></table></div>{forecastPage?.hasMore && <div ref={forecastSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">More estimate rows are available below.</div>}</div>}
           </div>

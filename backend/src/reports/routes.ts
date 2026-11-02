@@ -96,10 +96,10 @@ reportsRoutes.get('/export', async (c) => {
 
 reportsRoutes.get('/sales/monthly', async (c) => c.json(await buildMonthlySalesReport()));
 
-reportsRoutes.get('/purchases/annual', (c) => {
+reportsRoutes.get('/purchases/annual', async (c) => {
   const parsed = parseYear(c.req.query('year'));
   if (!parsed.ok) return c.json({ error: parsed.error }, 400);
-  return c.json(buildAnnualPurchasesReport(parsed.year));
+  return c.json(await buildAnnualPurchasesReport(parsed.year));
 });
 
 reportsRoutes.get('/inventory/evaluation', (c) => c.json(buildInventoryEvaluationReport()));
@@ -131,8 +131,8 @@ reportsRoutes.get('/policy-performance/page', async (c) => {
 
 reportsRoutes.get('/policy-performance', async (c) => c.json(await buildPolicyPerformanceReport()));
 
-reportsRoutes.get('/spending', (c) => {
+reportsRoutes.get('/spending', async (c) => {
   const parsed = parseYear(c.req.query('year'));
   if (!parsed.ok) return c.json({ error: parsed.error }, 400);
-  return c.json(buildSpendingReport(parsed.year));
+  return c.json(await buildSpendingReport(parsed.year));
 });

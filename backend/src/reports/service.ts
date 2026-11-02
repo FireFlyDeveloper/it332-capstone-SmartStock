@@ -8,7 +8,7 @@
 import { listOrders } from '../orders/store.js';
 import { isDbSyncActive } from '../db/syncState.js';
 import { getOrderSummaryReportDb, listPolicyPerformancePageDb } from '../db/postgresStore.js';
-import { getAnnualPurchases, getSalesTrends, getDemandForecast } from '../analytics/service.js';
+import { getAnnualPurchases, getAnnualPurchasesPage, getSalesTrends, getDemandForecast } from '../analytics/service.js';
 import { listProducts, readInventoryPolicyHistory, type InventoryPolicyEvent, type Product } from '../inventory/store.js';
 
 function currentUtcYear() {
@@ -78,8 +78,24 @@ export async function buildMonthlySalesReport() {
   };
 }
 
-export function buildAnnualPurchasesReport(year = currentUtcYear()) {
-  const rows = getAnnualPurchases(year);
+async function listAnnualPurchaseGroups(year: number) {
+  const groups: Awaited<ReturnType<typeof getAnnualPurchasesPage>>['groups'] = [];
+  let cursor: { materialType: string; supplier: string; productId: string } | null = null;
+  let pages = 0;
+  do {
+    const page = await getAnnualPurchasesPage(year, 100, cursor);
+    groups.push(...page.groups);
+    if (!page.page.hasMore) break;
+    if (!page.page.nextCursor) throw new Error('Annual purchases page is missing its next cursor');
+    cursor = page.page.nextCursor;
+    pages += 1;
+    if (pages > 10000) throw new Error('Annual purchases exceeded the report page safety limit');
+  } while (cursor);
+  return groups;
+}
+
+export async function buildAnnualPurchasesReport(year = currentUtcYear()) {
+  const rows = await listAnnualPurchaseGroups(year);
   return {
     report: 'annual_purchases' as const,
     year,
@@ -124,15 +140,35 @@ export function buildInventoryEvaluationReport() {
   };
 }
 
-export function buildSpendingReport(year = currentUtcYear()) {
-  const purchaseRows = getAnnualPurchases(year);
+export async function buildSpendingReport(year = currentUtcYear()) {
+  const purchaseRows = await listAnnualPurchaseGroups(year);
   const totalSpend = roundTwo(purchaseRows.reduce((sum, row) => sum + row.totalCost, 0));
-  const rows = purchaseRows.map((row) => ({
-    materialType: row.materialType,
-    supplier: row.supplier,
-    totalSpend: row.totalCost,
-    shareOfSpend: totalSpend === 0 ? 0 : roundTwo((row.totalCost / totalSpend) * 100),
-  }));
+  const byMaterialSupplierAndUnit = new Map<string, {
+    materialType: string; supplier: string; unit: string; totalSpend: number;
+    unpricedReceiptCount: number; unpricedQuantity: number;
+  }>();
+  for (const purchase of purchaseRows) {
+    const key = JSON.stringify([purchase.materialType, purchase.supplier, purchase.unit]);
+    const row = byMaterialSupplierAndUnit.get(key) ?? {
+      materialType: purchase.materialType,
+      supplier: purchase.supplier,
+      unit: purchase.unit,
+      totalSpend: 0,
+      unpricedReceiptCount: 0,
+      unpricedQuantity: 0,
+    };
+    row.totalSpend += purchase.totalCost;
+    row.unpricedReceiptCount += purchase.unpricedReceiptCount;
+    row.unpricedQuantity += purchase.unpricedQuantity;
+    byMaterialSupplierAndUnit.set(key, row);
+  }
+  const compare = (left: string, right: string) => left < right ? -1 : left > right ? 1 : 0;
+  const rows = [...byMaterialSupplierAndUnit.values()]
+    .sort((a, b) => compare(a.materialType, b.materialType) || compare(a.supplier, b.supplier) || compare(a.unit, b.unit))
+    .map((row) => ({
+      ...row,
+      shareOfSpend: totalSpend === 0 ? 0 : roundTwo((row.totalSpend / totalSpend) * 100),
+    }));
 
   return {
     report: 'spending' as const,
@@ -143,10 +179,7 @@ export function buildSpendingReport(year = currentUtcYear()) {
       unpricedReceiptCount: purchaseRows.reduce((sum, row) => sum + row.unpricedReceiptCount, 0),
       unpricedQuantity: purchaseRows.reduce((sum, row) => sum + row.unpricedQuantity, 0),
     },
-    rows: rows.map((row) => {
-      const purchase = purchaseRows.find((item) => item.materialType === row.materialType && item.supplier === row.supplier);
-      return { ...row, unpricedReceiptCount: purchase?.unpricedReceiptCount ?? 0, unpricedQuantity: purchase?.unpricedQuantity ?? 0 };
-    }),
+    rows,
   };
 }
 
@@ -336,8 +369,8 @@ export async function buildPolicyPerformancePage(now: Date, limit: number, curso
 
 export type ReportDto =
   | Awaited<ReturnType<typeof buildMonthlySalesReport>>
-  | ReturnType<typeof buildAnnualPurchasesReport>
+  | Awaited<ReturnType<typeof buildAnnualPurchasesReport>>
   | ReturnType<typeof buildInventoryEvaluationReport>
-  | ReturnType<typeof buildSpendingReport>
+  | Awaited<ReturnType<typeof buildSpendingReport>>
   | ReturnType<typeof buildDemandForecastReport>
   | Awaited<ReturnType<typeof buildPolicyPerformanceReport>>;

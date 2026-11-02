@@ -136,8 +136,9 @@ analyticsRoutes.get('/purchases/page', requireRole('admin'), async (c) => {
       if (Buffer.from(decoded, 'utf8').toString('base64url') !== rawCursor) return c.json({ error: 'cursor is invalid' }, 400);
       const parsed = JSON.parse(decoded) as Record<string, unknown>;
       if (typeof parsed.materialType !== 'string' || parsed.materialType.length > 100
-        || typeof parsed.supplier !== 'string' || parsed.supplier.length > 200) return c.json({ error: 'cursor is invalid' }, 400);
-      cursor = { materialType: parsed.materialType, supplier: parsed.supplier };
+        || typeof parsed.supplier !== 'string' || parsed.supplier.length > 200
+        || typeof parsed.productId !== 'string' || parsed.productId.length < 1 || parsed.productId.length > 64) return c.json({ error: 'cursor is invalid' }, 400);
+      cursor = { materialType: parsed.materialType, supplier: parsed.supplier, productId: parsed.productId };
     } catch {
       return c.json({ error: 'cursor is invalid' }, 400);
     }
