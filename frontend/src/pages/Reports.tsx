@@ -22,9 +22,10 @@ import type { Order } from '../types';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
-import { getProductsPage, apiFetchBlob, getAnalyticsPurchasesPage, getDemandForecastPage, getPolicyPerformancePage, getOrdersPage, getReportOrdersSummary, type ProductsPageResponse, type ApiError, type ReportOrdersSummary, type PurchaseAnalyticsPageResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
+import { getProductsPage, apiFetchBlob, getAnalyticsPurchasesPage, getAnalyticsOrderSummary, getDemandForecastPage, getPolicyPerformancePage, getOrdersPage, getReportOrdersSummary, type ProductsPageResponse, type ApiError, type ReportOrdersSummary, type AnalyticsOrderSummary, type PurchaseAnalyticsPageResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
 import { toFrontendOrder } from '../components/orderMapper';
 import { useAuth } from '../components/AuthContext';
+import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 type ExportType = 'sales' | 'purchases' | 'inventory' | 'spending';
@@ -50,6 +51,13 @@ const EXPORT_TYPE_LABELS: Record<ExportType, string> = {
   inventory: 'Inventory Evaluation',
   spending: 'Spending Report',
 };
+
+function formatReportMonth(month: string): string {
+  const date = new Date(`${month}-01T00:00:00.000Z`);
+  return Number.isNaN(date.getTime())
+    ? month
+    : date.toLocaleDateString(undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
 
 
 interface ReportCardProps {
@@ -165,6 +173,28 @@ export const Reports: React.FC = () => {
   const [inventorySummaryError, setInventorySummaryError] = useState('');
   const [inventorySummaryRetry, setInventorySummaryRetry] = useState(0);
   const inventorySummaryRequestRef = useRef(0);
+  const [salesTrend, setSalesTrend] = useState<AnalyticsOrderSummary['salesTrendData']>([]);
+  const [salesTrendLoading, setSalesTrendLoading] = useState(true);
+  const [salesTrendError, setSalesTrendError] = useState('');
+  const [salesTrendRetry, setSalesTrendRetry] = useState(0);
+  const [printPreparing, setPrintPreparing] = useState(false);
+  const purchaseScrollerRef = useRef<HTMLDivElement | null>(null);
+  const policyScrollerRef = useRef<HTMLDivElement | null>(null);
+  const observedPolicyScrollerRef = useRef<HTMLDivElement | null>(null);
+  const historyScrollerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setSalesTrendLoading(true);
+    setSalesTrendError('');
+    getAnalyticsOrderSummary({ fromDate: fromDate || null, toDate: toDate || null })
+      .then((response) => { if (active) setSalesTrend(response.salesTrendData); })
+      .catch((error: unknown) => {
+        if (active) setSalesTrendError(error instanceof Error ? error.message : 'Could not load monthly sales trends.');
+      })
+      .finally(() => { if (active) setSalesTrendLoading(false); });
+    return () => { active = false; };
+  }, [fromDate, toDate, salesTrendRetry]);
 
   useEffect(() => {
     const requestId = ++inventorySummaryRequestRef.current;
@@ -264,7 +294,7 @@ export const Reports: React.FC = () => {
     if (!sentinel || !historyHasMore || historyLoading || historyLoadingMore || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) void loadMoreHistory();
-    }, { rootMargin: '320px' });
+    }, { root: historyScrollerRef.current, rootMargin: '160px' });
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [historyHasMore, historyLoading, historyLoadingMore, loadMoreHistory]);
@@ -321,7 +351,7 @@ export const Reports: React.FC = () => {
     if (!sentinel || !purchaseData?.page.hasMore || purchaseLoading || purchaseLoadingMore || purchaseLoadMoreError || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(entries => {
       if (entries.some(entry => entry.isIntersecting)) void loadMorePurchaseGroups();
-    }, { rootMargin: '320px' });
+    }, { root: purchaseScrollerRef.current, rootMargin: '160px' });
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [purchaseData?.page.hasMore, purchaseLoading, purchaseLoadingMore, purchaseLoadMoreError, loadMorePurchaseGroups]);
@@ -377,7 +407,7 @@ export const Reports: React.FC = () => {
     if (!sentinel || !policyPage?.hasMore || policyLoading || policyLoadingMore || policyLoadMoreError || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) void loadMorePolicyRows();
-    }, { rootMargin: '320px' });
+    }, { root: policyScrollerRef.current, rootMargin: '160px' });
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [policyPage?.hasMore, policyLoading, policyLoadingMore, policyLoadMoreError, loadMorePolicyRows]);
@@ -426,7 +456,7 @@ export const Reports: React.FC = () => {
     if (!sentinel || !observedPolicy?.page.hasMore || observedPolicyLoading || observedPolicyLoadingMore || observedPolicyLoadMoreError || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(entries => {
       if (entries.some(entry => entry.isIntersecting)) void loadMoreObservedPolicy();
-    }, { rootMargin: '320px' });
+    }, { root: observedPolicyScrollerRef.current, rootMargin: '160px' });
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [observedPolicy?.page.hasMore, observedPolicyLoading, observedPolicyLoadingMore, observedPolicyLoadMoreError, loadMoreObservedPolicy]);
@@ -494,10 +524,99 @@ export const Reports: React.FC = () => {
   const paymentCounts = orderSummary?.paymentCounts ?? { paid: 0, pending: 0, partial: 0, refunded: 0 };
   const totalProducts = inventorySummary?.totalProducts ?? 0;
   const totalInventoryValue = inventorySummary?.totalInventoryValue ?? 0;
+  const currentMonthKey = new Date().toISOString().slice(0, 7);
+  const currentMonthTrend = salesTrend.find((row) => row.month === currentMonthKey);
+  const salesTrendTotals = salesTrend.reduce((totals, row) => ({
+    grossSales: totals.grossSales + row.grossSales,
+    grossOrderValue: totals.grossOrderValue + row.grossOrderValue,
+    transactions: totals.transactions + row.cancelledOrders + row.nonCancelledOrders,
+    cancelled: totals.cancelled + row.cancelledOrders,
+    nonCancelled: totals.nonCancelled + row.nonCancelledOrders,
+  }), { grossSales: 0, grossOrderValue: 0, transactions: 0, cancelled: 0, nonCancelled: 0 });
+  const reportPeriodLabel = fromDate || toDate
+    ? `${fromDate || 'Earliest available'} to ${toDate || 'Today'}`
+    : 'All available dates';
 
-  const handlePrint = () => {
-    toast.info('Opening browser print dialog...');
-    window.print();
+  const handlePrint = async () => {
+    if (purchaseLoading || purchaseLoadingMore || policyLoading || policyLoadingMore || observedPolicyLoading || observedPolicyLoadingMore || historyLoading || historyLoadingMore || orderSummaryLoading || inventorySummaryLoading || salesTrendLoading) {
+      toast.info('Wait for the report sections to finish loading before printing.');
+      return;
+    }
+    const loadErrors = [purchaseError, purchaseLoadMoreError, policyError, policyLoadMoreError, observedPolicyError, observedPolicyLoadMoreError, historyError, orderSummaryError, inventorySummaryError, salesTrendError].filter(Boolean);
+    if (loadErrors.length) {
+      toast.error('Resolve the report loading errors before printing, so the statement is complete.');
+      return;
+    }
+
+    setPrintPreparing(true);
+    try {
+      let purchaseGroups = purchaseData?.groups ?? [];
+      let purchaseCursor = purchaseData?.page.nextCursor ?? null;
+      let purchaseHasMore = Boolean(purchaseData?.page.hasMore);
+      let completePurchasePage = purchaseData?.page;
+      while (purchaseHasMore && purchaseCursor && numericPurchaseYear !== null) {
+        const page = await getAnalyticsPurchasesPage({ year: numericPurchaseYear, limit: 100, cursor: purchaseCursor });
+        purchaseGroups = [...purchaseGroups, ...page.groups];
+        purchaseHasMore = page.page.hasMore;
+        purchaseCursor = page.page.nextCursor;
+        completePurchasePage = page.page;
+      }
+
+      let completePolicyRows = policyRows;
+      let policyCursor = policyPage?.nextCursor ?? null;
+      let policyHasMore = Boolean(policyPage?.hasMore);
+      let completePolicyPage = policyPage;
+      while (policyHasMore && policyCursor) {
+        const page = await getDemandForecastPage({ historyMonths: 12, limit: 100, cursor: policyCursor });
+        completePolicyRows = [...completePolicyRows, ...page.products];
+        policyHasMore = page.page.hasMore;
+        policyCursor = page.page.nextCursor;
+        completePolicyPage = page.page;
+      }
+
+      let completeObservedRows = observedPolicy?.rows ?? [];
+      let observedCursor = observedPolicy?.page.nextCursor ?? null;
+      let observedHasMore = Boolean(observedPolicy?.page.hasMore);
+      let completeObservedPage = observedPolicy?.page;
+      while (observedHasMore && observedCursor) {
+        const page = await getPolicyPerformancePage({ limit: 100, cursor: observedCursor });
+        completeObservedRows = [...completeObservedRows, ...page.rows];
+        observedHasMore = page.page.hasMore;
+        observedCursor = page.page.nextCursor;
+        completeObservedPage = page.page;
+      }
+
+      let completeHistory = historyOrders;
+      let historyCursorToLoad = historyCursor;
+      let historyHasMoreToLoad = historyHasMore;
+      let completeHistoryTotal = historyTotalCount;
+      while (historyHasMoreToLoad && historyCursorToLoad) {
+        const page = await getOrdersPage({ limit: 100, cursor: historyCursorToLoad, status: statusFilter, search: searchTerm, fromDate: fromDate || null, toDate: toDate || null });
+        completeHistory = [...completeHistory, ...page.orders.map(toFrontendOrder)];
+        completeHistoryTotal = page.page.totalCount;
+        historyHasMoreToLoad = page.page.hasMore;
+        historyCursorToLoad = page.page.nextCursor;
+      }
+      if (purchaseHasMore || policyHasMore || observedHasMore || historyHasMoreToLoad) {
+        throw new Error('A report section returned more rows without a usable next-page cursor.');
+      }
+
+      if (purchaseData && completePurchasePage) setPurchaseData({ ...purchaseData, groups: purchaseGroups, page: completePurchasePage });
+      setPolicyRows(completePolicyRows);
+      if (completePolicyPage) setPolicyPage({ ...completePolicyPage, hasMore: false, nextCursor: null });
+      if (observedPolicy && completeObservedPage) setObservedPolicy({ ...observedPolicy, rows: completeObservedRows, page: { ...completeObservedPage, hasMore: false, nextCursor: null } });
+      setHistoryOrders(completeHistory);
+      setHistoryTotalCount(completeHistoryTotal);
+      setHistoryHasMore(false);
+      setHistoryCursor(null);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      toast.info('Opening the complete report in the browser print dialog…');
+      window.print();
+    } catch (error) {
+      toast.error(error instanceof Error ? `Could not prepare the complete report for printing: ${error.message}` : 'Could not prepare the complete report for printing.');
+    } finally {
+      setPrintPreparing(false);
+    }
   };
 
   const handleExport = async (format: 'pdf' | 'xlsx') => {
@@ -647,9 +766,18 @@ export const Reports: React.FC = () => {
   }
 
   return (
-      <div className="space-y-6 animate-fadeIn">
+      <div id="reports-print-root" className="space-y-6 animate-fadeIn">
+        <div className="report-print-only border-b-2 border-slate-900 pb-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">SmartStock · Glass &amp; Aluminum Supply</p>
+          <h1 className="mt-1 text-2xl font-black text-slate-950">Reports &amp; Sales Statement</h1>
+          <div className="mt-2 flex flex-wrap gap-x-8 gap-y-1 text-xs text-slate-700">
+            <span><strong>Period:</strong> {reportPeriodLabel}</span>
+            <span><strong>Generated:</strong> {generatedAt}</span>
+          </div>
+          <p className="mt-2 text-[10px] text-slate-600">Sales charts use delivery dates; the current month is month-to-date. Spending uses recorded receipt costs.</p>
+        </div>
         {/* Header — title + generated-at + Daily Cash button */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="report-screen-only flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
               Financial Reports &amp; Statement
@@ -670,7 +798,7 @@ export const Reports: React.FC = () => {
 
 
         {/* Filter Toolbar Card: Date Range (presets + specific From/To) & Export Controls */}
-        <div className="bg-white rounded-[28px] p-5 sm:p-6 border border-[#f1f5f9] shadow-sm space-y-4">
+        <div aria-busy={printPreparing} className={`report-screen-only bg-white rounded-[28px] p-5 sm:p-6 border border-[#f1f5f9] shadow-sm space-y-4 ${printPreparing ? 'pointer-events-none opacity-60' : ''}`}>
           {/* Row 1: Date Range Presets & Specific Date From / To */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             {/* Quick Presets */}
@@ -836,11 +964,12 @@ export const Reports: React.FC = () => {
               <button
                 type="button"
                 onClick={handlePrint}
+                disabled={printPreparing}
                 className="btn-primary flex items-center gap-1.5 text-xs font-bold py-2 px-3.5 shadow-2xs"
-                title="Print current report view"
+                title="Load all report pages and print the complete report"
               >
                 <Printer className="w-3.5 h-3.5" />
-                Print
+                {printPreparing ? 'Preparing…' : 'Print'}
               </button>
             </div>
           </div>
@@ -897,25 +1026,77 @@ export const Reports: React.FC = () => {
           />
         </div>
 
+        <section className="space-y-4 rounded-[28px] border border-indigo-100 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-extrabold text-slate-900">Monthly Sales &amp; Order Transactions</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-600">Calendar-month trends for {reportPeriodLabel.toLowerCase()}. Sales and order counts use recorded delivery dates.</p>
+            </div>
+            {currentMonthTrend && <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">Current month · MTD</span>}
+          </div>
+          <div className="rounded-xl bg-indigo-50 px-4 py-3 text-xs leading-5 text-indigo-950">
+            Gross Sales counts delivered orders only. Gross Order Value includes every non-cancelled order, including orders not yet delivered. Transaction totals include cancelled orders. Refunds are not deducted from either sales measure. {currentMonthTrend && 'The current month is incomplete (MTD), so do not compare it directly with a full prior month.'}
+          </div>
+          {salesTrendLoading ? <p role="status" className="py-8 text-center text-sm text-slate-500">Loading monthly sales trends…</p>
+            : salesTrendError ? <div role="alert" className="py-6 text-center text-sm text-rose-700"><p>Monthly sales trends could not be loaded: {salesTrendError}</p><button type="button" onClick={() => setSalesTrendRetry((value) => value + 1)} className="mt-2 font-semibold underline">Retry</button></div>
+              : <>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Gross Sales · delivered</p><p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(salesTrendTotals.grossSales)}</p></div>
+                  <div className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-sky-800">Gross Order Value</p><p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(salesTrendTotals.grossOrderValue)}</p></div>
+                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-indigo-800">Recorded transactions</p><p className="mt-1 text-xl font-black text-slate-900">{salesTrendTotals.transactions.toLocaleString()}</p><p className="mt-1 text-[11px] text-slate-600">{salesTrendTotals.nonCancelled} non-cancelled · {salesTrendTotals.cancelled} cancelled</p></div>
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-600">Months in report</p><p className="mt-1 text-xl font-black text-slate-900">{salesTrend.length}</p><p className="mt-1 text-[11px] text-slate-600">Zero-order months remain visible.</p></div>
+                </div>
+                {salesTrend.length === 0 ? <p className="rounded-2xl bg-slate-50 p-8 text-center text-sm text-slate-500">No sales or transaction activity is available for this period.</p> :
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-100 p-4">
+                      <h3 className="text-sm font-bold text-slate-800">Monthly revenue measures</h3>
+                      <p className="mt-1 text-xs text-slate-500">PHP by delivery month · current month is MTD</p>
+                      <ResponsiveContainer width="100%" height={280}>
+                        <LineChart data={salesTrend} margin={{ top: 12, right: 12, left: 4, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis dataKey="month" tickFormatter={(month) => `${formatReportMonth(String(month))}${String(month) === currentMonthKey ? ' MTD' : ''}`} stroke="#64748b" fontSize={11} />
+                          <YAxis stroke="#64748b" fontSize={11} tickFormatter={(value) => value >= 1000 ? `₱${Math.round(value / 1000)}k` : `₱${value}`} />
+                          <Tooltip labelFormatter={(month) => `${formatReportMonth(String(month))}${String(month) === currentMonthKey ? ' · Month-to-date' : ''}`} formatter={(value: number, name: string) => [formatCurrency(value), name]} />
+                          <Legend />
+                          <Line type="monotone" dataKey="grossSales" name="Gross Sales (delivered)" stroke="#059669" strokeWidth={2.5} dot={{ r: 3 }} />
+                          <Line type="monotone" dataKey="grossOrderValue" name="Gross Order Value" stroke="#0284c7" strokeWidth={2.5} dot={{ r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="rounded-2xl border border-slate-100 p-4">
+                      <h3 className="text-sm font-bold text-slate-800">Recorded orders by month</h3>
+                      <p className="mt-1 text-xs text-slate-500">All recorded orders, including cancelled transactions</p>
+                      <ResponsiveContainer width="100%" height={280}>
+                        <BarChart data={salesTrend} margin={{ top: 12, right: 12, left: 4, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis dataKey="month" tickFormatter={(month) => `${formatReportMonth(String(month))}${String(month) === currentMonthKey ? ' MTD' : ''}`} stroke="#64748b" fontSize={11} />
+                          <YAxis allowDecimals={false} stroke="#64748b" fontSize={11} />
+                          <Tooltip labelFormatter={(month) => `${formatReportMonth(String(month))}${String(month) === currentMonthKey ? ' · Month-to-date' : ''}`} />
+                          <Legend />
+                          <Bar dataKey="nonCancelledOrders" name="Non-cancelled" stackId="orders" fill="#4f46e5" />
+                          <Bar dataKey="cancelledOrders" name="Cancelled" stackId="orders" fill="#f97316" radius={[5, 5, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>}
+              </>}
+        </section>
+
         <section className="space-y-4 rounded-[28px] border border-[#f1f5f9] bg-white p-5 shadow-sm sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Annual procurement spending</h2><p className="text-xs text-slate-500">Recorded receipt acquisition costs only. Unknown costs are excluded, never estimated from selling prices.</p></div><label className="text-xs font-semibold text-slate-600">Year <input className="input ml-2 w-28" type="number" min="2000" max="2100" value={purchaseYear} onChange={e => setPurchaseYear(e.target.value)}/></label></div>
-          {purchaseLoading ? <p className="py-6 text-sm text-slate-500">Loading purchase costs…</p> : purchaseError ? <p role="alert" className="py-6 text-sm text-rose-700">{purchaseError}</p> : purchaseData ? <><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-500">Priced spend · {purchaseYear}</p><p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(purchaseData.totalSpend)}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced receipts</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedReceiptCount}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced quantity</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedQuantity}</p></div></div><div className="mt-4 overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Material</th><th className="px-4 py-3">Supplier</th><th className="px-4 py-3 text-right">Priced receipts</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Recorded spend</th><th className="px-4 py-3 text-right">Unpriced qty</th></tr></thead><tbody className="divide-y divide-slate-100">{purchaseData.groups.map(row=><tr key={`${row.materialType}-${row.supplier}`}><td className="px-4 py-3 text-sm capitalize">{row.materialType}</td><td className="px-4 py-3 text-sm">{row.supplier || '—'}</td><td className="px-4 py-3 text-right text-sm">{Math.max(0, row.transactionCount - row.unpricedReceiptCount)}</td><td className="px-4 py-3 text-right text-sm">{row.totalQuantity}</td><td className="px-4 py-3 text-right text-sm font-semibold">{formatCurrency(row.totalCost)}</td><td className="px-4 py-3 text-right text-sm">{row.unpricedQuantity ?? 0}</td></tr>)}{purchaseData.groups.length===0&&<tr><td colSpan={6} className="p-6 text-center text-sm text-slate-500">No purchase receipts recorded for this year.</td></tr>}</tbody></table></div></> : null}
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Annual procurement spending</h2><p className="text-xs text-slate-500">Recorded receipt acquisition costs only. Unknown costs are excluded, never estimated from selling prices.</p></div><label className="report-screen-only text-xs font-semibold text-slate-600">Year <input className="input ml-2 w-28" type="number" min="2000" max="2100" value={purchaseYear} onChange={e => setPurchaseYear(e.target.value)}/></label><span className="report-print-only text-xs font-semibold text-slate-700">Reporting year: {purchaseYear}</span></div>
+          {purchaseLoading ? <p className="py-6 text-sm text-slate-500">Loading purchase costs…</p> : purchaseError ? <p role="alert" className="py-6 text-sm text-rose-700">{purchaseError}</p> : purchaseData ? <><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-500">Priced spend · {purchaseYear}</p><p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(purchaseData.totalSpend)}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced receipts</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedReceiptCount}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs uppercase text-amber-700">Unpriced quantity</p><p className="mt-1 text-xl font-black text-amber-900">{purchaseData.unpricedQuantity}</p></div></div><div ref={purchaseScrollerRef} className="report-infinite-scroll mt-4 max-h-[28rem] overflow-auto rounded-xl border border-slate-100"><div className="min-w-[880px]"><table className="w-full text-left"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Material</th><th className="px-4 py-3">Supplier</th><th className="px-4 py-3 text-right">Priced receipts</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Recorded spend</th><th className="px-4 py-3 text-right">Unpriced qty</th></tr></thead><tbody className="divide-y divide-slate-100">{purchaseData.groups.map(row=><tr key={`${row.materialType}-${row.supplier}`}><td className="px-4 py-3 text-sm capitalize">{row.materialType}</td><td className="px-4 py-3 text-sm">{row.supplier || '—'}</td><td className="px-4 py-3 text-right text-sm">{Math.max(0, row.transactionCount - row.unpricedReceiptCount)}</td><td className="px-4 py-3 text-right text-sm">{row.totalQuantity}</td><td className="px-4 py-3 text-right text-sm font-semibold">{formatCurrency(row.totalCost)}</td><td className="px-4 py-3 text-right text-sm">{row.unpricedQuantity ?? 0}</td></tr>)}{purchaseData.groups.length===0&&<tr><td colSpan={6} className="p-6 text-center text-sm text-slate-500">No purchase receipts recorded for this year.</td></tr>}</tbody></table></div>{purchaseData.page.hasMore && <div ref={purchaseSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll inside this table to load more purchase groups…</div>}{purchaseLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more purchase groups…</p>}{purchaseLoadMoreError && <div role="alert" className="p-3 text-center text-sm text-rose-700"><p>{purchaseLoadMoreError}</p><button type="button" onClick={() => void loadMorePurchaseGroups()} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}{purchaseData.page.hasMore && typeof IntersectionObserver === 'undefined' && <div className="py-3 text-center"><button type="button" onClick={() => void loadMorePurchaseGroups()} disabled={purchaseLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">{purchaseLoadingMore ? 'Loading…' : 'Load more purchase groups'}</button></div>}</div></> : null}
         </section>
         {purchaseData && <p className="px-1 text-xs text-slate-500">Showing {purchaseData.groups.length} of {purchaseData.page.totalCount} purchase groups.</p>}
-        {purchaseData?.page.hasMore && <div ref={purchaseSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more purchase groups…</div>}
-        {purchaseLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more purchase groups…</p>}
-        {purchaseLoadMoreError && <div role="alert" className="text-center text-sm text-rose-700"><p>{purchaseLoadMoreError}</p><button type="button" onClick={() => void loadMorePurchaseGroups()} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
-        {purchaseData?.page.hasMore && typeof IntersectionObserver === 'undefined' && <div className="py-3 text-center"><button type="button" onClick={() => void loadMorePurchaseGroups()} disabled={purchaseLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">{purchaseLoadingMore ? 'Loading…' : 'Load more purchase groups'}</button></div>}
+
 
         <section className="space-y-4 rounded-[28px] border border-violet-100 bg-violet-50/30 p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Current Stock Check</h2><p className="max-w-3xl text-xs text-slate-600">Compares current stock with its restock level and estimated sales for next month. This is a current snapshot, not a review of past settings.</p></div><div className="flex gap-2"><button onClick={() => void handleForecastExport('pdf')} className="btn-secondary text-xs">Download PDF</button><button onClick={() => void handleForecastExport('xlsx')} className="btn-secondary text-xs">Download XLSX</button></div></div>
           <p className="text-xs text-slate-500">Sales estimates use completed orders from recent months. We need recorded sales in at least three months before showing an estimate.</p>
           {policyPage && <p className="text-xs text-slate-500">Showing {availablePolicyRows.length} of {policyPage.totalCount} products with enough sales history.</p>}
-          {policyLoading ? <p className="py-6 text-sm text-slate-500">Preparing stock checks…</p> : policyError ? <p role="alert" className="py-6 text-sm text-rose-700">We could not load the stock check. Please try again.</p> : availablePolicyRows.length === 0 ? <p className="py-6 text-center text-sm text-slate-600">No products have enough sales history for an estimate yet. We need recorded sales in at least three months.</p> : <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-white text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3 text-right">Stock / restock level</th><th className="px-4 py-3 text-right">Expected sales next month</th><th className="px-4 py-3 text-right">Suggested restock</th><th className="px-4 py-3">Stock check</th><th className="px-4 py-3">Months with sales</th></tr></thead><tbody className="divide-y divide-violet-100">{availablePolicyRows.map(row=><tr key={row.productId}><td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">Code: {row.sku}</span></td><td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.reorderPoint} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.forecastQuantity} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.recommendedOrderQuantity===null?'—':`${row.recommendedOrderQuantity} ${row.unit}`}</td><td className="px-4 py-3 text-sm">{STOCK_CHECK_LABELS[row.policyAssessment]}</td><td className="px-4 py-3 text-sm">{row.positiveMonths} months</td></tr>)}</tbody></table></div>}
+          {policyLoading ? <p className="py-6 text-sm text-slate-500">Preparing stock checks…</p> : policyError ? <p role="alert" className="py-6 text-sm text-rose-700">We could not load the stock check. Please try again.</p> : availablePolicyRows.length === 0 ? <p className="py-6 text-center text-sm text-slate-600">No products have enough sales history for an estimate yet. We need recorded sales in at least three months.</p> : <div ref={policyScrollerRef} className="report-infinite-scroll max-h-[30rem] overflow-auto rounded-xl border border-violet-100"><div className="min-w-[1040px]"><table className="w-full text-left"><thead className="bg-white text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3 text-right">Stock / restock level</th><th className="px-4 py-3 text-right">Expected sales next month</th><th className="px-4 py-3 text-right">Suggested restock</th><th className="px-4 py-3">Stock check</th><th className="px-4 py-3">Months with sales</th></tr></thead><tbody className="divide-y divide-violet-100">{availablePolicyRows.map(row=><tr key={row.productId}><td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">Code: {row.sku}</span></td><td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.reorderPoint} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.forecastQuantity} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.recommendedOrderQuantity===null?'—':`${row.recommendedOrderQuantity} ${row.unit}`}</td><td className="px-4 py-3 text-sm">{STOCK_CHECK_LABELS[row.policyAssessment]}</td><td className="px-4 py-3 text-sm">{row.positiveMonths} months</td></tr>)}</tbody></table></div>{policyPage?.hasMore && <div ref={policySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll inside this table to see more products…</div>}</div>}
           {policyLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more products…</p>}
           {policyLoadMoreError && <div role="alert" className="text-center text-sm text-rose-700"><p>{policyLoadMoreError}</p><button type="button" onClick={() => void loadMorePolicyRows()} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
         </section>
-        {policyPage?.hasMore && <div ref={policySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to see more products…</div>}
         {policyPage?.hasMore && typeof IntersectionObserver === 'undefined' && (
           <div className="py-3 text-center">
             <button type="button" onClick={() => void loadMorePolicyRows()} disabled={policyLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">
@@ -956,7 +1137,7 @@ export const Reports: React.FC = () => {
                     <p>This report describes recorded stock levels only. It does not show missed sales, restocking delays, storage costs, or prove that a restock setting caused the results.</p>
                   </div>
                   <p className="text-xs text-slate-500">Showing {observedPolicy.rows.length} of {observedPolicy.page.totalCount} products.</p>
-                  <div className="overflow-x-auto"><table className="w-full text-left">
+                  <div ref={observedPolicyScrollerRef} className="report-infinite-scroll max-h-[32rem] overflow-auto rounded-xl border border-emerald-100"><div className="min-w-[1320px]"><table className="w-full text-left">
                     <thead className="bg-white text-xs uppercase text-slate-500"><tr>
                       <th className="px-4 py-3">Product</th><th className="px-4 py-3 text-right">Stock / restock level</th><th className="px-4 py-3 text-right">Average stock</th>
                       <th className="px-4 py-3 text-right">Days at or below level</th><th className="px-4 py-3 text-right">Time at or below level</th><th className="px-4 py-3 text-right">Days out of stock</th>
@@ -984,12 +1165,11 @@ export const Reports: React.FC = () => {
                           </details>
                         </td></tr>
                       </React.Fragment>
-                    })}</tbody>
-                  </table></div>
-                  {observedPolicy.page.hasMore && <div ref={observedPolicySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to see more products…</div>}
+                    })}</tbody></table>{observedPolicy.page.hasMore && <div ref={observedPolicySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll inside this table to see more products…</div>}</div>
                   {observedPolicyLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more products…</p>}
                   {observedPolicyLoadMoreError && <div role="alert" className="text-center text-sm text-rose-700"><p>{observedPolicyLoadMoreError}</p><button type="button" onClick={() => void loadMoreObservedPolicy()} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
                   {observedPolicy.page.hasMore && typeof IntersectionObserver === 'undefined' && <div className="py-3 text-center"><button type="button" onClick={() => void loadMoreObservedPolicy()} disabled={observedPolicyLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">{observedPolicyLoadingMore ? 'Loading…' : 'Load more products'}</button></div>}
+                  </div>
                 </>}
         </section>
 
@@ -1056,8 +1236,7 @@ export const Reports: React.FC = () => {
             {!historyLoading && <p className="text-xs text-slate-400 mt-1">Showing {historyOrders.length} of {historyTotalCount} matching orders</p>}
           </div>
           
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div ref={historyScrollerRef} className="report-infinite-scroll max-h-[32rem] overflow-auto"><div className="min-w-[1000px]"><table className="w-full">
               <thead className="bg-slate-50/80 border-b border-[#f1f5f9]">
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Order ID</th>
@@ -1102,8 +1281,7 @@ export const Reports: React.FC = () => {
                   );
                 })}
               </tbody>
-            </table>
-          </div>
+            </table>{historyHasMore && <div ref={historySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll inside the order list to load more…</div>}</div></div>
           
           {historyLoading && <div role="status" className="p-8 text-center text-sm text-slate-500">Loading matching orders…</div>}
           {historyError && (
@@ -1114,7 +1292,6 @@ export const Reports: React.FC = () => {
               </button>
             </div>
           )}
-          {historyHasMore && <div ref={historySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll to load more orders…</div>}
           {historyHasMore && typeof IntersectionObserver === 'undefined' && (
             <div className="py-3 text-center">
               <button type="button" onClick={() => void loadMoreHistory()} disabled={historyLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">

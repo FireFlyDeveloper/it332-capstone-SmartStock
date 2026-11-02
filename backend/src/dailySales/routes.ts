@@ -85,8 +85,11 @@ dailySalesRoutes.get('/', async (c) => {
       const pageOrders = dbPage.orders.map(toDailySalesOrder);
       return c.json({
         date,
+        recordedOrderCount: dbPage.recordedOrderCount,
         orderCount: dbPage.orderCount,
         cancelledOrderCount: dbPage.cancelledOrderCount,
+        statusCounts: dbPage.statusCounts,
+        paymentCounts: dbPage.paymentCounts,
         grossSales: dbPage.grossSales,
         collectedAmount: dbPage.collectedAmount,
         refundsAmount: dbPage.refundsAmount,
@@ -125,13 +128,28 @@ dailySalesRoutes.get('/', async (c) => {
   const hasMore = pageWithLookahead.length > limit;
   const pageOrders = pageWithLookahead.slice(0, limit);
   const activeOrders = orders.filter((order) => order.orderStatus !== 'cancelled');
+  const statusCounts = {
+    processing: orders.filter((order) => order.orderStatus === 'processing').length,
+    inTransit: orders.filter((order) => order.orderStatus === 'in_transit').length,
+    delivered: orders.filter((order) => order.orderStatus === 'delivered').length,
+    cancelled: orders.filter((order) => order.orderStatus === 'cancelled').length,
+  };
+  const paymentCounts = {
+    paid: orders.filter((order) => order.paymentStatus === 'paid').length,
+    partial: orders.filter((order) => order.paymentStatus === 'partial').length,
+    unpaid: orders.filter((order) => order.paymentStatus === 'unpaid').length,
+    refunded: orders.filter((order) => order.paymentStatus === 'refunded').length,
+  };
   const netCollectedAmount = orders.reduce((sum, order) => sum + order.paidAmount, 0);
   const refundsAmount = orders.reduce((sum, order) => sum + order.refundedAmount, 0);
   const collectedAmount = netCollectedAmount + refundsAmount;
   const summary: DailySalesSummary = {
     date,
+    recordedOrderCount: orders.length,
     orderCount: activeOrders.length,
     cancelledOrderCount: orders.length - activeOrders.length,
+    statusCounts,
+    paymentCounts,
     grossSales: activeOrders.reduce((sum, order) => sum + order.total, 0),
     collectedAmount,
     refundsAmount,

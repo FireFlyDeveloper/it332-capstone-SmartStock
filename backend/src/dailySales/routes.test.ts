@@ -47,7 +47,9 @@ describe('Daily Sales API', () => {
     const response = await buildApp().request('/daily-sales?date=2026-10-30', { headers: staffHeaders() });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      date: '2026-10-30', orderCount: 1, cancelledOrderCount: 0, grossSales: 100,
+      date: '2026-10-30', recordedOrderCount: 1, orderCount: 1, cancelledOrderCount: 0,
+      statusCounts: { processing: 0, inTransit: 0, delivered: 1, cancelled: 0 },
+      paymentCounts: { paid: 0, partial: 1, unpaid: 0, refunded: 0 }, grossSales: 100,
       collectedAmount: 90, refundsAmount: 10, netCollectedAmount: 80,
       orders: [{
         id: 'order-1', referenceNumber: 'SS-1', customerName: 'Sample',
@@ -99,7 +101,14 @@ describe('Daily Sales API', () => {
     const filtered = await filteredResponse.json() as { orders: Array<{ id: string }>; page: { totalCount: number }; orderCount: number; cancelledOrderCount: number; grossSales: number };
     expect(filtered.orders.map((order) => order.id)).toEqual(['order-2']);
     expect(filtered.page.totalCount).toBe(1);
-    expect(filtered).toMatchObject({ orderCount: 2, cancelledOrderCount: 1, grossSales: 200 });
+    expect(filtered).toMatchObject({
+      recordedOrderCount: 3,
+      orderCount: 2,
+      cancelledOrderCount: 1,
+      statusCounts: { processing: 0, inTransit: 0, delivered: 2, cancelled: 1 },
+      paymentCounts: { paid: 0, partial: 2, unpaid: 1, refunded: 0 },
+      grossSales: 200,
+    });
   });
 
   it('rejects invalid pagination parameters', async () => {

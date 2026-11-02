@@ -9,21 +9,28 @@
  * Last touched: 2026-07-07
  */
 
+.report-print-only {
+  display: none;
+}
+
 @media print {
   /* Hide screen-only chrome */
   .layout-topbar,
   .layout-sidebar,
   .layout-mobile-bar,
+  .layout-mobile-overlay,
+  [data-sonner-toaster],
   .no-print,
+  .report-screen-only,
   button,
   nav {
     display: none !important;
   }
 
   /* Reset the layout so the report fills the page */
-  .layout,
-  .layout__main,
-  main {
+  .app-layout,
+  .app-layout__content,
+  .layout-main {
     display: block !important;
     width: 100% !important;
     margin: 0 !important;
@@ -31,10 +38,26 @@
     background: #fff !important;
   }
 
+  #reports-print-root {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #111827 !important;
+    animation: none !important;
+  }
+
+  .report-print-only {
+    display: block !important;
+    margin-bottom: 8mm !important;
+    color: #111827 !important;
+  }
+
   /* Page setup */
   @page {
-    size: A4;
-    margin: 16mm 14mm;
+    size: A4 landscape;
+    margin: 11mm 10mm;
   }
 
   body {
@@ -53,14 +76,25 @@
   table {
     width: 100% !important;
     border-collapse: collapse !important;
+    table-layout: auto !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+
+  tr {
     page-break-inside: avoid;
+    break-inside: avoid;
   }
 
   th, td {
-    border: 1px solid #ddd !important;
-    padding: 6pt 8pt !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 4pt 5pt !important;
     color: #000 !important;
     background: #fff !important;
+    font-size: 8.5pt !important;
   }
 
   th {
@@ -87,6 +121,28 @@
 
   .print-break-after {
     page-break-after: always;
+  }
+
+  .report-infinite-scroll {
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  .report-infinite-scroll > div {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .report-infinite-scroll [role="status"] {
+    display: none !important;
+  }
+
+  .recharts-wrapper,
+  .recharts-surface {
+    max-width: 100% !important;
   }
 
   /* Anchors: don't print URL after the text */

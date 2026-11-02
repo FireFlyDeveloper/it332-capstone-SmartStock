@@ -25,6 +25,7 @@ export const DailySales: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [retryVersion, setRetryVersion] = useState(0);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const salesScrollerRef = useRef<HTMLDivElement | null>(null);
   const loadingMoreRef = useRef(false);
   const requestVersionRef = useRef(0);
 
@@ -103,7 +104,7 @@ export const DailySales: React.FC = () => {
     if (!sentinel || !hasMore || loading || loadingMore || loadMoreError || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) void loadMore();
-    }, { rootMargin: '320px 0px' });
+    }, { root: salesScrollerRef.current, rootMargin: '96px 0px' });
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [hasMore, loading, loadingMore, loadMoreError, loadMore]);
@@ -163,7 +164,7 @@ export const DailySales: React.FC = () => {
           <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600"><Banknote className="h-5 w-5" /></span>
           <div>
             <h1 className="text-2xl font-extrabold text-slate-900">Daily Sales</h1>
-            <p className="text-sm text-slate-500">Daily totals and order details.</p>
+            <p className="text-sm text-slate-500">Daily totals by order creation date (UTC), with sales and payment details.</p>
           </div>
         </div>
         <button type="button" onClick={() => void exportCsv()} disabled={exporting} className="btn-secondary inline-flex items-center gap-2 self-start text-sm disabled:opacity-60 sm:self-auto">
@@ -172,9 +173,9 @@ export const DailySales: React.FC = () => {
       </header>
 
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-        <label htmlFor="daily-sales-date" className="flex items-center gap-2 text-sm font-semibold text-slate-600"><Calendar className="h-4 w-4" /> Sales date</label>
+        <label htmlFor="daily-sales-date" className="flex items-center gap-2 text-sm font-semibold text-slate-600"><Calendar className="h-4 w-4" /> Order date (UTC)</label>
         <input id="daily-sales-date" type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="input w-auto" />
-        {summary && <span className="text-xs text-slate-500">{summary.orderCount} active · {summary.cancelledOrderCount} cancelled</span>}
+        {summary && <span className="text-xs text-slate-500">{summary.recordedOrderCount ?? (summary.orderCount + summary.cancelledOrderCount)} orders recorded · summary totals do not change with list filters</span>}
       </div>
 
       {loading ? (
@@ -187,17 +188,32 @@ export const DailySales: React.FC = () => {
       ) : summary && (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Metric label="Gross sales" amount={summary.grossSales} />
-            <Metric label="Collected" amount={summary.collectedAmount} />
-            <Metric label="Refunds" amount={summary.refundsAmount} />
+            <Metric label="Gross order value · non-cancelled" amount={summary.grossSales} />
+            <Metric label="Collected before refunds" amount={summary.collectedAmount} />
+            <Metric label="Refunds recorded" amount={summary.refundsAmount} />
             <Metric label="Net collected" amount={summary.netCollectedAmount} />
           </div>
+
+          {summary.statusCounts && summary.paymentCounts ? <div className="grid gap-4 xl:grid-cols-2">
+            <Breakdown title="Order status" items={[
+              ['Processing', summary.statusCounts.processing],
+              ['In transit', summary.statusCounts.inTransit],
+              ['Delivered', summary.statusCounts.delivered],
+              ['Cancelled', summary.statusCounts.cancelled],
+            ]} />
+            <Breakdown title="Payment status" items={[
+              ['Paid', summary.paymentCounts.paid],
+              ['Partial', summary.paymentCounts.partial],
+              ['Unpaid', summary.paymentCounts.unpaid],
+              ['Refunded', summary.paymentCounts.refunded],
+            ]} />
+          </div> : <p role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Order and payment breakdowns are not available from the connected backend version yet.</p>}
 
           <section className="space-y-4 rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Sales orders <span className="text-sm font-medium text-slate-500">({totalCount})</span></h2>
-                <p className="text-xs text-slate-500">Totals are based on recorded orders.</p>
+                <p className="text-xs text-slate-500">Summary covers all orders created on this UTC date, including cancelled orders. Gross order value excludes cancelled orders; payment totals include recorded collections and refunds.</p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <label className="relative">
@@ -224,27 +240,30 @@ export const DailySales: React.FC = () => {
                 No sales records match this date and filter.
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div ref={salesScrollerRef} className="report-infinite-scroll max-h-[32rem] overflow-auto rounded-xl border border-slate-100"><div className="min-w-[1120px]">
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>
-                    <th className="px-4 py-3">Reference / customer</th><th className="px-4 py-3">Items</th><th className="px-4 py-3 text-right">Gross</th><th className="px-4 py-3 text-right">Collected</th><th className="px-4 py-3 text-right">Refunded</th><th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Reference / customer</th><th className="px-4 py-3">Items · quantity × unit price</th><th className="px-4 py-3 text-right">Gross order value</th><th className="px-4 py-3 text-right">Collected</th><th className="px-4 py-3 text-right">Refunded</th><th className="px-4 py-3">Payment</th><th className="px-4 py-3">Order status</th><th className="px-4 py-3">Recorded (UTC)</th>
                   </tr></thead>
                   <tbody className="divide-y divide-slate-100">
                     {orders.map((order) => <tr key={order.id} className="text-sm">
                       <td className="px-4 py-3"><span className="block font-mono font-bold text-slate-900">{order.referenceNumber}</span><span className="text-xs text-slate-500">{order.customerName}</span></td>
-                      <td className="max-w-sm px-4 py-3 text-slate-600">{order.items.map((item) => `${item.name} × ${item.quantity}`).join(', ')}</td>
+                      <td className="max-w-sm px-4 py-3 text-slate-600">{order.items.map((item, index) => <div key={`${item.productId}-${index}`} className="text-xs"><span className="font-medium text-slate-700">{item.name}</span><span> · {item.quantity} × {formatCurrency(item.unitPrice)} = {formatCurrency(item.lineTotal)}</span></div>)}</td>
                       <td className="px-4 py-3 text-right font-semibold">{formatCurrency(order.total)}</td>
                       <td className="px-4 py-3 text-right font-semibold text-emerald-700">{formatCurrency(order.paidAmount)}</td>
                       <td className="px-4 py-3 text-right font-semibold text-rose-700">{formatCurrency(order.refundedAmount)}</td>
+                      <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${getStatusColor(order.paymentStatus)}`}>{order.paymentStatus}</span></td>
                       <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${getStatusColor(order.orderStatus)}`}>{order.orderStatus.replaceAll('_', ' ')}</span></td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">{new Date(order.createdAt).toLocaleString(undefined, { timeZone: 'UTC' })} UTC</td>
                     </tr>)}
                   </tbody>
                 </table>
+                </div>
+                {hasMore && <div ref={sentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">{loadingMore ? 'Loading more sales…' : 'Scroll inside this list to load more sales…'}</div>}
+                {loadMoreError && <div role="alert" className="p-3 text-center text-sm text-rose-700">Could not load more sales: {loadMoreError}<button type="button" onClick={() => { setLoadMoreError(''); void loadMore(); }} className="ml-2 underline">Retry</button></div>}
+                {hasMore && typeof IntersectionObserver === 'undefined' && <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="btn-secondary mx-auto my-3 block">{loadingMore ? 'Loading…' : 'Load more sales'}</button>}
               </div>
             )}
-            {hasMore && <div ref={sentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">{loadingMore ? 'Loading more sales…' : 'Scroll to load more sales…'}</div>}
-            {loadMoreError && <div role="alert" className="text-center text-sm text-rose-700">Could not load more sales: {loadMoreError}<button type="button" onClick={() => { setLoadMoreError(''); void loadMore(); }} className="ml-2 underline">Retry</button></div>}
-            {hasMore && typeof IntersectionObserver === 'undefined' && <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="btn-secondary mx-auto block">{loadingMore ? 'Loading…' : 'Load more sales'}</button>}
           </section>
         </>
       )}
@@ -257,4 +276,18 @@ function Metric({ label, amount }: { label: string; amount: number }) {
     <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</p>
     <p className="mt-2 text-2xl font-black text-slate-900">{formatCurrency(amount)}</p>
   </div>;
+}
+
+function Breakdown({ title, items }: { title: string; items: [string, number][] }) {
+  const total = items.reduce((sum, [, count]) => sum + count, 0);
+  return <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+    <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-bold text-slate-800">{title}</h2><span className="text-xs text-slate-500">{total} orders</span></div>
+    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {items.map(([label, count]) => <div key={label} className="rounded-xl bg-slate-50 p-3">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
+        <p className="mt-1 text-lg font-black text-slate-900">{count.toLocaleString()}</p>
+        <p className="text-[10px] text-slate-500">{total ? `${((count / total) * 100).toFixed(1)}%` : '0.0%'} of daily orders</p>
+      </div>)}
+    </div>
+  </section>;
 }

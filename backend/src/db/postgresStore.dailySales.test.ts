@@ -35,7 +35,15 @@ describe('PostgreSQL Daily Sales cursor query', () => {
   it('queries date/filter/cursor in SQL and maps summary plus lookahead page', async () => {
     database.query.mockResolvedValue({ rows: [{
       order_count: 3,
+      recorded_order_count: 4,
       cancelled_order_count: 1,
+      processing_count: 1,
+      in_transit_count: 1,
+      delivered_count: 1,
+      paid_count: 1,
+      partial_count: 1,
+      unpaid_count: 1,
+      refunded_count: 1,
       gross_sales: '420',
       net_collected_amount: '100',
       refunds_amount: '50',
@@ -53,8 +61,11 @@ describe('PostgreSQL Daily Sales cursor query', () => {
     });
 
     expect(result).toMatchObject({
+      recordedOrderCount: 4,
       orderCount: 3,
       cancelledOrderCount: 1,
+      statusCounts: { processing: 1, inTransit: 1, delivered: 1, cancelled: 1 },
+      paymentCounts: { paid: 1, partial: 1, unpaid: 1, refunded: 1 },
       grossSales: 420,
       collectedAmount: 150,
       refundsAmount: 50,
@@ -68,6 +79,7 @@ describe('PostgreSQL Daily Sales cursor query', () => {
     expect(sql).toContain('created_at >= $1::timestamptz');
     expect(sql).toContain('jsonb_array_elements');
     expect(sql).toContain('ORDER BY o.order_no ASC, o.id ASC');
+    expect(sql).toContain("COUNT(*) FILTER (WHERE payment_status = 'refunded')");
     expect(sql).toContain('LIMIT $7');
     expect(values).toEqual([
       '2026-10-30T00:00:00.000Z',

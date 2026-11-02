@@ -117,8 +117,11 @@ export interface DailySalesOrder {
 
 export interface DailySalesSummary {
   date: string
+  recordedOrderCount?: number
   orderCount: number
   cancelledOrderCount: number
+  statusCounts?: { processing: number; inTransit: number; delivered: number; cancelled: number }
+  paymentCounts?: { paid: number; partial: number; unpaid: number; refunded: number }
   grossSales: number
   collectedAmount: number
   refundsAmount: number

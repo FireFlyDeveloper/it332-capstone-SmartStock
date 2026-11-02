@@ -92,18 +92,18 @@ export function Layout({ children }: LayoutProps) {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#f8fafc] text-slate-900 font-sans antialiased">
+    <div className="app-layout flex min-h-screen bg-[#f8fafc] text-slate-900 font-sans antialiased">
       {/* Mobile Drawer Overlay */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden transition-opacity"
+          className="layout-mobile-overlay fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden transition-opacity"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
       {/* 280px Fixed-width Dark Navy Sidebar */}
       <aside
-        className={`
+      className={`layout-sidebar
           fixed inset-y-0 left-0 z-50
           w-[280px] min-w-[280px] bg-[#0f172a] border-r border-[#1e293b]
           flex flex-col justify-between
@@ -203,9 +203,9 @@ export function Layout({ children }: LayoutProps) {
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col lg:pl-[280px] min-w-0">
+      <div className="app-layout__content flex-1 flex flex-col lg:pl-[280px] min-w-0">
         {/* Sticky Header: 80px height, #ffffff, border-bottom #f1f5f9 */}
-        <header className="sticky top-0 z-30 h-[80px] bg-white border-b border-[#f1f5f9] px-4 lg:px-8 flex items-center justify-between shadow-[0_1px_3px_rgb(0_0_0/0.02)]">
+        <header className="layout-topbar sticky top-0 z-30 h-[80px] bg-white border-b border-[#f1f5f9] px-4 lg:px-8 flex items-center justify-between shadow-[0_1px_3px_rgb(0_0_0/0.02)]">
           {/* Mobile navigation toggle; global search is intentionally absent. */}
           <div className="flex flex-1 items-center gap-4">
             <button
@@ -320,7 +320,7 @@ export function Layout({ children }: LayoutProps) {
         </header>
 
         {/* Fluid Workspace Body */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1720px] w-full mx-auto">
+        <main className="layout-main flex-1 p-4 sm:p-6 lg:p-8 max-w-[1720px] w-full mx-auto">
           {error && (
             <div role="alert" className="mb-5 flex flex-col gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between">
               <span>Live data could not be loaded: {error}. Sample data is not being substituted.</span>

@@ -1922,8 +1922,11 @@ export async function listOrdersPageDb(input: {
 }
 
 export interface DailySalesDbPage {
+  recordedOrderCount: number;
   orderCount: number;
   cancelledOrderCount: number;
+  statusCounts: { processing: number; inTransit: number; delivered: number; cancelled: number };
+  paymentCounts: { paid: number; partial: number; unpaid: number; refunded: number };
   grossSales: number;
   collectedAmount: number;
   refundsAmount: number;
@@ -1955,8 +1958,16 @@ export async function listDailySalesPageDb(input: {
         AND created_at < $2::timestamptz
     ), summary AS (
       SELECT
+        COUNT(*)::int AS recorded_order_count,
         COUNT(*) FILTER (WHERE order_status <> 'cancelled')::int AS order_count,
         COUNT(*) FILTER (WHERE order_status = 'cancelled')::int AS cancelled_order_count,
+        COUNT(*) FILTER (WHERE order_status = 'processing')::int AS processing_count,
+        COUNT(*) FILTER (WHERE order_status = 'in_transit')::int AS in_transit_count,
+        COUNT(*) FILTER (WHERE order_status = 'delivered')::int AS delivered_count,
+        COUNT(*) FILTER (WHERE payment_status = 'paid')::int AS paid_count,
+        COUNT(*) FILTER (WHERE payment_status = 'partial')::int AS partial_count,
+        COUNT(*) FILTER (WHERE payment_status = 'unpaid')::int AS unpaid_count,
+        COUNT(*) FILTER (WHERE payment_status = 'refunded')::int AS refunded_count,
         COALESCE(SUM(total_amount) FILTER (WHERE order_status <> 'cancelled'), 0) AS gross_sales,
         COALESCE(SUM(paid_amount), 0) AS net_collected_amount,
         COALESCE(SUM(refunded_amount), 0) AS refunds_amount
@@ -1985,8 +1996,16 @@ export async function listDailySalesPageDb(input: {
       LIMIT $7
     )
     SELECT
+      summary.recorded_order_count,
       summary.order_count,
       summary.cancelled_order_count,
+      summary.processing_count,
+      summary.in_transit_count,
+      summary.delivered_count,
+      summary.paid_count,
+      summary.partial_count,
+      summary.unpaid_count,
+      summary.refunded_count,
       summary.gross_sales,
       summary.net_collected_amount,
       summary.refunds_amount,
@@ -2011,8 +2030,21 @@ export async function listDailySalesPageDb(input: {
   const netCollectedAmount = Number(row.net_collected_amount ?? 0);
   const refundsAmount = Number(row.refunds_amount ?? 0);
   return {
+    recordedOrderCount: Number(row.recorded_order_count ?? 0),
     orderCount: Number(row.order_count ?? 0),
     cancelledOrderCount: Number(row.cancelled_order_count ?? 0),
+    statusCounts: {
+      processing: Number(row.processing_count ?? 0),
+      inTransit: Number(row.in_transit_count ?? 0),
+      delivered: Number(row.delivered_count ?? 0),
+      cancelled: Number(row.cancelled_order_count ?? 0),
+    },
+    paymentCounts: {
+      paid: Number(row.paid_count ?? 0),
+      partial: Number(row.partial_count ?? 0),
+      unpaid: Number(row.unpaid_count ?? 0),
+      refunded: Number(row.refunded_count ?? 0),
+    },
     grossSales: Number(row.gross_sales ?? 0),
     collectedAmount: netCollectedAmount + refundsAmount,
     refundsAmount,
