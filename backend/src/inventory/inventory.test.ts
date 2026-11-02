@@ -271,13 +271,13 @@ describe('product inventory routes', () => {
     const inbound = await app.request('/products/' + product.id + '/stock/inbound', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ quantity: 4, referenceNo: 'PO-1001', supplier: 'Acme Glass' }),
+      body: JSON.stringify({ quantity: 4, referenceNo: 'PO-1001', supplier: 'Acme Glass', occurredAt: '2026-10-31T00:00:00.000Z' }),
     });
 
     expect(inbound.status).toBe(201);
-    const updated = (await inbound.json()) as { product: { stock: number }; movement: { type: string; quantity: number; referenceNo: string; supplier: string; createdBy: string } };
+    const updated = (await inbound.json()) as { product: { stock: number }; movement: { type: string; quantity: number; referenceNo: string; supplier: string; occurredAt: string; createdBy: string } };
     expect(updated.product.stock).toBe(product.stock + 4);
-    expect(updated.movement).toMatchObject({ type: 'inbound', quantity: 4, referenceNo: 'PO-1001', supplier: 'Acme Glass', createdBy: ADMIN });
+    expect(updated.movement).toMatchObject({ type: 'inbound', quantity: 4, referenceNo: 'PO-1001', supplier: 'Acme Glass', occurredAt: '2026-10-31T00:00:00.000Z', createdBy: ADMIN });
 
     const list = await app.request('/products/' + product.id + '/movements', {
       headers: { authorization: 'Bearer ' + token },

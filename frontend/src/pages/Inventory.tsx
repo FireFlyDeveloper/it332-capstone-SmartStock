@@ -107,6 +107,7 @@ export const Inventory: React.FC = () => {
   const [restockReferenceNo, setRestockReferenceNo] = useState('');
   const [restockSupplier, setRestockSupplier] = useState('');
   const [purchaseUnitCost, setPurchaseUnitCost] = useState('');
+  const [restockDate, setRestockDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [formData, setFormData] = useState<ProductFormData>(emptyProductForm);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
@@ -236,6 +237,7 @@ export const Inventory: React.FC = () => {
     setRestockReferenceNo('');
     setRestockSupplier('');
     setPurchaseUnitCost('');
+    setRestockDate(new Date().toISOString().slice(0, 10));
     setIsRestockModalOpen(true);
   };
 
@@ -253,6 +255,10 @@ export const Inventory: React.FC = () => {
     const quantity = Number(restockQuantity);
     const unitCost = purchaseUnitCost.trim() === '' ? undefined : Number(purchaseUnitCost);
     if (!restockProductId || restockQuantity.trim() === '' || !Number.isFinite(quantity) || quantity <= 0 || savingRestock) return;
+    if (!restockDate) {
+      toast.error('Enter the actual receipt date.');
+      return;
+    }
     if (!restockReferenceNo.trim() || !restockSupplier.trim()) {
       toast.error('Enter the actual supplier and receipt or purchase-order reference.');
       return;
@@ -267,6 +273,7 @@ export const Inventory: React.FC = () => {
       await restockProduct(restockProductId, quantity, {
         referenceNo: restockReferenceNo.trim(),
         supplier: restockSupplier.trim(),
+        occurredAt: `${restockDate}T00:00:00.000Z`,
         ...(unitCost !== undefined ? { unitCost } : {}),
       });
       await loadFirstPage();
@@ -806,6 +813,19 @@ export const Inventory: React.FC = () => {
                     autoComplete="organization"
                     required
                   />
+                </div>
+                <div>
+                  <label className="label" htmlFor="restock-date">Actual receipt date</label>
+                  <input
+                    id="restock-date"
+                    type="date"
+                    name="restockDate"
+                    value={restockDate}
+                    onChange={(e) => setRestockDate(e.target.value)}
+                    className="input"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-slate-500">Use the date shown on the receipt. Reports group movement dates by UTC calendar date.</p>
                 </div>
                 <div>
                   <label className="label" htmlFor="restock-reference">Receipt or purchase-order reference</label>

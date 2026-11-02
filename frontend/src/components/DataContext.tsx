@@ -69,7 +69,7 @@ interface DataContextValue {
   addProduct: (product: Omit<Product, 'id'>) => Promise<void>
   updateProduct: (id: string, product: Partial<Product>) => Promise<void>
   deleteProduct: (id: string) => Promise<void>
-  restockProduct: (id: string, quantity: number, details: { referenceNo: string; supplier: string; unitCost?: number }) => Promise<void>
+  restockProduct: (id: string, quantity: number, details: { referenceNo: string; supplier: string; occurredAt?: string; unitCost?: number }) => Promise<void>
   listProductMovements: (id: string) => Promise<StockMovement[]>
 
   // Order mutators
@@ -147,7 +147,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     dispatchNotificationFeedRefresh()
   }, [])
 
-  const restockProduct = useCallback(async (id: string, quantity: number, details: { referenceNo: string; supplier: string; unitCost?: number }) => {
+  const restockProduct = useCallback(async (id: string, quantity: number, details: { referenceNo: string; supplier: string; occurredAt?: string; unitCost?: number }) => {
     await apiFetch<{ product: Product; movement: StockMovement }>(`/products/${id}/stock/inbound`, {
       method: 'POST',
       body: JSON.stringify({ quantity, ...details }),
