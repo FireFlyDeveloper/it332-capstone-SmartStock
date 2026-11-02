@@ -14,8 +14,9 @@ import { _resetOrderStore, createOrder } from '../orders/store.js';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { _resetInventoryStore, createProduct, recordInboundStock, recordOutboundStock, updateProduct, listInventoryPolicyHistory, hydrateInventoryPolicyHistory, resetInventoryPolicyHistory } from '../inventory/store.js';
-import { buildPolicyPerformanceReport } from './service.js';
+import { buildDemandForecastReport, buildPolicyPerformanceReport } from './service.js';
 import { reportsRoutes } from './routes.js';
+import ExcelJS from 'exceljs';
 
 function buildApp() {
   const app = new Hono();
@@ -240,6 +241,56 @@ describe('reports routes', () => {
         { materialType: 'glass', supplier: 'Supplier B', unit: 'sheet', totalSpend: 400, shareOfSpend: 22.22 },
       ],
     });
+  });
+
+  it('builds the forecast export from the report service and exposes its evidence coverage', async () => {
+    const product = await createProduct({ sku: 'FC-RP-01', name: 'Forecast Report Glass', category: 'glass', unit: 'sheet', stock: 2, price: 40, threshold: 5 });
+    for (const [index, createdAt] of ['2026-01-15T12:00:00.000Z', '2026-02-15T12:00:00.000Z', '2026-03-15T12:00:00.000Z'].entries()) {
+      const order = createOrder({
+        referenceNumber: `FC-RP-${index + 1}`,
+        customerName: 'Forecast Customer',
+        customerPhone: '+639****0000',
+        deliveryAddress: 'Balayan',
+        deliveryDate: createdAt.slice(0, 10),
+        paidAmount: 100,
+        items: [{ productId: product.id, name: product.name, quantity: index + 1, unitPrice: 40 }],
+      });
+      order.createdAt = createdAt;
+      order.orderStatus = 'delivered';
+    }
+
+    const report = await buildDemandForecastReport(new Date('2026-11-02T00:00:00.000Z'));
+    expect(report.totals).toMatchObject({ productCount: 3, availableForecasts: 1, insufficientHistory: 2 });
+    expect(report.rows).toHaveLength(1);
+    expect(report.rows[0]).toMatchObject({ name: 'Forecast Report Glass', status: 'available', positiveMonths: 3 });
+    expect(JSON.parse(report.rows[0].history)).toEqual(expect.arrayContaining([
+      { month: '2026-01', quantity: 1 },
+      { month: '2026-02', quantity: 2 },
+      { month: '2026-03', quantity: 3 },
+    ]));
+  });
+
+  it('uses the selected year in purchase and spending PDF/XLSX exports', async () => {
+    const historical = await createProduct({ sku: 'HIST-RP-01', name: 'Historical Receipt', category: 'glass', unit: 'piece', stock: 0, price: 10, threshold: 1 });
+    await recordInboundStock(historical.id, { quantity: 2, unitCost: 25, referenceNo: 'PO-2025-RP', supplier: 'Supplier Past', occurredAt: '2025-05-20T00:00:00.000Z' });
+
+    for (const type of ['purchases', 'spending'] as const) {
+      const response = await authedRequest(app, `/reports/export?type=${type}&year=2025&format=xlsx`, ADMIN);
+      expect(response.status).toBe(200);
+      const workbook = new ExcelJS.Workbook();
+      const workbookData = Buffer.from(await response.arrayBuffer()) as unknown as Parameters<ExcelJS.Workbook['xlsx']['load']>[0];
+      await workbook.xlsx.load(workbookData);
+      const worksheet = workbook.worksheets[0];
+      const yearRow = worksheet.getRows(1, worksheet.rowCount)?.find((row) => row.getCell(1).value === 'Year');
+      expect(yearRow?.getCell(2).value).toBe(2025);
+      const totalLabel = type === 'spending' ? 'totalSpend' : 'totalCost';
+      const totalRow = worksheet.getRows(1, worksheet.rowCount)?.find((row) => row.getCell(1).value === totalLabel);
+      expect(totalRow?.getCell(2).value).toBe(50);
+    }
+
+    const invalidYear = await authedRequest(app, '/reports/export?type=spending&year=bad&format=pdf', ADMIN);
+    expect(invalidYear.status).toBe(400);
+    expect(await invalidYear.json()).toEqual({ error: 'year must be an integer between 1900 and 3000' });
   });
 
   it('exports a forecast/current-policy report as PDF and XLSX for admins', async () => {

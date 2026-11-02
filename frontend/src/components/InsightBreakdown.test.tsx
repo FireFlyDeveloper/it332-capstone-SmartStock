@@ -8,6 +8,7 @@ const cases: Array<[AnalyticsInsightKey, string, string]> = [
   ['annualPurchasedMaterials', 'Annual purchased materials', 'Interpretation for annual purchased materials.'],
   ['inventoryMovement', 'Inventory movement', 'Interpretation for inventory movement.'],
   ['demandForecast', 'Demand forecast', 'Interpretation for demand forecast.'],
+  ['stockPolicyPerformance', 'Observed stock-policy history', 'Interpretation for observed stock-policy history.'],
   ['orderRecordsPerMonth', 'Order records per month', 'Interpretation for order records per month.'],
   ['monthlyGrossOrderValue', 'Monthly gross order value', 'Interpretation for monthly gross order value.'],
   ['topOrderedProducts', 'Top ordered products', 'Interpretation for top ordered products.'],
@@ -20,7 +21,7 @@ const cases: Array<[AnalyticsInsightKey, string, string]> = [
 ]
 
 describe('InsightBreakdown', () => {
-  it('renders the 13 product-friendly labels in the required order', () => {
+  it('renders the 14 product-friendly labels in the required order', () => {
     const interpretations = Object.fromEntries(cases.map(([key, , text]) => [key, text])) as Record<AnalyticsInsightKey, string>
     const html = renderToStaticMarkup(<InsightBreakdown interpretations={interpretations} />)
     const positions = cases.map(([, label]) => html.indexOf(label.replace('&', '&amp;')))
@@ -29,7 +30,7 @@ describe('InsightBreakdown', () => {
     expect(positions).toEqual([...positions].sort((left, right) => left - right))
   })
 
-  it('renders all 13 interpretation strings', () => {
+  it('renders all 14 interpretation strings', () => {
     const interpretations = Object.fromEntries(cases.map(([key, , text]) => [key, text])) as Record<AnalyticsInsightKey, string>
     const html = renderToStaticMarkup(<InsightBreakdown interpretations={interpretations} />)
 

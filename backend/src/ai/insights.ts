@@ -6,6 +6,7 @@
  */
 
 import { getAnalyticsOrderSummary, getInsightAnnualMaterialSummary, getInsightInventorySummary, getInsightMovementSummary, projectInsightOrderRankings, getInsightPurchaseSummary, getItemMovementPage, getMonthlyStockMovementByUnit, getDemandForecastPage } from '../analytics/service.js';
+import { buildPolicyPerformanceReport } from '../reports/service.js';
 import type { SalesDirection } from './types.js';
 import { getHermesConfig } from './config.js';
 import { callHermesInsight } from './hermes.js';
@@ -87,6 +88,58 @@ async function buildSafeDemandForecast(now: Date): Promise<SafeInsightPayload['f
   };
 }
 
+function buildSafePolicyPerformance(
+  report: Awaited<ReturnType<typeof buildPolicyPerformanceReport>>,
+  fromDate?: string,
+  toDate?: string,
+): SafeInsightPayload['policyPerformance'] {
+  const trackedRows = report.rows.filter((row) => row.trackingDays > 0);
+  const trackedProductDays = trackedRows.reduce((sum, row) => sum + row.trackingDays, 0);
+  const daysAtOrBelow = trackedRows.reduce((sum, row) => sum + row.daysAtOrBelowReorderPoint, 0);
+  const outOfStockProductDays = trackedRows.reduce((sum, row) => sum + row.outOfStockDays, 0);
+  const comparisons = report.rows.flatMap((row) => row.policyPeriods.slice(1).map((period, index) => ({
+    productId: row.productId,
+    unit: row.unit.trim() || 'unknown',
+    previous: row.policyPeriods[index],
+    current: period,
+  })));
+  const percentDeltas = comparisons.flatMap(({ previous, current }) => (
+    previous.percentTimeAtOrBelowReorderPoint === null || current.percentTimeAtOrBelowReorderPoint === null
+      ? [] : [current.percentTimeAtOrBelowReorderPoint - previous.percentTimeAtOrBelowReorderPoint]
+  ));
+  const outOfStockDeltas = comparisons.flatMap(({ previous, current }) => (
+    previous.trackingDays <= 0 || current.trackingDays <= 0 ? [] : [
+      (current.outOfStockDays / current.trackingDays * 30) - (previous.outOfStockDays / previous.trackingDays * 30),
+    ]
+  ));
+  const stockDeltaByUnit = new Map<string, number[]>();
+  for (const { unit, previous, current } of comparisons) {
+    if (previous.timeWeightedAverageOnHand === null || current.timeWeightedAverageOnHand === null) continue;
+    const values = stockDeltaByUnit.get(unit) ?? [];
+    values.push(current.timeWeightedAverageOnHand - previous.timeWeightedAverageOnHand);
+    stockDeltaByUnit.set(unit, values);
+  }
+  const stockDeltas = [...stockDeltaByUnit.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([unit, values]) => ({ unit, quantity: roundTwo(values.reduce((sum, value) => sum + value, 0) / values.length) }));
+
+  return {
+    period: { fromDate: fromDate ?? null, toDate: toDate ?? null, basis: fromDate || toDate ? 'policy_event_utc' : 'all_tracked_history' },
+    productsWithHistory: trackedRows.length,
+    trackedProductDays: roundTwo(trackedProductDays),
+    productsWithReorderPointChanges: report.rows.filter((row) => row.reorderPointChanges > 0).length,
+    reorderPointChanges: report.totals.reorderPointChanges,
+    timeAtOrBelowReorderPointPercent: trackedProductDays > 0 ? roundTwo(daysAtOrBelow / trackedProductDays * 100) : null,
+    outOfStockProductDays: roundTwo(outOfStockProductDays),
+    productsCompared: new Set(comparisons.map((entry) => entry.productId)).size,
+    comparisonPairs: comparisons.length,
+    averageTimeAtOrBelowDeltaPoints: percentDeltas.length ? roundTwo(percentDeltas.reduce((sum, value) => sum + value, 0) / percentDeltas.length) : null,
+    averageOutOfStockDaysPer30Delta: outOfStockDeltas.length ? roundTwo(outOfStockDeltas.reduce((sum, value) => sum + value, 0) / outOfStockDeltas.length) : null,
+    averageOnHandDeltaByUnit: stockDeltas.slice(0, MAX_UNIT_GROUPS),
+    omittedUnitGroups: Math.max(0, stockDeltas.length - MAX_UNIT_GROUPS),
+  };
+}
+
 export async function buildSafeInsightPayload(options: InsightRequestOptions = {}, now = new Date()): Promise<SafeInsightPayload> {
   const startAt = dateBoundary(options.fromDate);
   const endAt = dateBoundary(options.toDate, true);
@@ -95,7 +148,7 @@ export async function buildSafeInsightPayload(options: InsightRequestOptions = {
   const year = now.getUTCFullYear();
   const annualStart = new Date(Date.UTC(year, 0, 1));
   const annualEnd = now;
-  const [salesAnalytics, purchases, selectedMovement, monthly, inventory, classification, forecast, annual] = await Promise.all([
+  const [salesAnalytics, purchases, selectedMovement, monthly, inventory, classification, forecast, annual, policyReport] = await Promise.all([
     getAnalyticsOrderSummary(options.fromDate, options.toDate),
     getInsightPurchaseSummary(startAt, endAt),
     getInsightMovementSummary(startAt, endAt),
@@ -104,6 +157,7 @@ export async function buildSafeInsightPayload(options: InsightRequestOptions = {
     getItemMovementPage(movementFromDate, movementToDate, options.threshold ?? 10, 1, null),
     buildSafeDemandForecast(now),
     getInsightAnnualMaterialSummary(annualStart, annualEnd),
+    buildPolicyPerformanceReport(now, options.fromDate, options.toDate),
   ]);
   const rankings = projectInsightOrderRankings(salesAnalytics);
   const trendRows = salesAnalytics.salesTrendData;
@@ -169,6 +223,7 @@ export async function buildSafeInsightPayload(options: InsightRequestOptions = {
       allTimeFewestByUnit: safeRankGroups(rankings.allTimeFewestByUnit),
       omittedUnitGroups: rankings.omittedUnitGroups,
     },
+    policyPerformance: buildSafePolicyPerformance(policyReport, options.fromDate, options.toDate),
   };
 }
 

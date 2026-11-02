@@ -11,7 +11,7 @@ import { authRoutes } from '../auth/routes.js';
 import { createUser, _resetUserStore, type Role } from '../auth/users.js';
 import { hashPassword } from '../auth/hash.js';
 import { _resetOrderStore, createOrder } from '../orders/store.js';
-import { _resetInventoryStore, createProduct, listProducts, recordInboundStock, recordOutboundStock } from '../inventory/store.js';
+import { _resetInventoryStore, createProduct, hydrateInventoryPolicyHistory, listProducts, recordInboundStock, recordOutboundStock, resetInventoryPolicyHistory } from '../inventory/store.js';
 import { analyticsRoutes } from '../analytics/routes.js';
 import { getAnalyticsInsight, buildSafeInsightPayload } from './insights.js';
 import { INSIGHT_SECTION_KEYS, type SafeInsightPayload } from './types.js';
@@ -77,6 +77,12 @@ async function seedAiAnalyticsData() {
   });
   marchOrder.createdAt = monthAt(1);
   marchOrder.orderStatus = 'delivered';
+
+  hydrateInventoryPolicyHistory([
+    { id: 1, productId: glass.id, recordedAt: '2026-02-01T00:00:00.000Z', eventType: 'baseline', stockBefore: null, stockAfter: 3, thresholdBefore: null, thresholdAfter: 5 },
+    { id: 2, productId: glass.id, recordedAt: '2026-02-11T00:00:00.000Z', eventType: 'threshold_changed', stockBefore: 3, stockAfter: 4, thresholdBefore: 5, thresholdAfter: 3 },
+    { id: 3, productId: glass.id, recordedAt: '2026-02-21T00:00:00.000Z', eventType: 'threshold_changed', stockBefore: 4, stockAfter: 2, thresholdBefore: 3, thresholdAfter: 6 },
+  ]);
 }
 
 const ORIGINAL_ENV = { ...process.env };
@@ -165,6 +171,16 @@ describe('AI insight generation', () => {
     ]);
     expect(payload.monthlySales.rangeTotals).toMatchObject({ orderRecords: 3, grossOrderValue: 900 });
     expect(payload.annualMaterials.periodBasis).toBe('occurredAt_utc_calendar_year_to_date');
+    expect(payload.policyPerformance).toMatchObject({
+      period: { fromDate: null, toDate: null, basis: 'all_tracked_history' },
+      productsWithHistory: 1,
+      productsWithReorderPointChanges: 1,
+      reorderPointChanges: 2,
+      productsCompared: 1,
+      comparisonPairs: 2,
+    });
+    expect(payload.policyPerformance.averageOnHandDeltaByUnit).toEqual([{ unit: 'sqm', quantity: -0.5 }]);
+    expect(JSON.stringify(payload.policyPerformance)).not.toMatch(/productId|productName|sku|policyPeriods|recordedAt/);
     expect(payload.orderRankings.omittedUnitGroups).toEqual({ selectedRangeTop: 0, allTimeMost: 0, allTimeFewest: 0 });
     for (const ranking of [payload.orderRankings.selectedRangeTopByUnit, payload.orderRankings.allTimeMostByUnit, payload.orderRankings.allTimeFewestByUnit]) {
       expect(ranking.length).toBeLessThanOrEqual(5);
@@ -210,6 +226,23 @@ describe('AI insight generation', () => {
     expect(payload).not.toHaveProperty('movement.rows');
   });
 
+  it('keeps stock-policy results unavailable when no policy history exists', async () => {
+    resetInventoryPolicyHistory();
+    const payload = await buildSafeInsightPayload({ fromDate: '2026-02-10', toDate: '2026-02-15' }, TEST_NOW);
+    expect(payload.policyPerformance).toMatchObject({
+      period: { fromDate: '2026-02-10', toDate: '2026-02-15', basis: 'policy_event_utc' },
+      productsWithHistory: 0,
+      trackedProductDays: 0,
+      timeAtOrBelowReorderPointPercent: null,
+      outOfStockProductDays: 0,
+      productsCompared: 0,
+      comparisonPairs: 0,
+      averageTimeAtOrBelowDeltaPoints: null,
+      averageOutOfStockDaysPer30Delta: null,
+      averageOnHandDeltaByUnit: [],
+    });
+  });
+
   it('applies inclusive delivery dates and movement dates with the selected cutoff', async () => {
     const glass = listProducts().find((product) => product.sku === 'AI-GLASS');
     if (!glass) throw new Error('AI test glass product was not seeded');
@@ -223,6 +256,16 @@ describe('AI insight generation', () => {
       { unit: 'sqm', inbound: 3, outbound: 8, inboundCount: 1, outboundCount: 1 },
     ]);
     expect(selected.movement.classification).toMatchObject({ fromDate: '2026-02-10', toDate: '2026-02-15', fastMovingCount: 1, slowMovingCount: 2 });
+    expect(selected.policyPerformance).toMatchObject({
+      period: { fromDate: '2026-02-10', toDate: '2026-02-15', basis: 'policy_event_utc' },
+      trackedProductDays: 6,
+      productsWithReorderPointChanges: 1,
+      reorderPointChanges: 1,
+      productsCompared: 1,
+      comparisonPairs: 1,
+      averageTimeAtOrBelowDeltaPoints: -100,
+      averageOnHandDeltaByUnit: [{ unit: 'sqm', quantity: 1 }],
+    });
     const februaryChart = selected.movement.monthlyWindow.months.find((entry) => entry.month === '2026-02');
     expect(februaryChart?.byUnit).toEqual(expect.arrayContaining([
       { unit: 'sqm', inbound: 10, outbound: 8 },
@@ -276,6 +319,9 @@ describe('AI insight generation', () => {
     for (const key of INSIGHT_SECTION_KEYS) expect(requestBody.messages[1].content).toContain(key);
     const sentPayload = JSON.parse(requestBody.messages[1].content.split('\n').at(-1)!) as SafeInsightPayload;
     expect(sentPayload.movement.classification).toMatchObject({ fromDate: '2026-02-01', toDate: '2026-02-28', threshold: 5 });
+    expect(sentPayload.policyPerformance.period).toEqual({ fromDate: null, toDate: null, basis: 'all_tracked_history' });
+    expect(sentPayload.policyPerformance.comparisonPairs).toBeGreaterThan(0);
+    expect(requestBody.messages[1].content).toContain('observed, not causal');
     const februaryChart = sentPayload.movement.monthlyWindow.months.find((entry) => entry.month === '2026-02');
     expect(februaryChart?.byUnit).toEqual(expect.arrayContaining([
       { unit: 'pcs', inbound: 0, outbound: 0 },

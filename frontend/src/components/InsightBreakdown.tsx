@@ -5,6 +5,7 @@ const INSIGHT_LABELS: Array<[AnalyticsInsightKey, string]> = [
   ['annualPurchasedMaterials', 'Annual purchased materials'],
   ['inventoryMovement', 'Inventory movement'],
   ['demandForecast', 'Demand forecast'],
+  ['stockPolicyPerformance', 'Observed stock-policy history'],
   ['orderRecordsPerMonth', 'Order records per month'],
   ['monthlyGrossOrderValue', 'Monthly gross order value'],
   ['topOrderedProducts', 'Top ordered products'],

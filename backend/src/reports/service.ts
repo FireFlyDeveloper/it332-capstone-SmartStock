@@ -8,7 +8,7 @@
 import { listOrders } from '../orders/store.js';
 import { isDbSyncActive } from '../db/syncState.js';
 import { getOrderSummaryReportDb, listPolicyPerformancePageDb } from '../db/postgresStore.js';
-import { getAnnualPurchases, getAnnualPurchasesPage, getSalesTrends, getDemandForecast } from '../analytics/service.js';
+import { getAnnualPurchases, getAnnualPurchasesPage, getSalesTrends, getDemandForecastPage } from '../analytics/service.js';
 import { listProducts, readInventoryPolicyHistory, type InventoryPolicyEvent, type Product } from '../inventory/store.js';
 
 function currentUtcYear() {
@@ -183,19 +183,37 @@ export async function buildSpendingReport(year = currentUtcYear()) {
   };
 }
 
-export function buildDemandForecastReport() {
-  const forecast = getDemandForecast();
+export async function buildDemandForecastReport(now = new Date()) {
+  const historyMonths = 12;
+  const limit = 100;
+  const firstPage = await getDemandForecastPage(historyMonths, limit, null, now);
+  const products = [...firstPage.products];
+  let hasMore = firstPage.page.hasMore;
+  let cursor = firstPage.page.nextCursor;
+  let pages = 1;
+  while (hasMore) {
+    if (!cursor) throw new Error('Demand-forecast page is missing its next cursor');
+    const page = await getDemandForecastPage(historyMonths, limit, cursor, now);
+    products.push(...page.products);
+    hasMore = page.page.hasMore;
+    cursor = page.page.nextCursor;
+    pages += 1;
+    if (pages > 10000) throw new Error('Demand forecast exceeded the report page safety limit');
+  }
+  if (products.length !== firstPage.summary.availableForecasts) {
+    throw new Error(`Demand-forecast report returned ${products.length} rows for ${firstPage.summary.availableForecasts} available forecasts`);
+  }
   return {
     report: 'forecast' as const,
-    method: forecast.method,
-    alpha: forecast.alpha,
-    horizonMonths: forecast.horizonMonths,
-    minimumPositiveMonths: forecast.minimumPositiveMonths,
-    generatedAt: forecast.generatedAt,
-    historyMonths: forecast.historyMonths,
-    assumption: forecast.assumption,
-    totals: forecast.summary,
-    rows: forecast.products.map((product) => ({ ...product, history: JSON.stringify(product.history) })),
+    method: firstPage.method,
+    alpha: firstPage.alpha,
+    horizonMonths: firstPage.horizonMonths,
+    minimumPositiveMonths: firstPage.minimumPositiveMonths,
+    generatedAt: firstPage.generatedAt,
+    historyMonths: firstPage.historyMonths,
+    assumption: firstPage.assumption,
+    totals: firstPage.summary,
+    rows: products.map((product) => ({ ...product, history: JSON.stringify(product.history) })),
   };
 }
 
@@ -208,67 +226,81 @@ function roundFour(value: number): number {
 const POLICY_PERFORMANCE_METHOD = 'Observed stock and reorder-point snapshots; intervals are time-weighted from each product baseline/event until the next event or report generation time.';
 const POLICY_PERFORMANCE_ASSUMPTION = 'History starts at baseline/migration activation. No pre-activation history is backfilled. This report does not infer causal effects, missed demand, lead-time effects, or holding-cost effects.';
 
-export async function buildPolicyPerformanceReport(now = new Date()) {
+function policyDateBoundary(value: string | undefined, endExclusive = false): number | undefined {
+  if (!value) return undefined;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+    throw new Error('policy performance dates must be valid YYYY-MM-DD values');
+  }
+  if (endExclusive) date.setUTCDate(date.getUTCDate() + 1);
+  return date.getTime();
+}
+
+export async function buildPolicyPerformanceReport(now = new Date(), fromDate?: string, toDate?: string) {
   const events = await readInventoryPolicyHistory();
   const products = listProducts();
   const byProduct = new Map<string, InventoryPolicyEvent[]>();
   for (const event of events) byProduct.set(event.productId, [...(byProduct.get(event.productId) ?? []), event]);
   const currentTime = now.getTime();
+  const rangeStart = policyDateBoundary(fromDate) ?? Number.NEGATIVE_INFINITY;
+  const rangeEnd = Math.min(currentTime, policyDateBoundary(toDate, true) ?? currentTime);
   const rows = products.map((product) => {
     const history = (byProduct.get(product.id) ?? []).slice().sort((a, b) =>
       Date.parse(a.recordedAt) - Date.parse(b.recordedAt) || Number(a.id) - Number(b.id));
-    const first = history[0];
+    const intervals = history.flatMap((event, index) => {
+      const eventTime = Date.parse(event.recordedAt);
+      const nextTime = index + 1 < history.length ? Date.parse(history[index + 1].recordedAt) : currentTime;
+      const start = Math.max(eventTime, rangeStart);
+      const end = Math.min(nextTime, rangeEnd, currentTime);
+      return end > start ? [{ event, start, end, duration: end - start }] : [];
+    });
     const policyPeriods: Array<{
       startedAt: string; endedAt: string | null; reorderPoint: number; trackingDays: number;
       timeWeightedAverageOnHand: number | null; daysAtOrBelowReorderPoint: number;
       percentTimeAtOrBelowReorderPoint: number | null; outOfStockDays: number;
     }> = [];
-    let periodStartIndex = 0;
-    const periodEnds = history.map((event, index) => index > 0 && event.thresholdBefore !== null && event.thresholdBefore !== event.thresholdAfter);
-    for (let index = 1; index <= history.length; index += 1) {
-      if (index < history.length && !periodEnds[index]) continue;
-      if (periodStartIndex >= history.length) break;
-      const periodEvents = history.slice(periodStartIndex, index);
-      const startTime = Date.parse(periodEvents[0].recordedAt);
-      const nextEventTime = index < history.length ? Date.parse(history[index].recordedAt) : currentTime;
-      const endTime = Math.min(currentTime, nextEventTime);
-      let tracked = 0, weighted = 0, below = 0, out = 0;
-      for (const [offset, event] of periodEvents.entries()) {
-        const eventTime = Math.min(currentTime, Date.parse(event.recordedAt));
-        const nextTime = offset + 1 < periodEvents.length ? Date.parse(periodEvents[offset + 1].recordedAt) : endTime;
-        const duration = Math.max(0, Math.max(eventTime, Math.min(currentTime, nextTime)) - eventTime);
-        tracked += duration; weighted += event.stockAfter * duration;
-        if (event.stockAfter <= event.thresholdAfter) below += duration;
-        if (event.stockAfter <= 0) out += duration;
-      }
-      if (endTime > startTime && tracked > 0) policyPeriods.push({
-        startedAt: periodEvents[0].recordedAt,
-        endedAt: index < history.length ? new Date(endTime).toISOString() : null,
-        reorderPoint: periodEvents[0].thresholdAfter,
-        trackingDays: roundFour(tracked / DAY_MS),
-        timeWeightedAverageOnHand: roundFour(weighted / tracked),
-        daysAtOrBelowReorderPoint: roundFour(below / DAY_MS),
-        percentTimeAtOrBelowReorderPoint: roundFour((below / tracked) * 100),
-        outOfStockDays: roundFour(out / DAY_MS),
+    let period: { reorderPoint: number; startedAt: number; endedAt: number; tracked: number; weighted: number; below: number; out: number } | null = null;
+    const finishPeriod = () => {
+      if (!period || period.tracked <= 0) return;
+      policyPeriods.push({
+        startedAt: new Date(period.startedAt).toISOString(),
+        endedAt: period.endedAt < currentTime ? new Date(period.endedAt).toISOString() : null,
+        reorderPoint: period.reorderPoint,
+        trackingDays: roundFour(period.tracked / DAY_MS),
+        timeWeightedAverageOnHand: roundFour(period.weighted / period.tracked),
+        daysAtOrBelowReorderPoint: roundFour(period.below / DAY_MS),
+        percentTimeAtOrBelowReorderPoint: roundFour(period.below / period.tracked * 100),
+        outOfStockDays: roundFour(period.out / DAY_MS),
       });
-      periodStartIndex = index;
+    };
+    for (const interval of intervals) {
+      if (!period || period.reorderPoint !== interval.event.thresholdAfter) {
+        finishPeriod();
+        period = { reorderPoint: interval.event.thresholdAfter, startedAt: interval.start, endedAt: interval.end, tracked: 0, weighted: 0, below: 0, out: 0 };
+      }
+      period.endedAt = interval.end;
+      period.tracked += interval.duration;
+      period.weighted += interval.event.stockAfter * interval.duration;
+      if (interval.event.stockAfter <= interval.event.thresholdAfter) period.below += interval.duration;
+      if (interval.event.stockAfter <= 0) period.out += interval.duration;
     }
+    finishPeriod();
+
     let weightedStock = 0;
     let trackedMs = 0;
     let atOrBelowMs = 0;
     let outOfStockMs = 0;
     let thresholdChanges = 0;
-    for (let index = 0; index < history.length; index += 1) {
-      const event = history[index];
-      const eventTime = Math.min(currentTime, Date.parse(event.recordedAt));
-      const nextTime = index + 1 < history.length ? Date.parse(history[index + 1].recordedAt) : currentTime;
-      const endTime = Math.max(eventTime, Math.min(currentTime, nextTime));
-      const interval = Math.max(0, endTime - eventTime);
-      weightedStock += event.stockAfter * interval;
-      trackedMs += interval;
-      if (event.stockAfter <= event.thresholdAfter) atOrBelowMs += interval;
-      if (event.stockAfter <= 0) outOfStockMs += interval;
-      if (event.thresholdBefore !== null && event.thresholdBefore !== event.thresholdAfter) thresholdChanges += 1;
+    for (const interval of intervals) {
+      weightedStock += interval.event.stockAfter * interval.duration;
+      trackedMs += interval.duration;
+      if (interval.event.stockAfter <= interval.event.thresholdAfter) atOrBelowMs += interval.duration;
+      if (interval.event.stockAfter <= 0) outOfStockMs += interval.duration;
+    }
+    for (const event of history) {
+      const eventTime = Date.parse(event.recordedAt);
+      if (event.thresholdBefore !== null && event.thresholdBefore !== event.thresholdAfter
+        && eventTime >= rangeStart && eventTime < rangeEnd && eventTime <= currentTime) thresholdChanges += 1;
     }
     const trackingDays = trackedMs / DAY_MS;
     return {
@@ -276,12 +308,12 @@ export async function buildPolicyPerformanceReport(now = new Date()) {
       sku: product.sku,
       name: product.name,
       unit: product.unit,
-      trackingStartedAt: first?.recordedAt ?? null,
+      trackingStartedAt: intervals.length ? new Date(intervals[0].start).toISOString() : null,
       policyPeriods,
       trackingDays: roundFour(trackingDays),
       timeWeightedAverageOnHand: trackedMs > 0 ? roundFour(weightedStock / trackedMs) : null,
       daysAtOrBelowReorderPoint: roundFour(atOrBelowMs / DAY_MS),
-      percentTimeAtOrBelowReorderPoint: trackedMs > 0 ? roundFour((atOrBelowMs / trackedMs) * 100) : null,
+      percentTimeAtOrBelowReorderPoint: trackedMs > 0 ? roundFour(atOrBelowMs / trackedMs * 100) : null,
       outOfStockDays: roundFour(outOfStockMs / DAY_MS),
       reorderPointChanges: thresholdChanges,
       currentStock: product.stock,
@@ -300,7 +332,7 @@ export async function buildPolicyPerformanceReport(now = new Date()) {
     totals: {
       products: rows.length,
       productsWithHistory: populated.length,
-      trackingDays: trackingStart ? roundFour(Math.max(0, (currentTime - Date.parse(trackingStart)) / DAY_MS)) : 0,
+      trackingDays: trackingStart ? roundFour(Math.max(0, (rangeEnd - Date.parse(trackingStart)) / DAY_MS)) : 0,
       outOfStockProductCount: rows.filter((row) => row.currentStock <= 0).length,
       reorderPointChanges: rows.reduce((sum, row) => sum + row.reorderPointChanges, 0),
     },
@@ -372,5 +404,5 @@ export type ReportDto =
   | Awaited<ReturnType<typeof buildAnnualPurchasesReport>>
   | ReturnType<typeof buildInventoryEvaluationReport>
   | Awaited<ReturnType<typeof buildSpendingReport>>
-  | ReturnType<typeof buildDemandForecastReport>
+  | Awaited<ReturnType<typeof buildDemandForecastReport>>
   | Awaited<ReturnType<typeof buildPolicyPerformanceReport>>;

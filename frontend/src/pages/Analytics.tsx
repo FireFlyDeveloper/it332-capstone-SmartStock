@@ -790,7 +790,7 @@ export const Analytics: React.FC = () => {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h3 className="text-lg font-bold text-slate-900">SmartStock Insights</h3>
-              <p className="mt-1 max-w-3xl text-xs text-slate-500">Summarizes the selected delivery-date range, monthly stock movement, and all 13 analytics. No customer details or raw records are sent.</p>
+              <p className="mt-1 max-w-3xl text-xs text-slate-500">Summarizes the selected delivery-date range, monthly stock movement, observed stock-policy history, and all 14 analytics. Only bounded computed summaries are sent—no customer details or raw records.</p>
             </div>
             <button type="button" onClick={() => void generateInsights()} disabled={aiInsightLoading} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-60">
               {aiInsightLoading ? 'Preparing…' : aiInsight ? 'Refresh summary' : 'Get a quick summary'}
@@ -803,7 +803,7 @@ export const Analytics: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">AI summary</span>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold capitalize text-slate-600">How sure: {aiInsight.confidence}</span>
-              {aiInsightCriteria && <span className="text-xs text-slate-500">Selected dates: {formatAnalyticsDateRange(aiInsightCriteria.fromDate, aiInsightCriteria.toDate)} · Orders use delivery dates; stock movement uses UTC event dates · Fast-moving cutoff: {describeFastMovingCutoff(aiInsightCriteria.threshold)}</span>}
+              {aiInsightCriteria && <span className="text-xs text-slate-500">Selected dates: {formatAnalyticsDateRange(aiInsightCriteria.fromDate, aiInsightCriteria.toDate)} · Orders use delivery dates; stock movement and policy history use UTC event dates · Fast-moving cutoff: {describeFastMovingCutoff(aiInsightCriteria.threshold)}</span>}
             </div>
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">At a glance</h4>

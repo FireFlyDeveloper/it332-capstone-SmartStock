@@ -9,7 +9,7 @@ export type InsightConfidence = 'low' | 'medium' | 'high';
 export type InsightSource = 'hermes';
 
 export const INSIGHT_SECTION_KEYS = [
-  'monthlySalesTransactions', 'annualPurchasedMaterials', 'inventoryMovement', 'demandForecast',
+  'monthlySalesTransactions', 'annualPurchasedMaterials', 'inventoryMovement', 'demandForecast', 'stockPolicyPerformance',
   'orderRecordsPerMonth', 'monthlyGrossOrderValue', 'topOrderedProducts', 'stockStatus',
   'stockAtListedPricesByCategory', 'mostOrderedProducts', 'fewestOrderedProducts',
   'salesEstimateNextMonth', 'stockAlerts',
@@ -103,6 +103,22 @@ export interface SafeDemandForecast {
   omittedUnitGroups: number;
 }
 
+export interface SafePolicyPerformance {
+  period: { fromDate: string | null; toDate: string | null; basis: 'all_tracked_history' | 'policy_event_utc' };
+  productsWithHistory: number;
+  trackedProductDays: number;
+  productsWithReorderPointChanges: number;
+  reorderPointChanges: number;
+  timeAtOrBelowReorderPointPercent: number | null;
+  outOfStockProductDays: number;
+  productsCompared: number;
+  comparisonPairs: number;
+  averageTimeAtOrBelowDeltaPoints: number | null;
+  averageOutOfStockDaysPer30Delta: number | null;
+  averageOnHandDeltaByUnit: Array<{ unit: string; quantity: number }>;
+  omittedUnitGroups: number;
+}
+
 export interface SafeInsightPayload {
   sales: SafeSalesSummary;
   purchases: SafePurchaseSummary;
@@ -112,4 +128,5 @@ export interface SafeInsightPayload {
   monthlySales: SafeMonthlySales;
   annualMaterials: SafeAnnualMaterials;
   orderRankings: SafeOrderRankings;
+  policyPerformance: SafePolicyPerformance;
 }

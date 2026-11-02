@@ -623,9 +623,17 @@ export const Reports: React.FC = () => {
   const handleExport = async (format: 'pdf' | 'xlsx') => {
     const label = format.toUpperCase();
     const typeLabel = EXPORT_TYPE_LABELS[exportType];
+    if ((exportType === 'purchases' || exportType === 'spending') && (!purchaseYearIsValid || numericPurchaseYear === null)) {
+      toast.error('Enter a year between 2000 and 2100 before exporting this report.');
+      return;
+    }
     toast.info(`Preparing ${typeLabel} (${label})...`);
     try {
-      const response = await apiFetchBlob(`/reports/export?type=${exportType}&format=${format}`);
+      const params = new URLSearchParams({ type: exportType, format });
+      if ((exportType === 'purchases' || exportType === 'spending') && numericPurchaseYear !== null) {
+        params.set('year', String(numericPurchaseYear));
+      }
+      const response = await apiFetchBlob(`/reports/export?${params.toString()}`);
       const blob = await response.blob();
       const fallbackName = `smartstock-${exportType}-report.${format}`;
       const disposition = response.headers.get('content-disposition') ?? '';

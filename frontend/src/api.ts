@@ -370,6 +370,7 @@ export type AnalyticsInsightKey =
   | 'annualPurchasedMaterials'
   | 'inventoryMovement'
   | 'demandForecast'
+  | 'stockPolicyPerformance'
   | 'orderRecordsPerMonth'
   | 'monthlyGrossOrderValue'
   | 'topOrderedProducts'

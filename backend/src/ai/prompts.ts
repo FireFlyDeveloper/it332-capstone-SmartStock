@@ -3,12 +3,14 @@ import { INSIGHT_SECTION_KEYS, type SafeInsightPayload } from './types.js';
 export const TREND_INTERPRETATION_PROMPT = 'Monthly sales transactions are calendar-month counts of delivery-date order records; they include cancelled records. Monthly gross order value excludes cancelled orders, includes unpaid and partially paid orders, and does not subtract refunds. Gross value is not profit. State the capped monthly window and omitted-month count when relevant.';
 export const MOVEMENT_INTERPRETATION_PROMPT = 'Keep inbound and outbound totals separate and grouped by unit. The selected movement period uses the shared date range (or all time) with UTC occurredAt timestamps; orders use the same selected dates by deliveryDate. The separate month-by-month series is a UTC calendar-month window, with the current month clipped to month-to-date. Never combine units or infer an individual-product speed from totals.';
 export const FORECAST_INTERPRETATION_PROMPT = 'Use the supplied rough next-month estimates, keep units separate, and state coverage out of the total. Missing history means unavailable, not zero demand. Estimates are a planning guide, not a promise; explain stock-policy pressure only from supplied counts.';
+export const POLICY_INTERPRETATION_PROMPT = 'Interpret tracked policy snapshots only. Selected UTC dates clip tracked intervals; the latest earlier snapshot establishes the starting state, and only changes within the selected dates count. Without dates, use all tracked history. Compare adjacent restock-level periods only when both are in range. Report no comparison as unavailable, not zero. Describe changes as observed, not causal; the system does not measure missed demand, lead-time effects, or holding costs. Keep on-hand changes grouped by unit.';
 
 const SECTION_RULES = [
   'monthlySalesTransactions: relate monthly gross value to transaction count without treating count as revenue.',
   'annualPurchasedMaterials: describe current UTC calendar-year-to-date inbound cost and quantity by category and unit; cost excludes unpriced receipts, and never name suppliers.',
   'inventoryMovement: interpret inbound and outbound separately by UTC period and unit; do not infer product-level demand from totals.',
   'demandForecast: explain estimate eligibility/coverage and supplied reorder pressure; missing history is unavailable, not zero demand.',
+  'stockPolicyPerformance: summarize tracked product-days, stock exposure, restock-level changes and adjacent-period comparisons when present; state that observed changes do not prove causation and that no comparison is unavailable, not zero.',
   'orderRecordsPerMonth: interpret monthly delivery-date record counts and state they include cancelled records.',
   'monthlyGrossOrderValue: compare gross value only; it is not profit, excludes cancelled orders, includes unpaid/partial orders, and does not subtract refunds.',
   'topOrderedProducts: selected delivery-date range, non-cancelled quantities, top five products within each of at most five alphabetically selected unit groups. Do not compare totals across units; mention omitted unit-group count when nonzero.',
@@ -24,14 +26,15 @@ export function buildInsightPrompt(payload: SafeInsightPayload): string {
   return [
     'You are SmartStock’s helpful assistant for a busy shop owner. Speak plainly to a shop owner, using everyday words, short sentences, and practical next steps.',
     'The input contains bounded aggregate computations only. Do not ask for more datasets. Never request or invent customer, order, product, SKU, supplier, receipt, or history details.',
-    'Interpret each requested section according to its rule below. Keep periods distinct: selected orders use inclusive deliveryDate; purchase and selected stock-movement dates use UTC occurredAt bounds; annual purchases are current UTC calendar year-to-date; inventory and alerts are current snapshots; rankings use their explicitly stated time scope; forecast history uses recent complete UTC months.',
+    'Interpret each requested section according to its rule below. Keep periods distinct: selected orders use inclusive deliveryDate; purchase and selected stock-movement dates use UTC occurredAt bounds; annual purchases are current UTC calendar year-to-date; policy history clips tracked intervals to the selected UTC window using the latest earlier snapshot for the starting state, or includes all tracked history when no dates are selected; inventory and alerts are current snapshots; rankings use their explicitly stated time scope; forecast history uses recent complete UTC months.',
     'Sales/order-record counts include cancelled orders. Gross order value excludes cancelled orders, includes unpaid or partially paid orders, and refunds are not deducted. Annual purchase costs include priced receipts only; call out unpriced receipts. Listed-price stock is not cost or realized sales.',
     'Keep quantities grouped by unit and movement direction. Never add unlike units or make product-level claims from aggregate movement. A zero is different from unavailable. Do not infer causes, profit, currency symbols, or facts that are absent from the payload.',
     'SECTION RULES:', ...SECTION_RULES,
-    `Return only valid JSON with exactly these top-level keys: summary, interpretations, recommendations, risks, confidence. interpretations must contain exactly these 13 keys and no others: ${INSIGHT_SECTION_KEYS.join(', ')}. Every interpretation must be a plain-language non-empty string of at most 500 characters. summary is one or two short sentences; recommendations has one to three brief actions; risks has one or two plain-language cautions; confidence is low, medium, or high.`,
+    `Return only valid JSON with exactly these top-level keys: summary, interpretations, recommendations, risks, confidence. interpretations must contain exactly these ${INSIGHT_SECTION_KEYS.length} keys and no others: ${INSIGHT_SECTION_KEYS.join(', ')}. Every interpretation must be a plain-language non-empty string of at most 500 characters. summary is one or two short sentences; recommendations has one to three brief actions; risks has one or two plain-language cautions; confidence is low, medium, or high.`,
     TREND_INTERPRETATION_PROMPT,
     MOVEMENT_INTERPRETATION_PROMPT,
     FORECAST_INTERPRETATION_PROMPT,
+    POLICY_INTERPRETATION_PROMPT,
     JSON.stringify(payload),
   ].join('\n');
 }
