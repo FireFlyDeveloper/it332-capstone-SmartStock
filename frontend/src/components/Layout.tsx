@@ -88,7 +88,7 @@ export function Layout({ children }: LayoutProps) {
 
   const handleLogout = () => {
     logout();
-    navigate('/login', { replace: true });
+    navigate('/login', { replace: true, state: null });
   };
 
   return (
