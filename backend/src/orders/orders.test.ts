@@ -186,14 +186,15 @@ describe('order routes', () => {
     const update = await app.request('/orders/' + created.id, {
       method: 'PATCH',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ orderStatus: 'in_transit', customerName: 'Maria Reyes', deliveryAddress: 'Updated Batangas Address' }),
+      body: JSON.stringify({ orderStatus: 'in_transit', customerName: 'Maria Reyes', deliveryAddress: 'Updated Batangas Address', deliveryDate: '2026-11-03' }),
     });
     expect(update.status).toBe(200);
-    const updated = (await update.json()) as { referenceNumber: string; orderStatus: string; customerName: string; deliveryAddress: string };
+    const updated = (await update.json()) as { referenceNumber: string; orderStatus: string; customerName: string; deliveryAddress: string; deliveryDate: string };
     expect(updated.referenceNumber).toBe(created.referenceNumber);
     expect(updated.orderStatus).toBe('in_transit');
     expect(updated.customerName).toBe('Maria Reyes');
     expect(updated.deliveryAddress).toBe('Updated Batangas Address');
+    expect(updated.deliveryDate).toBe('2026-11-03');
 
     const remove = await app.request('/orders/' + created.id, {
       method: 'DELETE',

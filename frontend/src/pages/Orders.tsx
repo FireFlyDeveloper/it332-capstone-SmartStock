@@ -64,6 +64,7 @@ const emptyForm = {
   contact: '',
   address: '',
   deliveryOption: 'delivery' as 'delivery' | 'pickup',
+  deliveryDate: formatDateInput(new Date()),
   paidAmount: 0,
   items: [] as OrderItem[],
   total: 0,
@@ -363,6 +364,7 @@ export const Orders: React.FC = () => {
       contact: order.contact,
       address: order.address,
       deliveryOption: order.orderType,
+      deliveryDate: order.date || formatDateInput(new Date()),
       paidAmount: order.paidAmount,
       items: [...order.items],
       total: order.total,
@@ -446,6 +448,7 @@ export const Orders: React.FC = () => {
     if (form.items.length === 0) { toast.error('Add at least one item'); return; }
     if (!form.customerName.trim()) { toast.error('Enter customer name'); return; }
     if (!form.contact.trim()) { toast.error('Enter contact number'); return; }
+    if (form.deliveryOption === 'delivery' && !form.deliveryDate) { toast.error('Choose a scheduled delivery date'); return; }
     if (modalMode === 'create' && (!Number.isFinite(form.paidAmount) || form.paidAmount < 0 || form.paidAmount > form.total)) {
       toast.error('Initial payment must be between zero and the order total');
       return;
@@ -458,6 +461,7 @@ export const Orders: React.FC = () => {
           customerName: form.customerName,
           contact: form.contact,
           address: form.address,
+          date: form.deliveryDate,
         });
         toast.success('Order updated');
       } else {
@@ -471,7 +475,7 @@ export const Orders: React.FC = () => {
           orderStatus: form.deliveryOption === 'pickup' ? 'ready_for_pickup' : 'packed',
           deliveryStatus: form.deliveryOption === 'delivery' ? 'scheduled' : 'not_required',
           orderType: form.deliveryOption,
-          date: new Date().toISOString().split('T')[0],
+          date: form.deliveryDate,
           refundAmount: 0,
           refundStatus: 'none',
           notes: form.notes,
@@ -892,12 +896,26 @@ export const Orders: React.FC = () => {
                     </div>
                   )}
                   {form.deliveryOption === 'delivery' && (
-                    <div className="sm:col-span-2">
-                      <label className="label">Delivery Address *</label>
-                      <textarea value={form.address}
-                        onChange={e => setForm({ ...form, address: e.target.value })}
-                        className="input" rows={2} required />
-                    </div>
+                    <>
+                      <div className="sm:col-span-2">
+                        <label className="label" htmlFor="order-delivery-date">Scheduled Delivery Date *</label>
+                        <input
+                          id="order-delivery-date"
+                          type="date"
+                          value={form.deliveryDate}
+                          onChange={e => setForm({ ...form, deliveryDate: e.target.value })}
+                          className="input"
+                          required
+                        />
+                        <p className="mt-1 text-xs text-slate-500">Choose the planned delivery day. Staff can review deliveries by this date and destination on the Deliveries page.</p>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="label">Delivery Address *</label>
+                        <textarea value={form.address}
+                          onChange={e => setForm({ ...form, address: e.target.value })}
+                          className="input" rows={2} required />
+                      </div>
+                    </>
                   )}
                 </div>
               </div>

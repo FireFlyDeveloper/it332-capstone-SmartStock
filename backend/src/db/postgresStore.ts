@@ -2389,6 +2389,7 @@ export interface DeliveriesDbPageItem extends Delivery {
   customerName: string;
   customerPhone: string;
   referenceNumber: string;
+  deliveryDate: string;
   createdAt: string;
 }
 
@@ -2405,6 +2406,7 @@ export interface DeliveriesDbPage {
 export async function listDeliveriesPageDb(input: {
   limit: number;
   status: 'all' | 'pending' | 'in_transit' | 'delivered';
+  scheduledDate: string | null;
   cursorCreatedAt: string | null;
   cursorOrderId: string | null;
 }): Promise<DeliveriesDbPage | null> {
@@ -2413,7 +2415,7 @@ export async function listDeliveriesPageDb(input: {
   const { rows } = await pool.query(`
     WITH candidates AS MATERIALIZED (
       SELECT o.id AS order_id, o.order_no AS reference_number, o.customer_name, o.customer_phone,
-        o.delivery_address AS destination, o.created_at,
+        o.delivery_address AS destination, o.delivery_date, o.created_at,
         CASE o.order_status WHEN 'processing' THEN 'pending' WHEN 'in_transit' THEN 'in_transit' WHEN 'delivered' THEN 'delivered' END AS delivery_status,
         CASE o.order_status WHEN 'processing' THEN 0 WHEN 'in_transit' THEN 1 WHEN 'delivered' THEN 2 END AS page_current_step,
         d.id AS delivery_id, d.driver, d.truck_number, d.location, d.current_location,
@@ -2425,26 +2427,27 @@ export async function listDeliveriesPageDb(input: {
       WHERE o.deleted_at IS NULL
         AND o.order_status IN ('processing', 'in_transit', 'delivered')
         AND LOWER(BTRIM(COALESCE(o.delivery_address, ''))) <> 'pickup'
+        AND ($2::date IS NULL OR o.delivery_date = $2::date)
     ), filtered AS (
       SELECT * FROM candidates WHERE $1::text = 'all' OR delivery_status = $1::text
     ), summary AS (
-      SELECT COUNT(*)::int AS total_count,
+      SELECT (SELECT COUNT(*)::int FROM filtered) AS total_count,
         COUNT(*) FILTER (WHERE delivery_status = 'pending')::int AS pending_count,
         COUNT(*) FILTER (WHERE delivery_status = 'in_transit')::int AS in_transit_count,
         COUNT(*) FILTER (WHERE delivery_status = 'delivered')::int AS delivered_count
       FROM candidates
     ), page_rows AS (
       SELECT * FROM filtered
-      WHERE $2::timestamptz IS NULL
-        OR created_at < $2::timestamptz
-        OR (created_at = $2::timestamptz AND order_id::text < $3::text)
+      WHERE $3::timestamptz IS NULL
+        OR created_at < $3::timestamptz
+        OR (created_at = $3::timestamptz AND order_id::text < $4::text)
       ORDER BY created_at DESC, order_id::text DESC
-      LIMIT $4
+      LIMIT $5
     )
     SELECT summary.total_count, summary.pending_count, summary.in_transit_count, summary.delivered_count,
       COALESCE((SELECT jsonb_agg(to_jsonb(page_rows) ORDER BY page_rows.created_at DESC, page_rows.order_id::text DESC) FROM page_rows), '[]'::jsonb) AS page_items
     FROM summary
-  `, [input.status, input.cursorCreatedAt, input.cursorOrderId, input.limit + 1]);
+  `, [input.status, input.scheduledDate, input.cursorCreatedAt, input.cursorOrderId, input.limit + 1]);
   const row = rows[0];
   if (!row) return null;
   const rawItems = (typeof row.page_items === 'string' ? JSON.parse(row.page_items) : row.page_items ?? []) as Record<string, unknown>[];
@@ -2471,6 +2474,7 @@ export async function listDeliveriesPageDb(input: {
       customerName: String(item.customer_name ?? ''),
       customerPhone: String(item.customer_phone ?? ''),
       referenceNumber: String(item.reference_number ?? ''),
+      deliveryDate: String(item.delivery_date ?? ''),
       createdAt: String(item.created_at),
     };
   });

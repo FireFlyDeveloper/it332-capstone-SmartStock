@@ -28,6 +28,7 @@ const deliverySteps = [
 export const DeliveryPage: React.FC = () => {
   const { updateOrder } = useData();
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'in_transit' | 'delivered'>('all');
+  const [scheduledDate, setScheduledDate] = useState('');
   const [pageItems, setPageItems] = useState<DeliveryPageItem[]>([]);
   const [pageNextCursor, setPageNextCursor] = useState<string | null>(null);
   const [pageHasMore, setPageHasMore] = useState(false);
@@ -56,7 +57,7 @@ export const DeliveryPage: React.FC = () => {
     setPageTotalCount(0);
     setPageSummary({ totalCount: 0, pendingCount: 0, inTransitCount: 0, deliveredCount: 0 });
     try {
-      const result = await getDeliveriesPage({ limit: pageSize, status: filterStatus });
+      const result = await getDeliveriesPage({ limit: pageSize, status: filterStatus, scheduledDate: scheduledDate || undefined });
       if (requestId !== pageGeneration.current) return;
       setPageItems(result.items);
       setPageNextCursor(result.page.nextCursor);
@@ -68,7 +69,7 @@ export const DeliveryPage: React.FC = () => {
     } finally {
       if (requestId === pageGeneration.current) setPageLoading(false);
     }
-  }, [filterStatus]);
+  }, [filterStatus, scheduledDate]);
 
   useEffect(() => { void loadFirstPage() }, [loadFirstPage]);
 
@@ -79,7 +80,7 @@ export const DeliveryPage: React.FC = () => {
     setLoadingMoreError('');
     const requestId = pageGeneration.current;
     try {
-      const result = await getDeliveriesPage({ limit: pageSize, cursor: pageNextCursor, status: filterStatus });
+      const result = await getDeliveriesPage({ limit: pageSize, cursor: pageNextCursor, status: filterStatus, scheduledDate: scheduledDate || undefined });
       if (requestId !== pageGeneration.current) return;
       setPageItems((current) => [...current, ...result.items]);
       setPageNextCursor(result.page.nextCursor);
@@ -92,7 +93,7 @@ export const DeliveryPage: React.FC = () => {
       loadingMoreRef.current = false;
       if (requestId === pageGeneration.current) setLoadingMore(false);
     }
-  }, [pageHasMore, pageNextCursor, filterStatus]);
+  }, [pageHasMore, pageNextCursor, filterStatus, scheduledDate]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -138,7 +139,7 @@ export const DeliveryPage: React.FC = () => {
       const deliveriesForExport: DeliveryPageItem[] = [];
       let cursor: string | null = null;
       do {
-        const result = await getDeliveriesPage({ limit: 100, cursor, status: filterStatus });
+        const result = await getDeliveriesPage({ limit: 100, cursor, status: filterStatus, scheduledDate: scheduledDate || undefined });
         deliveriesForExport.push(...result.items);
         cursor = result.page.nextCursor;
       } while (cursor);
@@ -148,6 +149,7 @@ export const DeliveryPage: React.FC = () => {
         orderId: delivery.orderId,
         customer: delivery.customerName,
         destination: delivery.destination ?? '',
+        scheduledDate: delivery.deliveryDate,
         truckNumber: delivery.truckNumber ?? '',
         status: delivery.status,
         trafficLevel: delivery.trafficLevel ?? '',
@@ -159,6 +161,7 @@ export const DeliveryPage: React.FC = () => {
         { key: 'orderId', header: 'Order ID' },
         { key: 'customer', header: 'Customer' },
         { key: 'destination', header: 'Destination' },
+        { key: 'scheduledDate', header: 'Scheduled Date' },
         { key: 'truckNumber', header: 'Truck' },
         { key: 'status', header: 'Status' },
         { key: 'trafficLevel', header: 'Traffic' },
@@ -213,15 +216,26 @@ export const DeliveryPage: React.FC = () => {
 
         {/* Filter */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-            Status
-            <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value as typeof filterStatus)} className="input w-44">
-              <option value="all">All statuses</option>
-              <option value="pending">Pending</option>
-              <option value="in_transit">In Transit</option>
-              <option value="delivered">Delivered</option>
-            </select>
-          </label>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+              Status
+              <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value as typeof filterStatus)} className="input w-44">
+                <option value="all">All statuses</option>
+                <option value="pending">Pending</option>
+                <option value="in_transit">In Transit</option>
+                <option value="delivered">Delivered</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+              Scheduled date
+              <input type="date" value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} className="input w-44" />
+            </label>
+            {scheduledDate && (
+              <button type="button" onClick={() => setScheduledDate('')} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+                Clear date
+              </button>
+            )}
+          </div>
           <button
             type="button"
             onClick={handleExportCSV}
@@ -278,6 +292,12 @@ export const DeliveryPage: React.FC = () => {
 
                     {/* Destination and vehicle details */}
                     <div className="space-y-2 text-xs">
+                      <div className="flex items-start gap-2.5 rounded-xl bg-indigo-50 px-3 py-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Scheduled delivery</p>
+                          <p className="font-bold text-indigo-900">{delivery.deliveryDate || 'Date not set'}</p>
+                        </div>
+                      </div>
                       <div className="flex items-start gap-2.5">
                         <MapPin className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
                         <div className="min-w-0 flex-1">

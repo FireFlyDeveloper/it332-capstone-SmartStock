@@ -14,6 +14,7 @@ const item = (orderId: string, createdAt: string, status = 'pending') => ({
   customer_name: `Customer ${orderId}`,
   customer_phone: '',
   destination: '1 Test Street',
+  delivery_date: '2026-10-30',
   created_at: createdAt,
   delivery_status: status,
   page_current_step: status === 'pending' ? 0 : status === 'in_transit' ? 1 : 2,
@@ -49,6 +50,7 @@ describe('PostgreSQL Deliveries cursor query', () => {
     const result = await listDeliveriesPageDb({
       limit: 1,
       status: 'all',
+      scheduledDate: null,
       cursorCreatedAt: '2026-10-29T00:00:00.000Z',
       cursorOrderId: '123e4567-e89b-42d3-a456-426614174000',
     });
@@ -66,6 +68,7 @@ describe('PostgreSQL Deliveries cursor query', () => {
         status: 'pending',
         customerName: 'Customer 123e4567-e89b-42d3-a456-426614174001',
         referenceNumber: 'SS-2026-74001',
+        deliveryDate: '2026-10-30',
         trafficLevel: null,
         currentLocation: null,
       }],
@@ -75,8 +78,10 @@ describe('PostgreSQL Deliveries cursor query', () => {
     expect(sql).toContain("LOWER(BTRIM(COALESCE(o.delivery_address, ''))) <> 'pickup'");
     expect(sql).toContain('LEFT JOIN LATERAL');
     expect(sql).toContain('ORDER BY created_at DESC, order_id::text DESC');
-    expect(sql).toContain('LIMIT $4');
-    expect(values).toEqual(['all', '2026-10-29T00:00:00.000Z', '123e4567-e89b-42d3-a456-426614174000', 2]);
+    expect(sql).toContain('o.delivery_date = $2::date');
+    expect(sql).toContain('(SELECT COUNT(*)::int FROM filtered) AS total_count');
+    expect(sql).toContain('LIMIT $5');
+    expect(values).toEqual(['all', null, '2026-10-29T00:00:00.000Z', '123e4567-e89b-42d3-a456-426614174000', 2]);
   });
 
   it('returns null when the PostgreSQL pool is unavailable', async () => {
@@ -84,6 +89,7 @@ describe('PostgreSQL Deliveries cursor query', () => {
     await expect(listDeliveriesPageDb({
       limit: 25,
       status: 'all',
+      scheduledDate: null,
       cursorCreatedAt: null,
       cursorOrderId: null,
     })).resolves.toBeNull();

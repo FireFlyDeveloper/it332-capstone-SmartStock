@@ -307,12 +307,14 @@ export interface DeliveryPageItem extends Delivery {
   customerName: string;
   customerPhone: string;
   referenceNumber: string;
+  deliveryDate: string;
   createdAt: string;
 }
 
 export interface DeliveryPageInput {
   limit: number;
   status: 'all' | 'pending' | 'in_transit' | 'delivered';
+  scheduledDate: string | null;
   cursorCreatedAt: string | null;
   cursorOrderId: string | null;
 }
@@ -332,11 +334,15 @@ export async function listDeliveryPageRecords(input: DeliveryPageInput) {
       customerName: order.customerName,
       customerPhone: order.customerPhone,
       referenceNumber: order.referenceNumber,
+      deliveryDate: order.deliveryDate,
       createdAt: order.createdAt,
     }] : [];
   }).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.orderId.localeCompare(a.orderId));
 
-  const filtered = input.status === 'all' ? allItems : allItems.filter((item) => item.status === input.status);
+  const scheduledItems = input.scheduledDate
+    ? allItems.filter((item) => item.deliveryDate === input.scheduledDate)
+    : allItems;
+  const filtered = input.status === 'all' ? scheduledItems : scheduledItems.filter((item) => item.status === input.status);
   const afterCursor = input.cursorCreatedAt === null
     ? filtered
     : filtered.filter((item) => item.createdAt < input.cursorCreatedAt!
@@ -348,9 +354,9 @@ export async function listDeliveryPageRecords(input: DeliveryPageInput) {
   return {
     items,
     totalCount: filtered.length,
-    pendingCount: allItems.filter((item) => item.status === 'pending').length,
-    inTransitCount: allItems.filter((item) => item.status === 'in_transit').length,
-    deliveredCount: allItems.filter((item) => item.status === 'delivered').length,
+    pendingCount: scheduledItems.filter((item) => item.status === 'pending').length,
+    inTransitCount: scheduledItems.filter((item) => item.status === 'in_transit').length,
+    deliveredCount: scheduledItems.filter((item) => item.status === 'delivered').length,
     hasMore,
     nextCursor: hasMore && lastVisible ? { createdAt: lastVisible.createdAt, orderId: lastVisible.orderId } : null,
   };

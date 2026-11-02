@@ -45,6 +45,14 @@ function parseDeliveryCursor(value: string | undefined): { createdAt: string; or
   }
 }
 
+function parseScheduledDate(value: string | undefined): string | null | false {
+  if (value === undefined || value === '') return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) return false;
+  return value;
+}
+
 export async function listDeliveriesPageController(c: Context) {
   const rawLimit = c.req.query('limit');
   const limit = rawLimit === undefined ? 25 : Number(rawLimit);
@@ -53,10 +61,13 @@ export async function listDeliveriesPageController(c: Context) {
   if (!['all', 'pending', 'in_transit', 'delivered'].includes(rawStatus)) return c.json({ error: 'status is invalid' }, 400);
   const cursor = parseDeliveryCursor(c.req.query('cursor'));
   if (cursor === false) return c.json({ error: 'cursor is invalid' }, 400);
+  const scheduledDate = parseScheduledDate(c.req.query('scheduledDate'));
+  if (scheduledDate === false) return c.json({ error: 'scheduledDate must be a valid YYYY-MM-DD date' }, 400);
   try {
     const result = await listDeliveryPageRecords({
       limit,
       status: rawStatus as 'all' | 'pending' | 'in_transit' | 'delivered',
+      scheduledDate,
       cursorCreatedAt: cursor?.createdAt ?? null,
       cursorOrderId: cursor?.orderId ?? null,
     });

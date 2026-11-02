@@ -40,12 +40,12 @@ const AT = String.fromCharCode(64);
 const ADMIN = 'admin' + AT + 'smartstock.local';
 const STAFF = 'staff' + AT + 'smartstock.local';
 
-function seedOrder(address = '101 Test Street, Manila') {
+function seedOrder(address = '101 Test Street, Manila', deliveryDate = '2026-10-30') {
   return createOrder({
     customerName: 'Test Customer',
     customerPhone: '09170000000',
     deliveryAddress: address,
-    deliveryDate: '2026-10-30',
+    deliveryDate,
     items: [{ productId: 'PRD-TEST', name: 'Test Item', quantity: 1, unitPrice: 100 }],
   });
 }
@@ -113,7 +113,7 @@ describe('delivery routes', () => {
 
   it('serves cursor-paginated, filtered order-backed delivery pages', async () => {
     const pending = seedOrder();
-    const inTransit = seedOrder();
+    const inTransit = seedOrder('202 Test Street, Manila', '2026-10-31');
     const delivered = seedOrder();
     seedOrder('Pickup');
     const cancelled = seedOrder();
@@ -129,6 +129,7 @@ describe('delivery routes', () => {
     expect(firstBody.page).toMatchObject({ limit: 1, totalCount: 3, hasMore: true });
     expect(firstBody.summary).toEqual({ totalCount: 3, pendingCount: 1, inTransitCount: 1, deliveredCount: 1 });
     expect(firstBody.items).toHaveLength(1);
+    expect(firstBody.items[0]).toHaveProperty('deliveryDate');
 
     const second = await app.request(`/deliveries?mode=page&limit=1&status=all&cursor=${encodeURIComponent(firstBody.page.nextCursor)}`, { headers });
     expect(second.status).toBe(200);
@@ -143,9 +144,17 @@ describe('delivery routes', () => {
     expect(transitBody.items[0]).toMatchObject({ orderId: inTransit.id, status: 'in_transit', customerName: 'Test Customer' });
     expect([pending.id, inTransit.id, delivered.id]).toContain(firstBody.items[0].orderId);
 
+    const scheduled = await app.request('/deliveries?mode=page&scheduledDate=2026-10-30', { headers });
+    expect(scheduled.status).toBe(200);
+    const scheduledBody = await scheduled.json();
+    expect(scheduledBody.page.totalCount).toBe(2);
+    expect(scheduledBody.summary).toEqual({ totalCount: 2, pendingCount: 1, inTransitCount: 0, deliveredCount: 1 });
+    expect(scheduledBody.items.every((item: { deliveryDate: string }) => item.deliveryDate === '2026-10-30')).toBe(true);
+
     expect((await app.request('/deliveries?mode=page&limit=101', { headers })).status).toBe(400);
     expect((await app.request('/deliveries?mode=page&status=failed', { headers })).status).toBe(400);
     expect((await app.request('/deliveries?mode=page&cursor=invalid', { headers })).status).toBe(400);
+    expect((await app.request('/deliveries?mode=page&scheduledDate=2026-02-30', { headers })).status).toBe(400);
   });
 
   it('filters deliveries by status and traffic level', async () => {

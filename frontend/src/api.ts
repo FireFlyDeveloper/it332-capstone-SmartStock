@@ -531,6 +531,7 @@ export interface DeliveryPageItem extends Delivery {
   customerName: string
   customerPhone: string
   referenceNumber: string
+  deliveryDate: string
   createdAt: string
 }
 
@@ -544,11 +545,13 @@ export function getDeliveriesPage(options: {
   limit?: number
   cursor?: string | null
   status?: 'all' | 'pending' | 'in_transit' | 'delivered'
+  scheduledDate?: string
 } = {}): Promise<DeliveriesPageResponse> {
   const params = new URLSearchParams()
   if (options.limit !== undefined) params.set('limit', String(options.limit))
   if (options.cursor) params.set('cursor', options.cursor)
   if (options.status) params.set('status', options.status)
+  if (options.scheduledDate) params.set('scheduledDate', options.scheduledDate)
   return apiFetch<DeliveriesPageResponse>(`/deliveries?${params.toString()}&mode=page`)
 }
 
