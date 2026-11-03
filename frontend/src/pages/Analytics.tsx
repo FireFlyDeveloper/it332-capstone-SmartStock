@@ -1200,7 +1200,7 @@ export const Analytics: React.FC = () => {
         <section className="space-y-4 rounded-[28px] border border-amber-100 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Annual Purchases by Product</h3>
+              <h3 className="text-lg font-bold text-slate-900">Annual Purchased materials and procurement summary</h3>
               <p className="mt-1 max-w-3xl text-xs text-slate-500">Recorded inbound receipts grouped by product and supplier. Spend includes only entered acquisition costs; unpriced receipts are shown separately, and quantity is kept in each product’s own unit.</p>
             </div>
             <label className="text-xs font-semibold text-slate-600">Year

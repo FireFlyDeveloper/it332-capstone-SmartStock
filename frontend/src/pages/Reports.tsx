@@ -1,14 +1,10 @@
-import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  FileText, 
-  Download, 
-  Printer, 
-  Search,
+import {
+  Download,
+  Printer,
   ShoppingCart,
   Package,
-  RotateCcw,
-  Settings,
   DollarSign,
   Clock,
   Calendar,
@@ -18,15 +14,11 @@ import {
   Banknote
 } from 'lucide-react';
 
-import type { Order } from '../types';
-import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
-import { toCSV, downloadCSV } from '../utils/csv';
+import { formatCurrency, formatDate, formatDateInput } from '../utils/helpers';
 import { toast } from 'sonner';
-import { getProductsPage, apiFetchBlob, getAnalyticsPurchasesPage, getAnalyticsOrderSummary, getDemandForecastPage, getPolicyPerformancePage, getOrdersPage, getReportOrdersSummary, type ProductsPageResponse, type ApiError, type ReportOrdersSummary, type AnalyticsOrderSummary, type PurchaseAnalyticsPageResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
+import { getProductsPage, apiFetchBlob, getAnalyticsPurchasesPage, getDemandForecastPage, getPolicyPerformancePage, getReportOrdersSummary, type ProductsPageResponse, type ApiError, type ReportOrdersSummary, type PurchaseAnalyticsPageResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
 import { compareObservedPolicyPeriods } from '../utils/policyPeriodComparison';
-import { toFrontendOrder } from '../components/orderMapper';
 import { useAuth } from '../components/AuthContext';
-import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 type ExportType = 'sales' | 'purchases' | 'inventory' | 'spending';
@@ -52,14 +44,6 @@ const EXPORT_TYPE_LABELS: Record<ExportType, string> = {
   inventory: 'Inventory Evaluation',
   spending: 'Spending Report',
 };
-
-function formatReportMonth(month: string): string {
-  const date = new Date(`${month}-01T00:00:00.000Z`);
-  return Number.isNaN(date.getTime())
-    ? month
-    : date.toLocaleDateString(undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' });
-}
-
 
 interface ReportCardProps {
   title: string;
@@ -120,8 +104,6 @@ const ReportCard: React.FC<ReportCardProps> = ({
 export const Reports: React.FC = () => {
   const navigate = useNavigate();
   const { canExportReports } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | Order['orderStatus']>('all');
   const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
@@ -155,47 +137,19 @@ export const Reports: React.FC = () => {
   const observedPolicySentinelRef = useRef<HTMLDivElement | null>(null);
   const observedPolicyRequestRef = useRef(0);
   const observedPolicyLoadingMoreRef = useRef(false);
-  const [historyOrders, setHistoryOrders] = useState<Order[]>([]);
-  const [historyTotalCount, setHistoryTotalCount] = useState(0);
-  const [historyHasMore, setHistoryHasMore] = useState(false);
-  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
-  const [historyLoading, setHistoryLoading] = useState(true);
-  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
-  const [historyError, setHistoryError] = useState('');
-  const [historyRetry, setHistoryRetry] = useState(0);
-  const historySentinelRef = useRef<HTMLDivElement | null>(null);
-  const historyRequestRef = useRef(0);
-  const historyLoadingMoreRef = useRef(false);
   const [orderSummary, setOrderSummary] = useState<ReportOrdersSummary | null>(null);
   const [orderSummaryLoading, setOrderSummaryLoading] = useState(true);
   const [orderSummaryError, setOrderSummaryError] = useState('');
+  const [orderSummaryRetry, setOrderSummaryRetry] = useState(0);
   const [inventorySummary, setInventorySummary] = useState<ProductsPageResponse['summary'] | null>(null);
   const [inventorySummaryLoading, setInventorySummaryLoading] = useState(true);
   const [inventorySummaryError, setInventorySummaryError] = useState('');
   const [inventorySummaryRetry, setInventorySummaryRetry] = useState(0);
   const inventorySummaryRequestRef = useRef(0);
-  const [salesTrend, setSalesTrend] = useState<AnalyticsOrderSummary['salesTrendData']>([]);
-  const [salesTrendLoading, setSalesTrendLoading] = useState(true);
-  const [salesTrendError, setSalesTrendError] = useState('');
-  const [salesTrendRetry, setSalesTrendRetry] = useState(0);
   const [printPreparing, setPrintPreparing] = useState(false);
   const purchaseScrollerRef = useRef<HTMLDivElement | null>(null);
   const policyScrollerRef = useRef<HTMLDivElement | null>(null);
   const observedPolicyScrollerRef = useRef<HTMLDivElement | null>(null);
-  const historyScrollerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    setSalesTrendLoading(true);
-    setSalesTrendError('');
-    getAnalyticsOrderSummary({ fromDate: fromDate || null, toDate: toDate || null })
-      .then((response) => { if (active) setSalesTrend(response.salesTrendData); })
-      .catch((error: unknown) => {
-        if (active) setSalesTrendError(error instanceof Error ? error.message : 'Could not load monthly sales trends.');
-      })
-      .finally(() => { if (active) setSalesTrendLoading(false); });
-    return () => { active = false; };
-  }, [fromDate, toDate, salesTrendRetry]);
 
   useEffect(() => {
     const requestId = ++inventorySummaryRequestRef.current;
@@ -229,76 +183,7 @@ export const Reports: React.FC = () => {
       })
       .finally(() => { if (active) setOrderSummaryLoading(false); });
     return () => { active = false; };
-  }, [fromDate, toDate, historyRetry]);
-
-  useEffect(() => {
-    const requestId = ++historyRequestRef.current;
-    setHistoryOrders([]);
-    setHistoryTotalCount(0);
-    setHistoryHasMore(false);
-    setHistoryCursor(null);
-    historyLoadingMoreRef.current = false;
-    setHistoryLoadingMore(false);
-    setHistoryError('');
-    setHistoryLoading(true);
-    getOrdersPage({ limit: 25, status: statusFilter, search: searchTerm, fromDate: fromDate || null, toDate: toDate || null })
-      .then((response) => {
-        if (requestId !== historyRequestRef.current) return;
-        setHistoryOrders(response.orders.map(toFrontendOrder));
-        setHistoryTotalCount(response.page.totalCount);
-        setHistoryHasMore(response.page.hasMore);
-        setHistoryCursor(response.page.nextCursor);
-      })
-      .catch((error) => {
-        if (requestId === historyRequestRef.current) setHistoryError(error instanceof Error ? error.message : 'Could not load order history.');
-      })
-      .finally(() => {
-        if (requestId === historyRequestRef.current) setHistoryLoading(false);
-      });
-    return () => {
-      if (requestId === historyRequestRef.current) historyRequestRef.current += 1;
-    };
-  }, [searchTerm, statusFilter, fromDate, toDate, historyRetry]);
-
-  const loadMoreHistory = useCallback(async () => {
-    if (!historyHasMore || !historyCursor || historyLoading || historyLoadingMoreRef.current) return;
-    const requestId = historyRequestRef.current;
-    historyLoadingMoreRef.current = true;
-    setHistoryLoadingMore(true);
-    setHistoryError('');
-    try {
-      const response = await getOrdersPage({
-        limit: 25,
-        cursor: historyCursor,
-        status: statusFilter,
-        search: searchTerm,
-        fromDate: fromDate || null,
-        toDate: toDate || null,
-      });
-      if (requestId !== historyRequestRef.current) return;
-      setHistoryOrders((current) => [...current, ...response.orders.map(toFrontendOrder)]);
-      setHistoryTotalCount(response.page.totalCount);
-      setHistoryHasMore(response.page.hasMore);
-      setHistoryCursor(response.page.nextCursor);
-    } catch (error) {
-      if (requestId === historyRequestRef.current) setHistoryError(error instanceof Error ? error.message : 'Could not load more order history.');
-    } finally {
-      if (requestId === historyRequestRef.current) {
-        historyLoadingMoreRef.current = false;
-        setHistoryLoadingMore(false);
-      }
-    }
-  }, [historyHasMore, historyCursor, historyLoading, statusFilter, searchTerm, fromDate, toDate]);
-
-  useEffect(() => {
-    const sentinel = historySentinelRef.current;
-    if (!sentinel || !historyHasMore || historyLoading || historyLoadingMore || typeof IntersectionObserver === 'undefined') return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void loadMoreHistory();
-    }, { root: historyScrollerRef.current, rootMargin: '160px' });
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [historyHasMore, historyLoading, historyLoadingMore, loadMoreHistory]);
+  }, [fromDate, toDate, orderSummaryRetry]);
 
   useEffect(() => {
     const requestId = ++purchaseRequestRef.current;
@@ -500,19 +385,6 @@ export const Reports: React.FC = () => {
     toast.info('Date filters cleared.');
   };
 
-  // The backend order-history endpoint applies filters before cursor pagination.
-  const transactionHistory = useMemo(() => {
-    return historyOrders.map((order) => ({
-      id: order.id,
-      type: 'order' as const,
-      reference: order.referenceNumber,
-      items: order.items.map(item => ({ name: item.productName, quantity: item.quantity, amount: item.total })),
-      total: order.total,
-      date: order.date,
-      status: order.orderStatus,
-    }));
-  }, [historyOrders]);
-  const filteredTransactions = transactionHistory;
   const availablePolicyRows = policyRows;
 
   // Summary counts and totals are computed from the backend's full filtered dataset.
@@ -525,25 +397,16 @@ export const Reports: React.FC = () => {
   const paymentCounts = orderSummary?.paymentCounts ?? { paid: 0, pending: 0, partial: 0, refunded: 0 };
   const totalProducts = inventorySummary?.totalProducts ?? 0;
   const totalInventoryValue = inventorySummary?.totalInventoryValue ?? 0;
-  const currentMonthKey = new Date().toISOString().slice(0, 7);
-  const currentMonthTrend = salesTrend.find((row) => row.month === currentMonthKey);
-  const salesTrendTotals = salesTrend.reduce((totals, row) => ({
-    grossSales: totals.grossSales + row.grossSales,
-    grossOrderValue: totals.grossOrderValue + row.grossOrderValue,
-    transactions: totals.transactions + row.cancelledOrders + row.nonCancelledOrders,
-    cancelled: totals.cancelled + row.cancelledOrders,
-    nonCancelled: totals.nonCancelled + row.nonCancelledOrders,
-  }), { grossSales: 0, grossOrderValue: 0, transactions: 0, cancelled: 0, nonCancelled: 0 });
   const reportPeriodLabel = fromDate || toDate
     ? `${fromDate || 'Earliest available'} to ${toDate || 'Today'}`
     : 'All available dates';
 
   const handlePrint = async () => {
-    if (purchaseLoading || purchaseLoadingMore || policyLoading || policyLoadingMore || observedPolicyLoading || observedPolicyLoadingMore || historyLoading || historyLoadingMore || orderSummaryLoading || inventorySummaryLoading || salesTrendLoading) {
+    if (purchaseLoading || purchaseLoadingMore || policyLoading || policyLoadingMore || observedPolicyLoading || observedPolicyLoadingMore || orderSummaryLoading || inventorySummaryLoading) {
       toast.info('Wait for the report sections to finish loading before printing.');
       return;
     }
-    const loadErrors = [purchaseError, purchaseLoadMoreError, policyError, policyLoadMoreError, observedPolicyError, observedPolicyLoadMoreError, historyError, orderSummaryError, inventorySummaryError, salesTrendError].filter(Boolean);
+    const loadErrors = [purchaseError, purchaseLoadMoreError, policyError, policyLoadMoreError, observedPolicyError, observedPolicyLoadMoreError, orderSummaryError, inventorySummaryError].filter(Boolean);
     if (loadErrors.length) {
       toast.error('Resolve the report loading errors before printing, so the statement is complete.');
       return;
@@ -587,18 +450,7 @@ export const Reports: React.FC = () => {
         completeObservedPage = page.page;
       }
 
-      let completeHistory = historyOrders;
-      let historyCursorToLoad = historyCursor;
-      let historyHasMoreToLoad = historyHasMore;
-      let completeHistoryTotal = historyTotalCount;
-      while (historyHasMoreToLoad && historyCursorToLoad) {
-        const page = await getOrdersPage({ limit: 100, cursor: historyCursorToLoad, status: statusFilter, search: searchTerm, fromDate: fromDate || null, toDate: toDate || null });
-        completeHistory = [...completeHistory, ...page.orders.map(toFrontendOrder)];
-        completeHistoryTotal = page.page.totalCount;
-        historyHasMoreToLoad = page.page.hasMore;
-        historyCursorToLoad = page.page.nextCursor;
-      }
-      if (purchaseHasMore || policyHasMore || observedHasMore || historyHasMoreToLoad) {
+      if (purchaseHasMore || policyHasMore || observedHasMore) {
         throw new Error('A report section returned more rows without a usable next-page cursor.');
       }
 
@@ -606,10 +458,6 @@ export const Reports: React.FC = () => {
       setPolicyRows(completePolicyRows);
       if (completePolicyPage) setPolicyPage({ ...completePolicyPage, hasMore: false, nextCursor: null });
       if (observedPolicy && completeObservedPage) setObservedPolicy({ ...observedPolicy, rows: completeObservedRows, page: { ...completeObservedPage, hasMore: false, nextCursor: null } });
-      setHistoryOrders(completeHistory);
-      setHistoryTotalCount(completeHistoryTotal);
-      setHistoryHasMore(false);
-      setHistoryCursor(null);
       await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       toast.info('Opening the complete report in the browser print dialog…');
       window.print();
@@ -682,76 +530,6 @@ export const Reports: React.FC = () => {
     }
   };
 
-  const handleExportCSV = async () => {
-    try {
-      const allOrders: Order[] = [];
-      let cursor: string | null = null;
-      let hasMore = true;
-      while (hasMore) {
-        const response = await getOrdersPage({
-          limit: 100,
-          cursor,
-          status: statusFilter,
-          search: searchTerm,
-          fromDate: fromDate || null,
-          toDate: toDate || null,
-        });
-        allOrders.push(...response.orders.map(toFrontendOrder));
-        hasMore = response.page.hasMore;
-        cursor = response.page.nextCursor;
-        if (hasMore && !cursor) throw new Error('Order history returned no cursor for another page.');
-      }
-      if (allOrders.length === 0) {
-        toast.warning('No orders found for the selected filters.');
-        return;
-      }
-      const rows = allOrders.map((order) => ({
-        id: order.id,
-        type: 'order' as const,
-        reference: order.referenceNumber,
-        items: order.items.map((item) => `${item.productName} (qty: ${item.quantity})`).join('; '),
-        total: order.total,
-        date: order.date,
-        status: order.orderStatus,
-      }));
-      const columns: { key: keyof typeof rows[0]; header: string }[] = [
-        { key: 'id', header: 'Order ID' },
-        { key: 'type', header: 'Type' },
-        { key: 'reference', header: 'Reference' },
-        { key: 'items', header: 'Items' },
-        { key: 'total', header: 'Total (PHP)' },
-        { key: 'date', header: 'Date' },
-        { key: 'status', header: 'Status' },
-      ];
-      const csvData = toCSV(rows, columns);
-      const dateRangeSlug = fromDate || toDate ? `_${fromDate || 'start'}_to_${toDate || 'end'}` : '_all-time';
-      downloadCSV(`smartstock-${exportType}-report${dateRangeSlug}.csv`, csvData);
-      toast.success(`Exported ${allOrders.length} order records to CSV.`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not export order history.');
-    }
-  };
-
-  const getTransactionIcon = (type: 'order' | 'restock' | 'return' | 'adjustment') => {
-    switch (type) {
-      case 'order': return ShoppingCart;
-      case 'restock': return Package;
-      case 'return': return RotateCcw;
-      case 'adjustment': return Settings;
-      default: return DollarSign;
-    }
-  };
-
-  const getTransactionColor = (type: 'order' | 'restock' | 'return' | 'adjustment') => {
-    switch (type) {
-      case 'order': return 'bg-emerald-50 text-[#10b981]';
-      case 'restock': return 'bg-indigo-50 text-[#4f46e5]';
-      case 'return': return 'bg-rose-50 text-[#f43f5e]';
-      case 'adjustment': return 'bg-amber-50 text-[#f59e0b]';
-      default: return 'bg-slate-100 text-slate-600';
-    }
-  };
-
   if (inventorySummaryLoading || orderSummaryLoading) {
     return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading reports…</div>;
   }
@@ -763,7 +541,7 @@ export const Reports: React.FC = () => {
         <button
           type="button"
           onClick={() => {
-            setHistoryRetry((current) => current + 1);
+            setOrderSummaryRetry((current) => current + 1);
             setInventorySummaryRetry((current) => current + 1);
           }}
           className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
@@ -877,39 +655,8 @@ export const Reports: React.FC = () => {
 
           <div className="h-px bg-[#f1f5f9] w-full" />
 
-          {/* Row 2: Search, Status Filter & Export Controls */}
+          {/* Export Controls */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            {/* Search + Status Filter */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search reference, items..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="input !pl-10 w-full sm:w-64 text-xs font-medium"
-                />
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-slate-400 hidden sm:inline">Status:</span>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as any)}
-                  className="rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:border-[#4f46e5] focus:outline-none shadow-2xs"
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="pending">Pending</option>
-                  <option value="ready_for_pickup">Ready for Pickup</option>
-                  <option value="packed">Packed</option>
-                  <option value="out_for_delivery">Out for Delivery</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-              </div>
-            </div>
-
             {/* Export Filter + Buttons */}
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Export Type Selector */}
@@ -958,17 +705,6 @@ export const Reports: React.FC = () => {
                   Only admins can download reports.
                 </span>
               )}
-
-              {/* CSV export (available for filtered table data) */}
-              <button
-                type="button"
-                onClick={handleExportCSV}
-                className="btn-secondary flex items-center gap-1.5 text-xs font-bold py-2 px-3 text-slate-700 shadow-2xs"
-                title="Export current filtered transactions as CSV"
-              >
-                <Download className="w-3.5 h-3.5" />
-                CSV
-              </button>
 
               <button
                 type="button"
@@ -1034,62 +770,6 @@ export const Reports: React.FC = () => {
             badgeIcon={Clock}
           />
         </div>
-
-        <section className="space-y-4 rounded-[28px] border border-indigo-100 bg-white p-5 shadow-sm sm:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-extrabold text-slate-900">Monthly Sales &amp; Order Transactions</h2>
-              <p className="mt-1 max-w-3xl text-xs text-slate-600">Calendar-month trends for {reportPeriodLabel.toLowerCase()}. Sales and order counts use recorded delivery dates.</p>
-            </div>
-            {currentMonthTrend && <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">Current month · MTD</span>}
-          </div>
-          <div className="rounded-xl bg-indigo-50 px-4 py-3 text-xs leading-5 text-indigo-950">
-            Gross Sales counts delivered orders only. Gross Order Value includes every non-cancelled order, including orders not yet delivered. Transaction totals include cancelled orders. Refunds are not deducted from either sales measure. {currentMonthTrend && 'The current month is incomplete (MTD), so do not compare it directly with a full prior month.'}
-          </div>
-          {salesTrendLoading ? <p role="status" className="py-8 text-center text-sm text-slate-500">Loading monthly sales trends…</p>
-            : salesTrendError ? <div role="alert" className="py-6 text-center text-sm text-rose-700"><p>Monthly sales trends could not be loaded: {salesTrendError}</p><button type="button" onClick={() => setSalesTrendRetry((value) => value + 1)} className="mt-2 font-semibold underline">Retry</button></div>
-              : <>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Gross Sales · delivered</p><p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(salesTrendTotals.grossSales)}</p></div>
-                  <div className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-sky-800">Gross Order Value</p><p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(salesTrendTotals.grossOrderValue)}</p></div>
-                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-indigo-800">Recorded transactions</p><p className="mt-1 text-xl font-black text-slate-900">{salesTrendTotals.transactions.toLocaleString()}</p><p className="mt-1 text-[11px] text-slate-600">{salesTrendTotals.nonCancelled} non-cancelled · {salesTrendTotals.cancelled} cancelled</p></div>
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-600">Months in report</p><p className="mt-1 text-xl font-black text-slate-900">{salesTrend.length}</p><p className="mt-1 text-[11px] text-slate-600">Zero-order months remain visible.</p></div>
-                </div>
-                {salesTrend.length === 0 ? <p className="rounded-2xl bg-slate-50 p-8 text-center text-sm text-slate-500">No sales or transaction activity is available for this period.</p> :
-                  <div className="grid gap-5 xl:grid-cols-2">
-                    <div className="rounded-2xl border border-slate-100 p-4">
-                      <h3 className="text-sm font-bold text-slate-800">Monthly revenue measures</h3>
-                      <p className="mt-1 text-xs text-slate-500">PHP by delivery month · current month is MTD</p>
-                      <ResponsiveContainer width="100%" height={280}>
-                        <LineChart data={salesTrend} margin={{ top: 12, right: 12, left: 4, bottom: 4 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                          <XAxis dataKey="month" tickFormatter={(month) => `${formatReportMonth(String(month))}${String(month) === currentMonthKey ? ' MTD' : ''}`} stroke="#64748b" fontSize={11} />
-                          <YAxis stroke="#64748b" fontSize={11} tickFormatter={(value) => value >= 1000 ? `₱${Math.round(value / 1000)}k` : `₱${value}`} />
-                          <Tooltip labelFormatter={(month) => `${formatReportMonth(String(month))}${String(month) === currentMonthKey ? ' · Month-to-date' : ''}`} formatter={(value: number, name: string) => [formatCurrency(value), name]} />
-                          <Legend />
-                          <Line type="monotone" dataKey="grossSales" name="Gross Sales (delivered)" stroke="#059669" strokeWidth={2.5} dot={{ r: 3 }} />
-                          <Line type="monotone" dataKey="grossOrderValue" name="Gross Order Value" stroke="#0284c7" strokeWidth={2.5} dot={{ r: 3 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="rounded-2xl border border-slate-100 p-4">
-                      <h3 className="text-sm font-bold text-slate-800">Recorded orders by month</h3>
-                      <p className="mt-1 text-xs text-slate-500">All recorded orders, including cancelled transactions</p>
-                      <ResponsiveContainer width="100%" height={280}>
-                        <BarChart data={salesTrend} margin={{ top: 12, right: 12, left: 4, bottom: 4 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                          <XAxis dataKey="month" tickFormatter={(month) => `${formatReportMonth(String(month))}${String(month) === currentMonthKey ? ' MTD' : ''}`} stroke="#64748b" fontSize={11} />
-                          <YAxis allowDecimals={false} stroke="#64748b" fontSize={11} />
-                          <Tooltip labelFormatter={(month) => `${formatReportMonth(String(month))}${String(month) === currentMonthKey ? ' · Month-to-date' : ''}`} />
-                          <Legend />
-                          <Bar dataKey="nonCancelledOrders" name="Non-cancelled" stackId="orders" fill="#4f46e5" />
-                          <Bar dataKey="cancelledOrders" name="Cancelled" stackId="orders" fill="#f97316" radius={[5, 5, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>}
-              </>}
-        </section>
 
         <section className="space-y-4 rounded-[28px] border border-[#f1f5f9] bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Annual procurement spending</h2><p className="text-xs text-slate-500">Recorded receipt acquisition costs only. Unknown costs are excluded, never estimated from selling prices.</p></div><label className="report-screen-only text-xs font-semibold text-slate-600">Year <input className="input ml-2 w-28" type="number" min="2000" max="2100" value={purchaseYear} onChange={e => setPurchaseYear(e.target.value)}/></label><span className="report-print-only text-xs font-semibold text-slate-700">Reporting year: {purchaseYear}</span></div>
@@ -1241,87 +921,6 @@ export const Reports: React.FC = () => {
             </div>
           </div>
         </div>
-
-        {/* Backend Order History */}
-        <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] overflow-hidden">
-          <div className="p-6 border-b border-[#f1f5f9]">
-            <h3 className="text-lg font-bold text-slate-900">Order History</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Orders from the selected period</p>
-            {!historyLoading && <p className="text-xs text-slate-400 mt-1">Showing {historyOrders.length} of {historyTotalCount} matching orders</p>}
-          </div>
-          
-          <div ref={historyScrollerRef} className="report-infinite-scroll max-h-[32rem] overflow-auto"><div className="min-w-[1000px]"><table className="w-full">
-              <thead className="bg-slate-50/80 border-b border-[#f1f5f9]">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Order ID</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Reference</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Items</th>
-                  <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Amount</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#f1f5f9]">
-                {filteredTransactions.map((txn) => {
-                  const Icon = getTransactionIcon(txn.type);
-                  return (
-                    <tr key={txn.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4 text-sm text-slate-500 font-medium">{txn.id}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`p-2 rounded-xl shadow-2xs ${getTransactionColor(txn.type)}`}>
-                            <Icon className="w-4 h-4" />
-                          </span>
-                          <span className="text-sm font-semibold text-slate-900 capitalize">{txn.type}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-900 font-semibold">{txn.reference}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600">
-                        {txn.items.map((item, idx) => (
-                          <div key={idx} className="text-xs">
-                            <span className="font-medium text-slate-700">{item.name}:</span> {item.quantity} × {formatCurrency(item.amount)}
-                          </div>
-                        ))}
-                      </td>
-                      <td className="px-6 py-4 text-right font-bold text-slate-900">{formatCurrency(txn.total)}</td>
-                      <td className="px-6 py-4 text-sm text-slate-500">{formatDate(txn.date)}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(txn.status)}`}>
-                          {txn.status}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>{historyHasMore && <div ref={historySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll inside the order list to load more…</div>}</div></div>
-          
-          {historyLoading && <div role="status" className="p-8 text-center text-sm text-slate-500">Loading matching orders…</div>}
-          {historyError && (
-            <div role="alert" className="p-5 text-center text-sm text-rose-700">
-              <p>{historyError}</p>
-              <button type="button" onClick={() => historyOrders.length ? void loadMoreHistory() : setHistoryRetry((value) => value + 1)} className="mt-2 font-bold underline">
-                Retry
-              </button>
-            </div>
-          )}
-          {historyHasMore && typeof IntersectionObserver === 'undefined' && (
-            <div className="py-3 text-center">
-              <button type="button" onClick={() => void loadMoreHistory()} disabled={historyLoadingMore} className="text-sm font-semibold text-indigo-600 disabled:opacity-50">
-                {historyLoadingMore ? 'Loading…' : 'Load more orders'}
-              </button>
-            </div>
-          )}
-          {historyLoadingMore && <div role="status" className="py-3 text-center text-xs text-slate-400">Loading more orders…</div>}
-          {!historyLoading && !historyError && historyTotalCount === 0 && (
-            <div className="p-12 text-center">
-              <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500 font-medium text-sm">No orders found</p>
-            </div>
-          )}
-        </div>
-
 
       </div>
   );
