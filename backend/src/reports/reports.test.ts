@@ -328,6 +328,28 @@ describe('reports routes', () => {
     expect(Buffer.from(bytes.subarray(0, 2)).toString('utf8')).toBe('PK');
   });
 
+  it('exports a CSV report with metadata, totals, and safely quoted detail rows', async () => {
+    await createProduct({ sku: 'CSV-RP-01', name: '=2+3', category: 'glass', unit: 'sheet', stock: 2, price: 50, threshold: 1 });
+    const response = await authedRequest(app, '/reports/export?type=inventory&format=csv', ADMIN);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/csv');
+    expect(response.headers.get('content-disposition')).toBe('attachment; filename="smartstock-inventory-report.csv"');
+    const csv = await response.text();
+    expect(csv).toContain('Inventory Evaluation');
+    expect(csv).toContain('Summary metric');
+    expect(csv).toContain('"name"');
+    expect(csv).toContain("'=2+3");
+  });
+
+  it('supports CSV for every Reports export type', async () => {
+    for (const type of ['sales', 'purchases', 'inventory', 'spending', 'forecast', 'policy-performance']) {
+      const response = await authedRequest(app, `/reports/export?type=${type}&format=csv`, ADMIN);
+      expect(response.status, `${type} CSV`).toBe(200);
+      expect(response.headers.get('content-type')).toContain('text/csv');
+      expect(response.headers.get('content-disposition')).toContain(`smartstock-${type}-report.csv`);
+    }
+  });
+
   it('records baseline and observed stock/reorder-point transitions in memory mode', async () => {
     const product = await createProduct({ sku: 'POLICY-EVENT', name: 'Policy Event', category: 'glass', unit: 'sheet', stock: 4, price: 10, threshold: 2 });
     const baseline = listInventoryPolicyHistory().find((event) => event.productId === product.id);

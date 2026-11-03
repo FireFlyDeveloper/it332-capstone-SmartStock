@@ -18,6 +18,7 @@ import { formatCurrency, formatDate, formatDateInput } from '../utils/helpers';
 import { toast } from 'sonner';
 import { getProductsPage, apiFetchBlob, getAnalyticsPurchasesPage, getDemandForecastPage, getPolicyPerformancePage, getReportOrdersSummary, type ProductsPageResponse, type ApiError, type ReportOrdersSummary, type PurchaseAnalyticsPageResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
 import { compareObservedPolicyPeriods } from '../utils/policyPeriodComparison';
+import { buildReportDocumentHtml } from '../utils/reportDocument';
 import { useAuth } from '../components/AuthContext';
 
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
@@ -412,63 +413,104 @@ export const Reports: React.FC = () => {
       return;
     }
 
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Allow pop-ups for SmartStock to open the report document.');
+      return;
+    }
+    printWindow.document.write('<!doctype html><title>Preparing SmartStock report…</title><p style="font:16px Arial;padding:24px">Preparing complete report document…</p>');
+    printWindow.document.close();
     setPrintPreparing(true);
     try {
       let purchaseGroups = purchaseData?.groups ?? [];
       let purchaseCursor = purchaseData?.page.nextCursor ?? null;
       let purchaseHasMore = Boolean(purchaseData?.page.hasMore);
-      let completePurchasePage = purchaseData?.page;
+      const purchaseTotalCount = purchaseData?.page.totalCount ?? purchaseGroups.length;
       while (purchaseHasMore && purchaseCursor && numericPurchaseYear !== null) {
         const page = await getAnalyticsPurchasesPage({ year: numericPurchaseYear, limit: 100, cursor: purchaseCursor });
         purchaseGroups = [...purchaseGroups, ...page.groups];
         purchaseHasMore = page.page.hasMore;
         purchaseCursor = page.page.nextCursor;
-        completePurchasePage = page.page;
       }
 
       let completePolicyRows = policyRows;
       let policyCursor = policyPage?.nextCursor ?? null;
       let policyHasMore = Boolean(policyPage?.hasMore);
-      let completePolicyPage = policyPage;
+      const policyTotalCount = policyPage?.totalCount ?? completePolicyRows.length;
       while (policyHasMore && policyCursor) {
         const page = await getDemandForecastPage({ historyMonths: 12, limit: 100, cursor: policyCursor });
         completePolicyRows = [...completePolicyRows, ...page.products];
         policyHasMore = page.page.hasMore;
         policyCursor = page.page.nextCursor;
-        completePolicyPage = page.page;
       }
 
       let completeObservedRows = observedPolicy?.rows ?? [];
       let observedCursor = observedPolicy?.page.nextCursor ?? null;
       let observedHasMore = Boolean(observedPolicy?.page.hasMore);
-      let completeObservedPage = observedPolicy?.page;
+      const observedTotalCount = observedPolicy?.page.totalCount ?? completeObservedRows.length;
       while (observedHasMore && observedCursor) {
         const page = await getPolicyPerformancePage({ limit: 100, cursor: observedCursor });
         completeObservedRows = [...completeObservedRows, ...page.rows];
         observedHasMore = page.page.hasMore;
         observedCursor = page.page.nextCursor;
-        completeObservedPage = page.page;
       }
 
+      let completeProducts: ProductsPageResponse['items'] = [];
+      let productCursor: string | null = null;
+      let productHasMore = true;
+      let completeProductSummary: ProductsPageResponse['summary'] | null = null;
+      while (productHasMore) {
+        const page = await getProductsPage({ limit: 100, ...(productCursor ? { cursor: productCursor } : {}) });
+        completeProducts = [...completeProducts, ...page.items];
+        completeProductSummary ??= page.summary;
+        productHasMore = page.page.hasMore;
+        productCursor = page.page.nextCursor;
+        if (productHasMore && !productCursor) throw new Error('Inventory report page is missing its next-page cursor.');
+        if (completeProducts.length > page.page.totalCount) throw new Error('Inventory report returned more rows than its reported total.');
+      }
+      if (completeProductSummary && completeProducts.length !== completeProductSummary.totalProducts) {
+        throw new Error(`Inventory report returned ${completeProducts.length} rows for ${completeProductSummary.totalProducts} products.`);
+      }
+
+      if (purchaseGroups.length !== purchaseTotalCount) throw new Error(`Purchase report returned ${purchaseGroups.length} rows for ${purchaseTotalCount} groups.`);
+      if (completePolicyRows.length !== policyTotalCount) throw new Error(`Forecast report returned ${completePolicyRows.length} rows for ${policyTotalCount} eligible products.`);
+      if (completeObservedRows.length !== observedTotalCount) throw new Error(`Stock history report returned ${completeObservedRows.length} rows for ${observedTotalCount} products.`);
       if (purchaseHasMore || policyHasMore || observedHasMore) {
         throw new Error('A report section returned more rows without a usable next-page cursor.');
       }
 
-      if (purchaseData && completePurchasePage) setPurchaseData({ ...purchaseData, groups: purchaseGroups, page: completePurchasePage });
-      setPolicyRows(completePolicyRows);
-      if (completePolicyPage) setPolicyPage({ ...completePolicyPage, hasMore: false, nextCursor: null });
-      if (observedPolicy && completeObservedPage) setObservedPolicy({ ...observedPolicy, rows: completeObservedRows, page: { ...completeObservedPage, hasMore: false, nextCursor: null } });
-      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-      toast.info('Opening the complete report in the browser print dialog…');
-      window.print();
+      const currency = (value: number) => formatCurrency(value);
+      const html = buildReportDocumentHtml({
+        period: reportPeriodLabel,
+        generatedAt,
+        summary: [
+          ['Sales from completed orders', currency(totalSales)], ['Orders in selected period', totalOrders],
+          ['Completed orders', completedOrders], ['Pending orders', pendingOrders],
+          ['Current inventory value', currency(completeProductSummary?.totalInventoryValue ?? inventorySummary?.totalInventoryValue ?? 0)],
+          ['Products', completeProducts.length], ['Purchase spend · ' + purchaseYear, currency(purchaseData?.totalSpend ?? 0)],
+          ['Products with sales forecast', completePolicyRows.length], ['Stock-history products', completeObservedRows.length],
+        ],
+        sections: [
+          { title: 'Inventory evaluation', columns: ['Product', 'SKU', 'Category', 'Stock', 'Unit', 'Listed price', 'Stock value', 'Restock level', 'Status'], rows: completeProducts.map((product) => [product.name, product.sku, product.category, product.stock, product.unit, currency(product.price), currency(product.stock * product.price), product.threshold, product.stock <= product.threshold ? 'Low stock' : 'Healthy']) },
+          { title: `Annual purchases · ${purchaseYear}`, columns: ['Product', 'Material', 'Supplier', 'Quantity', 'Recorded spend', 'Unpriced receipts', 'Unpriced quantity'], rows: purchaseGroups.map((row) => [row.productName, row.materialType, row.supplier || '—', `${row.totalQuantity} ${row.unit}`, currency(row.totalCost), row.unpricedReceiptCount, `${row.unpricedQuantity} ${row.unit}`]) },
+          { title: 'Next-month sales estimate and stock check', columns: ['Product', 'Category', 'Estimated quantity', 'Current stock', 'Restock level', 'Suggested restock', 'Months with sales', 'Stock check'], rows: completePolicyRows.map((row) => [row.name, row.category, `${row.forecastQuantity ?? '—'} ${row.unit}`, `${row.currentStock} ${row.unit}`, `${row.reorderPoint} ${row.unit}`, row.recommendedOrderQuantity === null ? '—' : `${row.recommendedOrderQuantity} ${row.unit}`, row.positiveMonths, STOCK_CHECK_LABELS[row.policyAssessment]]) },
+          { title: 'Observed stock history', columns: ['Product', 'SKU', 'Unit', 'Tracking days', 'Average on hand', 'Days at/below level', 'Time at/below level', 'Out-of-stock days', 'Level changes', 'Restock-level periods'], rows: completeObservedRows.map((row) => [row.name, row.sku, row.unit, row.trackingDays, row.timeWeightedAverageOnHand ?? '—', row.daysAtOrBelowReorderPoint, row.percentTimeAtOrBelowReorderPoint === null ? '—' : `${row.percentTimeAtOrBelowReorderPoint}%`, row.outOfStockDays, row.reorderPointChanges, (row.policyPeriods ?? []).map((period) => `${period.reorderPoint}: ${formatDate(period.startedAt)}–${period.endedAt ? formatDate(period.endedAt) : 'Current'}`).join('; ') || 'No tracked periods']) },
+        ],
+      });
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      toast.info('Prepared a standalone report document for printing.');
     } catch (error) {
+      printWindow.close();
       toast.error(error instanceof Error ? `Could not prepare the complete report for printing: ${error.message}` : 'Could not prepare the complete report for printing.');
     } finally {
       setPrintPreparing(false);
     }
   };
 
-  const handleExport = async (format: 'pdf' | 'xlsx') => {
+  const handleExport = async (format: 'pdf' | 'xlsx' | 'csv') => {
     const label = format.toUpperCase();
     const typeLabel = EXPORT_TYPE_LABELS[exportType];
     if ((exportType === 'purchases' || exportType === 'spending') && (!purchaseYearIsValid || numericPurchaseYear === null)) {
@@ -498,14 +540,14 @@ export const Reports: React.FC = () => {
     } catch (error) {
       const apiError = error as ApiError;
       if (apiError.status === 403) {
-        toast.error('Only admins can export PDF/XLSX reports.');
+        toast.error('Only admins can export PDF, XLSX, or CSV reports.');
       } else {
         toast.error(apiError.message || `Failed to export ${label} report.`);
       }
     }
   };
 
-  const handleForecastExport = async (format: 'pdf' | 'xlsx') => {
+  const handleForecastExport = async (format: 'pdf' | 'xlsx' | 'csv') => {
     try {
       const response = await apiFetchBlob(`/reports/export?type=forecast&format=${format}`);
       const blob = await response.blob();
@@ -516,7 +558,7 @@ export const Reports: React.FC = () => {
     } catch (error) { const err = error as ApiError; toast.error(err.message || 'Could not download forecast report.'); }
   };
 
-  const handlePolicyPerformanceExport = async (format: 'pdf' | 'xlsx') => {
+  const handlePolicyPerformanceExport = async (format: 'pdf' | 'xlsx' | 'csv') => {
     try {
       const response = await apiFetchBlob(`/reports/export?type=policy-performance&format=${format}`);
       const filename = response.headers.get('content-disposition')?.match(/filename="?([^";]+)"?/)?.[1] ?? `smartstock-policy-performance-report.${format}`;
@@ -699,6 +741,15 @@ export const Reports: React.FC = () => {
                     <Download className="w-3.5 h-3.5" />
                     XLSX
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleExport('csv')}
+                    className="btn-secondary flex items-center gap-1.5 text-xs font-bold py-2 px-3 shadow-2xs"
+                    title={`Export ${EXPORT_TYPE_LABELS[exportType]} as CSV`}
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    CSV
+                  </button>
                 </>
               ) : (
                 <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
@@ -711,10 +762,10 @@ export const Reports: React.FC = () => {
                 onClick={handlePrint}
                 disabled={printPreparing}
                 className="btn-primary flex items-center gap-1.5 text-xs font-bold py-2 px-3.5 shadow-2xs"
-                title="Load all report pages and print the complete report"
+                title="Prepare a separate report document, then open the print dialog"
               >
                 <Printer className="w-3.5 h-3.5" />
-                {printPreparing ? 'Preparing…' : 'Print'}
+                {printPreparing ? 'Preparing…' : 'Print Report'}
               </button>
             </div>
           </div>
@@ -779,7 +830,7 @@ export const Reports: React.FC = () => {
 
 
         <section className="space-y-4 rounded-[28px] border border-violet-100 bg-violet-50/30 p-5 shadow-sm sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Current Stock Check</h2><p className="max-w-3xl text-xs text-slate-600">Compares current stock with its restock level and estimated sales for next month. This is a current snapshot, not a review of past settings.</p></div><div className="flex gap-2"><button onClick={() => void handleForecastExport('pdf')} className="btn-secondary text-xs">Download PDF</button><button onClick={() => void handleForecastExport('xlsx')} className="btn-secondary text-xs">Download XLSX</button></div></div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Current Stock Check</h2><p className="max-w-3xl text-xs text-slate-600">Compares current stock with its restock level and estimated sales for next month. This is a current snapshot, not a review of past settings.</p></div><div className="flex gap-2"><button onClick={() => void handleForecastExport('pdf')} className="btn-secondary text-xs">Download PDF</button><button onClick={() => void handleForecastExport('xlsx')} className="btn-secondary text-xs">Download XLSX</button><button onClick={() => void handleForecastExport('csv')} className="btn-secondary text-xs">Download CSV</button></div></div>
           <p className="text-xs text-slate-500">Sales estimates use completed orders from recent months. We need recorded sales in at least three months before showing an estimate.</p>
           {policyPage && <p className="text-xs text-slate-500">Showing {availablePolicyRows.length} of {policyPage.totalCount} products with enough sales history.</p>}
           {policyLoading ? <p className="py-6 text-sm text-slate-500">Preparing stock checks…</p> : policyError ? <p role="alert" className="py-6 text-sm text-rose-700">We could not load the stock check. Please try again.</p> : availablePolicyRows.length === 0 ? <p className="py-6 text-center text-sm text-slate-600">No products have enough sales history for an estimate yet. We need recorded sales in at least three months.</p> : <div ref={policyScrollerRef} className="report-infinite-scroll max-h-[30rem] overflow-auto rounded-xl border border-violet-100"><div className="min-w-[1040px]"><table className="w-full text-left"><thead className="bg-white text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3 text-right">Stock / restock level</th><th className="px-4 py-3 text-right">Expected sales next month</th><th className="px-4 py-3 text-right">Suggested restock</th><th className="px-4 py-3">Stock check</th><th className="px-4 py-3">Months with sales</th></tr></thead><tbody className="divide-y divide-violet-100">{availablePolicyRows.map(row=><tr key={row.productId}><td className="px-4 py-3 text-sm font-semibold">{row.name}<span className="block text-xs font-normal text-slate-500">Code: {row.sku}</span></td><td className="px-4 py-3 text-right text-sm">{row.currentStock} / {row.reorderPoint} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.forecastQuantity} {row.unit}</td><td className="px-4 py-3 text-right text-sm">{row.recommendedOrderQuantity===null?'—':`${row.recommendedOrderQuantity} ${row.unit}`}</td><td className="px-4 py-3 text-sm">{STOCK_CHECK_LABELS[row.policyAssessment]}</td><td className="px-4 py-3 text-sm">{row.positiveMonths} months</td></tr>)}</tbody></table></div>{policyPage?.hasMore && <div ref={policySentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">Scroll inside this table to see more products…</div>}</div>}
@@ -804,6 +855,7 @@ export const Reports: React.FC = () => {
               <div className="flex gap-2">
                 <button type="button" onClick={() => void handlePolicyPerformanceExport('pdf')} className="btn-secondary text-xs">Download PDF</button>
                 <button type="button" onClick={() => void handlePolicyPerformanceExport('xlsx')} className="btn-secondary text-xs">Download XLSX</button>
+                <button type="button" onClick={() => void handlePolicyPerformanceExport('csv')} className="btn-secondary text-xs">Download CSV</button>
               </div>
             ) : <span className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500">Only admins can download reports.</span>}
           </div>

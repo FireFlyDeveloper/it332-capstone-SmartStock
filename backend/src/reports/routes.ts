@@ -21,6 +21,7 @@ import {
 } from './service.js';
 import { exportReportPdf } from './exporters/pdf.js';
 import { exportReportXlsx } from './exporters/xlsx.js';
+import { exportReportCsv } from './exporters/csv.js';
 
 export const reportsRoutes = new Hono();
 
@@ -55,7 +56,7 @@ function parseYear(rawYear: string | undefined): { ok: true; year: number | unde
 }
 
 type ExportType = 'sales' | 'purchases' | 'inventory' | 'spending' | 'forecast' | 'policy-performance';
-type ExportFormat = 'pdf' | 'xlsx';
+type ExportFormat = 'pdf' | 'xlsx' | 'csv';
 
 function filenameFor(type: ExportType, format: ExportFormat): string {
   return `smartstock-${type}-report.${format}`;
@@ -78,7 +79,7 @@ reportsRoutes.get('/export', async (c) => {
   if (type !== 'sales' && type !== 'purchases' && type !== 'inventory' && type !== 'spending' && type !== 'forecast' && type !== 'policy-performance') {
     return c.json({ error: 'type must be one of sales, purchases, inventory, spending, forecast, policy-performance' }, 400);
   }
-  if (format !== 'pdf' && format !== 'xlsx') return c.json({ error: 'format must be pdf or xlsx' }, 400);
+  if (format !== 'pdf' && format !== 'xlsx' && format !== 'csv') return c.json({ error: 'format must be pdf, xlsx, or csv' }, 400);
   const parsedYear = type === 'purchases' || type === 'spending'
     ? parseYear(c.req.query('year'))
     : { ok: true as const, year: undefined };
@@ -87,10 +88,12 @@ reportsRoutes.get('/export', async (c) => {
   const report = await buildReportForType(type, parsedYear.year);
   const buffer = format === 'pdf'
     ? await exportReportPdf(report)
-    : await exportReportXlsx(report);
+    : format === 'xlsx' ? await exportReportXlsx(report) : exportReportCsv(report);
   const contentType = format === 'pdf'
     ? 'application/pdf'
-    : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    : format === 'xlsx'
+      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : 'text/csv; charset=utf-8';
   return new Response(new Uint8Array(buffer), {
     headers: {
       'content-type': contentType,
