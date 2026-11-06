@@ -150,7 +150,6 @@ export const DeliveryPage: React.FC = () => {
         customer: delivery.customerName,
         destination: delivery.destination ?? '',
         scheduledDate: delivery.deliveryDate,
-        truckNumber: delivery.truckNumber ?? '',
         status: delivery.status,
         trafficLevel: delivery.trafficLevel ?? '',
         predictedDelay: delivery.predictedDelay == null ? '' : delivery.predictedDelay ? 'yes' : 'no',
@@ -162,7 +161,6 @@ export const DeliveryPage: React.FC = () => {
         { key: 'customer', header: 'Customer' },
         { key: 'destination', header: 'Destination' },
         { key: 'scheduledDate', header: 'Scheduled Date' },
-        { key: 'truckNumber', header: 'Truck' },
         { key: 'status', header: 'Status' },
         { key: 'trafficLevel', header: 'Traffic' },
         { key: 'predictedDelay', header: 'Predicted Delay' },
@@ -304,12 +302,6 @@ export const DeliveryPage: React.FC = () => {
                           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Destination</p>
                           <p className="font-semibold text-slate-800 truncate">{delivery.destination || 'Address not provided'}</p>
                         </div>
-                      </div>
-
-                      <div className="flex items-center justify-end pt-2 border-t border-slate-100 text-xs text-slate-500">
-                        <span className="font-bold text-slate-700 shrink-0 bg-slate-100 px-2 py-0.5 rounded-md text-[11px]">
-                          {delivery.truckNumber || 'Not assigned'}
-                        </span>
                       </div>
                     </div>
 
