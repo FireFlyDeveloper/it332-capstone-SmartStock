@@ -5,6 +5,7 @@ import { getNotificationChangesDb, getNotificationIdsDb, getNotificationPageDb }
 import { listProducts } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import { buildNotificationFeed, listActiveNotificationIds, listNewNotificationItems, paginateNotificationFeed } from './feed.js';
+import { getWebPushPublicKey, isValidWebPushSubscription, isWebPushConfigured, normalizeWebPushPreferences, removeWebPushSubscription, saveWebPushSubscription, sendWebPushTest } from './push.js';
 
 export const notificationRoutes = new Hono();
 notificationRoutes.use('*', requireAuth);
@@ -116,4 +117,51 @@ notificationRoutes.post('/ids', async (c) => {
   }
   const feed = buildNotificationFeed(listProducts(), listOrders());
   return c.json({ ids: listActiveNotificationIds(feed, dismissedIds) });
+});
+
+notificationRoutes.get('/push/config', (c) => {
+  return c.json({ configured: isWebPushConfigured(), publicKey: getWebPushPublicKey() });
+});
+
+notificationRoutes.post('/push/subscriptions', async (c) => {
+  if (!isWebPushConfigured()) return c.json({ error: 'push_not_configured' }, 503);
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ error: 'Request body must be valid JSON' }, 400);
+  }
+  if (!isValidWebPushSubscription(body.subscription)) return c.json({ error: 'Invalid push subscription' }, 400);
+  const preferences = normalizeWebPushPreferences(body.preferences);
+  if (!preferences) return c.json({ error: 'Invalid push preferences' }, 400);
+  try {
+    await saveWebPushSubscription(c.get('user').id, body.subscription, preferences);
+    return c.json({ ok: true }, 201);
+  } catch {
+    return c.json({ error: 'Could not save push subscription' }, 503);
+  }
+});
+
+notificationRoutes.delete('/push/subscriptions', async (c) => {
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ error: 'Request body must be valid JSON' }, 400);
+  }
+  if (typeof body.endpoint !== 'string' || body.endpoint.length > 2048) return c.json({ error: 'Invalid push endpoint' }, 400);
+  try {
+    await removeWebPushSubscription(c.get('user').id, body.endpoint);
+    return c.json({ ok: true });
+  } catch {
+    return c.json({ error: 'Could not remove push subscription' }, 503);
+  }
+});
+
+notificationRoutes.post('/push/test', async (c) => {
+  const result = await sendWebPushTest(c.get('user').id);
+  if (result.reason === 'not_configured') return c.json({ error: 'push_not_configured' }, 503);
+  if (result.reason === 'no_subscriptions') return c.json({ error: 'push_subscription_missing' }, 404);
+  if (result.sent < 1) return c.json({ error: 'push_delivery_failed' }, 502);
+  return c.json({ ok: true, sent: result.sent });
 });

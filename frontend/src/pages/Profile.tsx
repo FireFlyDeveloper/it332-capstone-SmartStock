@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   User as UserIcon,
@@ -23,7 +23,8 @@ import {
   Check,
 } from 'lucide-react';
 import { useAuth } from '../components/AuthContext';
-import { apiFetch, type ApiError } from '../api';
+import { apiFetch, getWebPushConfig, sendWebPushTest, type ApiError, type WebPushPreferences } from '../api';
+import { registerWebPush, supportsWebPush, syncWebPushPreferences, unregisterWebPush } from '../push';
 import { toast } from 'sonner';
 
 type ProfileTab = 'profile' | 'security' | 'notifications' | 'settings';
@@ -99,6 +100,10 @@ export const ProfilePage: React.FC = () => {
       ? Notification.permission
       : 'default';
   });
+  const [pushConfig, setPushConfig] = useState<{ configured: boolean; publicKey: string | null } | null>(null);
+  const [pushConfigError, setPushConfigError] = useState(false);
+  const [pushSubscriptionReady, setPushSubscriptionReady] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
 
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences>(() => {
     try {
@@ -108,6 +113,46 @@ export const ProfilePage: React.FC = () => {
       return DEFAULT_NOTIF_PREFS;
     }
   });
+  const notifPrefsRef = useRef(notifPrefs);
+
+  useEffect(() => {
+    notifPrefsRef.current = notifPrefs;
+  }, [notifPrefs]);
+
+  useEffect(() => {
+    if (activeTab !== 'notifications') return;
+    let cancelled = false;
+    setPushConfig(null);
+    setPushConfigError(false);
+    setPushSubscriptionReady(false);
+    if (!supportsWebPush()) {
+      setPushConfig({ configured: false, publicKey: null });
+      return () => { cancelled = true; };
+    }
+
+    void Promise.all([
+      getWebPushConfig().catch(() => {
+        if (!cancelled) setPushConfigError(true);
+        return null;
+      }),
+      navigator.serviceWorker.getRegistration('/')
+        .then((registration) => registration?.pushManager.getSubscription() ?? null)
+        .catch(() => null),
+    ]).then(([config, subscription]) => {
+      if (cancelled) return;
+      setPushConfig(config);
+      setPushSubscriptionReady(Boolean(subscription && Notification.permission === 'granted'));
+      setBrowserPermission(Notification.permission);
+      const currentPreferences = notifPrefsRef.current;
+      if (Boolean(subscription) !== currentPreferences.browserPush) {
+        const nextPreferences = { ...currentPreferences, browserPush: Boolean(subscription) };
+        setNotifPrefs(nextPreferences);
+        try { localStorage.setItem('smartstock_notif_prefs', JSON.stringify(nextPreferences)); } catch { /* storage is optional */ }
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [activeTab, notifPrefs.browserPush]);
 
   // ── App Settings State ──────────────────────────────────────────
   const [appSettings, setAppSettings] = useState<AppSettings>(() => {
@@ -204,51 +249,97 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
+  const getPushPreferences = (preferences: NotificationPreferences = notifPrefs): WebPushPreferences => ({
+    lowStockAlerts: preferences.lowStockAlerts,
+    orderStatusUpdates: preferences.orderStatusUpdates,
+    deliveryDispatches: preferences.deliveryDispatches,
+  });
+
+  const persistNotificationPreferences = (preferences: NotificationPreferences) => {
+    setNotifPrefs(preferences);
+    try { localStorage.setItem('smartstock_notif_prefs', JSON.stringify(preferences)); } catch { /* storage is optional */ }
+    window.dispatchEvent(new Event('smartstock-notif-prefs-changed'));
+  };
+
   const handleRequestPushPermission = async () => {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      toast.error('Browser notifications are not supported in this browser.');
+    if (!supportsWebPush()) {
+      toast.error('Background push is unsupported here. On iPhone or iPad, add SmartStock to the Home Screen first.');
+      return;
+    }
+    if (!pushConfig?.configured || !pushConfig.publicKey) {
+      toast.error('Push delivery is not configured on the SmartStock server yet.');
       return;
     }
 
+    setPushBusy(true);
     try {
-      const result = await Notification.requestPermission();
-      setBrowserPermission(result);
-      if (result === 'granted') {
-        toast.success('Notifications enabled in this browser.');
-        const nextPreferences = { ...notifPrefs, browserPush: true };
-        setNotifPrefs(nextPreferences);
-        localStorage.setItem('smartstock_notif_prefs', JSON.stringify(nextPreferences));
-        window.dispatchEvent(new Event('smartstock-notif-prefs-changed'));
-        new Notification('Notifications enabled', {
-          body: 'SmartStock can show alerts while this app is open.',
-          icon: '/favicon.ico',
-        });
-      } else if (result === 'denied') {
-        toast.error('Browser notifications were blocked. Please enable them in browser site settings.');
+      const permission = await Notification.requestPermission();
+      setBrowserPermission(permission);
+      if (permission !== 'granted') {
+        toast.error(permission === 'denied'
+          ? 'Notifications are blocked. Allow them in this browser’s site settings, then try again.'
+          : 'Notification permission was not granted.');
+        return;
       }
-    } catch {
-      toast.error('Failed to request notification permission.');
+
+      await registerWebPush(pushConfig.publicKey, getPushPreferences());
+      const nextPreferences = { ...notifPrefs, browserPush: true };
+      persistNotificationPreferences(nextPreferences);
+      setPushSubscriptionReady(true);
+      toast.success('Background push notifications are enabled for this browser.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not enable push notifications.');
+    } finally {
+      setPushBusy(false);
     }
   };
 
-  const handleTestPushNotification = () => {
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification('SmartStock notification test', {
-        body: 'Notifications are working while SmartStock is open.',
-      });
-      toast.info('Test notification shown.');
-    } else {
-      toast.error('Grant browser notification permission before previewing a local notification.');
+  const handleTestPushNotification = async () => {
+    if (!pushSubscriptionReady) {
+      toast.error('Enable push notifications for this browser first.');
+      return;
     }
-  };
-
-  const handleSaveNotifPrefs = () => {
+    setPushBusy(true);
     try {
+      await sendWebPushTest();
+      toast.success('Test push sent. It should appear as a system notification.');
+    } catch (error) {
+      const apiError = error as ApiError;
+      toast.error(apiError.status === 404
+        ? 'This browser is no longer subscribed. Enable notifications again.'
+        : apiError.status === 503
+          ? 'Push delivery is not configured on the SmartStock server.'
+          : 'The test push could not be delivered. Check server and browser settings.');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const handleDisablePush = async () => {
+    setPushBusy(true);
+    try {
+      await unregisterWebPush();
+      persistNotificationPreferences({ ...notifPrefs, browserPush: false });
+      setPushSubscriptionReady(false);
+      toast.success('Push notifications disabled for this browser.');
+    } catch {
+      toast.error('Could not remove this browser’s push subscription.');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const handleSaveNotifPrefs = async () => {
+    try {
+      if (notifPrefs.browserPush) {
+        const synced = await syncWebPushPreferences(getPushPreferences());
+        if (!synced) throw new Error('Push subscription is missing');
+      } else await unregisterWebPush();
       localStorage.setItem('smartstock_notif_prefs', JSON.stringify(notifPrefs));
       window.dispatchEvent(new Event('smartstock-notif-prefs-changed'));
-      toast.success('Notification preferences saved on this browser.');
+      toast.success(notifPrefs.browserPush ? 'Notification preferences saved and synced to push delivery.' : 'Notification preferences saved on this browser.');
     } catch {
-      toast.error('Could not save notification preferences in this browser.');
+      toast.error('Could not sync notification preferences. Your changes were not confirmed by the server.');
     }
   };
 
@@ -542,43 +633,63 @@ export const ProfilePage: React.FC = () => {
                   <h3 className="text-base font-extrabold text-slate-900">Notifications</h3>
                   <span
                     className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                      browserPermission === 'granted'
+                      pushSubscriptionReady && pushConfig?.configured && !pushConfigError
                         ? 'bg-emerald-100 text-emerald-800'
-                        : browserPermission === 'denied'
-                        ? 'bg-rose-100 text-rose-800'
-                        : 'bg-amber-100 text-amber-800'
+                        : !supportsWebPush() || pushConfigError || pushConfig?.configured === false || browserPermission === 'denied'
+                          ? 'bg-rose-100 text-rose-800'
+                          : 'bg-amber-100 text-amber-800'
                     }`}
                   >
-                    {browserPermission === 'granted'
-                      ? 'Permission Granted'
-                      : browserPermission === 'denied'
-                      ? 'Blocked'
-                      : 'Permission Required'}
+                    {!supportsWebPush()
+                      ? 'Unsupported'
+                      : pushConfigError
+                        ? 'Server Unavailable'
+                        : pushConfig === null
+                          ? 'Checking Server'
+                          : !pushConfig.configured
+                            ? 'Server Not Configured'
+                            : pushSubscriptionReady
+                              ? 'Push Enabled'
+                              : browserPermission === 'denied'
+                                ? 'Blocked'
+                                : 'Ready to Enable'}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 max-w-xl">
-                  Receive alerts for new stock, order, and delivery notifications while SmartStock is open. Permission is required; notifications do not arrive after the app is closed.
+                  Receive stock, order, and delivery alerts even when SmartStock is closed. Requires server push setup and browser permission. On iPhone or iPad (iOS 16.4+), add SmartStock to the Home Screen and open the installed app.
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2.5 shrink-0">
-              {browserPermission !== 'granted' || !notifPrefs.browserPush ? (
-                <button
-                  type="button"
-                  onClick={() => void handleRequestPushPermission()}
-                  className="btn-primary text-xs font-bold py-2.5 px-4 shadow-sm"
-                >
-                  Enable Notifications
-                </button>
+              {pushSubscriptionReady ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void handleTestPushNotification()}
+                    disabled={pushBusy || !pushConfig?.configured || pushConfigError}
+                    className="btn-secondary flex items-center gap-1.5 text-xs font-bold py-2 px-3.5 shadow-2xs text-slate-700 disabled:opacity-50"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-[#4f46e5]" />
+                    <span>{pushBusy ? 'Sending...' : 'Send Test Push'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDisablePush()}
+                    disabled={pushBusy}
+                    className="text-xs font-bold text-rose-700 px-2 py-2 disabled:opacity-50"
+                  >
+                    Disable
+                  </button>
+                </>
               ) : (
                 <button
                   type="button"
-                  onClick={handleTestPushNotification}
-                  className="btn-secondary flex items-center gap-1.5 text-xs font-bold py-2 px-3.5 shadow-2xs text-slate-700"
+                  onClick={() => void handleRequestPushPermission()}
+                  disabled={pushBusy || pushConfig === null || !pushConfig.configured || !supportsWebPush()}
+                  className="btn-primary text-xs font-bold py-2.5 px-4 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-[#4f46e5]" />
-                  <span>Test Notification</span>
+                  {pushBusy ? 'Enabling...' : pushConfigError ? 'Server Unavailable' : pushConfig === null ? 'Checking...' : !supportsWebPush() ? 'Unsupported' : !pushConfig.configured ? 'Server Not Configured' : 'Enable Background Push'}
                 </button>
               )}
             </div>
@@ -588,7 +699,7 @@ export const ProfilePage: React.FC = () => {
           <div className="bg-white rounded-[28px] p-6 sm:p-8 border border-[#f1f5f9] shadow-sm space-y-6">
             <div className="border-b border-slate-100 pb-4">
               <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Notification Preferences</h3>
-              <p className="text-xs text-slate-400 mt-0.5">These choices are saved in this browser. Alerts, emails, and sounds are not sent automatically yet.</p>
+              <p className="text-xs text-slate-400 mt-0.5">When background push is enabled, stock, order, and delivery choices sync to your saved browser subscription. Sound alerts and weekly emails are not available yet.</p>
             </div>
 
             <div className="space-y-4">
@@ -596,19 +707,19 @@ export const ProfilePage: React.FC = () => {
                 {
                   key: 'lowStockAlerts',
                   label: 'Low-stock alerts',
-                  desc: 'Automatic low-stock alerts are not available yet.',
+                  desc: 'Send a push when an inventory item needs attention.',
                   icon: AlertCircle,
                 },
                 {
                   key: 'orderStatusUpdates',
                   label: 'New orders & status changes',
-                  desc: 'Automatic order updates are not available yet.',
+                  desc: 'Send a push when an order status changes.',
                   icon: CheckCircle2,
                 },
                 {
                   key: 'deliveryDispatches',
                   label: 'Delivery updates',
-                  desc: 'Automatic delivery and tracking updates are not available yet.',
+                  desc: 'Send a push when a delivery status changes.',
                   icon: Smartphone,
                 },
                 {

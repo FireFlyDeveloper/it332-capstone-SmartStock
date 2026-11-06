@@ -13,43 +13,17 @@ import {
   Package,
   RefreshCw,
 } from 'lucide-react';
-import { getNotificationChanges, getNotificationIds, getNotificationsPage, type NotificationFeedItem, type NotificationsPageResponse } from '../api';
+import { getNotificationIds, getNotificationsPage, type NotificationFeedItem, type NotificationsPageResponse } from '../api';
 
 export type NotificationItem = NotificationFeedItem;
 
 const READ_STORAGE_KEY = 'smartstock_read_notifications';
 const DISMISSED_STORAGE_KEY = 'smartstock_dismissed_notifications';
-const PREFERENCES_STORAGE_KEY = 'smartstock_notif_prefs';
-
-interface BrowserNotificationPreferences {
-  browserPush: boolean;
-  lowStockAlerts: boolean;
-  orderStatusUpdates: boolean;
-  deliveryDispatches: boolean;
-}
-
-const readBrowserNotificationPreferences = (): BrowserNotificationPreferences => {
-  try {
-    const stored = localStorage.getItem(PREFERENCES_STORAGE_KEY);
-    const parsed = stored ? JSON.parse(stored) as Partial<BrowserNotificationPreferences> : {};
-    return {
-      browserPush: parsed.browserPush === true,
-      lowStockAlerts: parsed.lowStockAlerts !== false,
-      orderStatusUpdates: parsed.orderStatusUpdates !== false,
-      deliveryDispatches: parsed.deliveryDispatches !== false,
-    };
-  } catch {
-    return { browserPush: false, lowStockAlerts: true, orderStatusUpdates: true, deliveryDispatches: true };
-  }
-};
-
 export const NotificationDropdown: React.FC = () => {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
-  const [notificationPreferences, setNotificationPreferences] = useState(readBrowserNotificationPreferences);
-  const knownNotificationIdsRef = useRef<Set<string>>(new Set());
-  const initializedNotificationsRef = useRef(false);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [readIds, setReadIds] = useState<Set<string>>(() => {
     try {
@@ -105,65 +79,18 @@ export const NotificationDropdown: React.FC = () => {
     }
   }, [activeTab, dismissedIds, readIds]);
 
-  const notifyBrowserNotifications = useCallback((items: NotificationFeedItem[]) => {
-    if (!notificationPreferences.browserPush || !('Notification' in window) || Notification.permission !== 'granted') return;
-    items.forEach((item) => {
-      if (dismissedIds.has(item.id)) return;
-      const categoryEnabled = item.type === 'stock'
-        ? notificationPreferences.lowStockAlerts
-        : item.type === 'delivery'
-          ? notificationPreferences.deliveryDispatches
-          : notificationPreferences.orderStatusUpdates;
-      if (!categoryEnabled) return;
-      const browserNotification = new Notification(item.title, { body: item.message, tag: item.id });
-      browserNotification.onclick = () => {
-        window.focus();
-        setIsOpen(false);
-        navigate(item.link);
-        browserNotification.close();
-      };
-    });
-  }, [dismissedIds, navigate, notificationPreferences]);
-
-  const baselineStartedRef = useRef(false);
-  const baselineReadyRef = useRef(false);
-  const pollNewNotifications = useCallback(async () => {
-    if (!baselineReadyRef.current || !notificationPreferences.browserPush || !('Notification' in window) || Notification.permission !== 'granted') return;
-    try {
-      const knownIds = Array.from(knownNotificationIdsRef.current).slice(-10_000);
-      const { items } = await getNotificationChanges(knownIds, Array.from(dismissedIds).slice(-10_000));
-      const newItems = items.filter((item) => !knownNotificationIdsRef.current.has(item.id));
-      newItems.forEach((item) => knownNotificationIdsRef.current.add(item.id));
-      notifyBrowserNotifications(newItems);
-    } catch {
-      // Keep background polling quiet; the visible list has its own retry state.
-    }
-  }, [dismissedIds, notificationPreferences, notifyBrowserNotifications]);
-
   useEffect(() => { void refreshSources(); }, [refreshSources]);
 
   useEffect(() => {
-    const refreshAndCheck = () => {
-      void refreshSources();
-      void pollNewNotifications();
-    };
-    window.addEventListener('smartstock-notifications-refresh', refreshAndCheck);
-    return () => window.removeEventListener('smartstock-notifications-refresh', refreshAndCheck);
-  }, [pollNewNotifications, refreshSources]);
+    const refresh = () => { void refreshSources(); };
+    window.addEventListener('smartstock-notifications-refresh', refresh);
+    return () => window.removeEventListener('smartstock-notifications-refresh', refresh);
+  }, [refreshSources]);
 
   useEffect(() => {
     if (isOpen) void refreshSources();
   }, [isOpen, refreshSources]);
 
-  useEffect(() => {
-    const reloadPreferences = () => setNotificationPreferences(readBrowserNotificationPreferences());
-    window.addEventListener('storage', reloadPreferences);
-    window.addEventListener('smartstock-notif-prefs-changed', reloadPreferences);
-    return () => {
-      window.removeEventListener('storage', reloadPreferences);
-      window.removeEventListener('smartstock-notif-prefs-changed', reloadPreferences);
-    };
-  }, []);
 
   const retrySources = () => {
     void refreshSources();
@@ -230,7 +157,6 @@ export const NotificationDropdown: React.FC = () => {
         unreadOnly: activeTab === 'unread',
       });
       if (requestId !== pageRequestRef.current) return;
-      result.items.forEach((item) => knownNotificationIdsRef.current.add(item.id));
       setAllNotifications((current) => {
         const existing = new Set(current.map((item) => item.id));
         return [...current, ...result.items.filter((item) => !existing.has(item.id))];
@@ -259,40 +185,6 @@ export const NotificationDropdown: React.FC = () => {
   }, [hasMore, loadMore, loadMoreError, loadingMore, sourcesLoading]);
 
 
-  useEffect(() => {
-    if (!sourcesReady) return;
-
-    if (!baselineStartedRef.current) {
-      baselineStartedRef.current = true;
-      allNotifications.forEach((item) => knownNotificationIdsRef.current.add(item.id));
-      initializedNotificationsRef.current = true;
-      void getNotificationIds(Array.from(dismissedIds).slice(-10_000))
-        .then(({ ids }) => {
-          ids.forEach((id) => knownNotificationIdsRef.current.add(id));
-          baselineReadyRef.current = true;
-        })
-        .catch(() => {
-          baselineReadyRef.current = true;
-        });
-      return;
-    }
-
-    if (!initializedNotificationsRef.current) return;
-    const newNotifications = allNotifications.filter((item) => !knownNotificationIdsRef.current.has(item.id));
-    allNotifications.forEach((item) => knownNotificationIdsRef.current.add(item.id));
-    notifyBrowserNotifications(newNotifications);
-  }, [allNotifications, dismissedIds, notifyBrowserNotifications, sourcesReady]);
-
-  useEffect(() => {
-    if (!sourcesReady || !notificationPreferences.browserPush || !('Notification' in window) || Notification.permission !== 'granted') return;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== 'hidden') {
-        void refreshSources();
-        void pollNewNotifications();
-      }
-    }, 60_000);
-    return () => window.clearInterval(timer);
-  }, [notificationPreferences.browserPush, pollNewNotifications, refreshSources, sourcesReady]);
 
   const markAllAsRead = async () => {
     try {

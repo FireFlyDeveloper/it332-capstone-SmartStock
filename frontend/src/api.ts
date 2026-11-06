@@ -661,3 +661,45 @@ export function getAnalyticsInsights(criteria: AnalyticsInsightsCriteria): Promi
   params.set('threshold', String(criteria.threshold))
   return apiFetch<AnalyticsInsightsResponse>(`/analytics/insights?${params.toString()}`)
 }
+
+export interface WebPushSubscriptionData {
+  endpoint: string
+  expirationTime?: number | null
+  keys: { p256dh: string; auth: string }
+}
+
+export interface WebPushPreferences {
+  lowStockAlerts: boolean
+  orderStatusUpdates: boolean
+  deliveryDispatches: boolean
+}
+
+export interface WebPushConfig {
+  configured: boolean
+  publicKey: string | null
+}
+
+export function getWebPushConfig(): Promise<WebPushConfig> {
+  return apiFetch<WebPushConfig>('/notifications/push/config')
+}
+
+export function saveWebPushSubscription(subscription: WebPushSubscriptionData, preferences: WebPushPreferences): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>('/notifications/push/subscriptions', {
+    method: 'POST',
+    body: JSON.stringify({ subscription, preferences }),
+  })
+}
+
+export function deleteWebPushSubscription(endpoint: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>('/notifications/push/subscriptions', {
+    method: 'DELETE',
+    body: JSON.stringify({ endpoint }),
+  })
+}
+
+export function sendWebPushTest(): Promise<{ ok: boolean; sent: number }> {
+  return apiFetch<{ ok: boolean; sent: number }>('/notifications/push/test', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
+}

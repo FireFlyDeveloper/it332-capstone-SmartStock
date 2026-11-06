@@ -6,6 +6,7 @@
  */
 
 import type { NotificationEvent } from './types.js';
+import { sendWebPushEvent } from './push.js';
 
 type FetchLike = (input: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => Promise<{ ok: boolean; status: number }>;
 
@@ -26,20 +27,23 @@ async function postWebhook(url: string, event: NotificationEvent): Promise<void>
 
 export async function sendNotificationEvent(event: NotificationEvent): Promise<void> {
   const webhookUrl = process.env.N8N_WEBHOOK_URL;
-  if (!webhookUrl) {
-    console.info('[notifications] webhook missing; event not sent');
-    return;
-  }
-
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
-      await postWebhook(webhookUrl, event);
+  const webhookDelivery = (async () => {
+    if (!webhookUrl) {
+      console.info('[notifications] webhook missing; event not sent');
       return;
-    } catch (error) {
-      if (attempt === 2) {
-        const message = error instanceof Error ? error.message : 'unknown webhook error';
-        console.warn(`[notifications] webhook delivery failed after retry: ${message}`);
+    }
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        await postWebhook(webhookUrl, event);
+        break;
+      } catch (error) {
+        if (attempt === 2) {
+          const message = error instanceof Error ? error.message : 'unknown webhook error';
+          console.warn(`[notifications] webhook delivery failed after retry: ${message}`);
+        }
       }
     }
-  }
+  })();
+
+  await Promise.all([webhookDelivery, sendWebPushEvent(event)]);
 }

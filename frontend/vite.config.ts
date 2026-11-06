@@ -39,7 +39,7 @@ export default defineConfig(({ mode }) => {
         '100.83.235.28',         // public/NAT IP
       ],
       proxy: Object.fromEntries(
-        ['/auth', '/products', '/inventory', '/orders', '/deliveries', '/tracking', '/analytics', '/reports', '/health'].map((path) => [
+        ['/auth', '/products', '/inventory', '/orders', '/deliveries', '/tracking', '/analytics', '/reports', '/notifications', '/health'].map((path) => [
           path,
           {
             target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:3000',
