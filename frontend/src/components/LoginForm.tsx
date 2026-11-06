@@ -54,9 +54,10 @@ export function LoginForm() {
       </a>
 
       <header className="login-form__header">
-        <h1 className="login-form__title">Sign in</h1>
+        <p className="login-form__eyebrow">TEAM ACCESS</p>
+        <h1 className="login-form__title">Welcome back</h1>
         <p className="login-form__subtitle">
-          Use your SmartStock work email. New here? Ask your admin for an invite.
+          Sign in with your SmartStock work email to continue. Need access? Ask your admin for an invite.
         </p>
       </header>
 
@@ -74,7 +75,7 @@ export function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={submitting}
-            placeholder="[email protected]"
+            placeholder="name@company.com"
           />
         </div>
 
@@ -121,7 +122,8 @@ export function LoginForm() {
           {submitting ? (
             <span className="login-form__spinner" aria-hidden="true" />
           ) : null}
-          <span>{submitting ? 'Signing in' : 'Sign in to SmartStock'}</span>
+          <span>{submitting ? 'Signing in' : 'Continue to SmartStock'}</span>
+          {!submitting && <span className="login-form__submit-arrow" aria-hidden="true">→</span>}
         </button>
       </form>
 

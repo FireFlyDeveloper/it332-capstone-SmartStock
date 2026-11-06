@@ -1,50 +1,56 @@
-/**
- * AuthArtPanel - ambient brand surface rendered on the right pane at
- * desktop widths. Purely decorative; the parent should mark it
- * aria-hidden.
- *
- * Three floating stat tiles + one short tagline. Uses --radius-card,
- * --mono, and a local frosted-glass treatment that degrades under
- * prefers-reduced-transparency.
- *
- * Author: Hazel
- * Last touched: 2026-07-07
- */
-
 import './AuthArtPanel.css'
 
-interface Feature {
-  name: string
-  description: string
-  className?: string
-}
-
-const FEATURES: Feature[] = [
-  { name: 'Inventory', description: 'Products and stock levels' },
-  { name: 'Orders', description: 'Customer order records', className: 'auth-art__stat--offset' },
-  { name: 'Delivery', description: 'Delivery status', className: 'auth-art__stat--bottom' },
+const WORKFLOW = [
+  { number: '01', title: 'Receive', detail: 'Record incoming stock' },
+  { number: '02', title: 'Manage', detail: 'Keep inventory current' },
+  { number: '03', title: 'Deliver', detail: 'Follow each order' },
 ]
 
 export function AuthArtPanel() {
   return (
     <div className="auth-art">
-      <div className="auth-art__grid" />
-      <div className="auth-art__grain" />
-      {FEATURES.map((feature) => (
-        <div
-          key={feature.name}
-          className={`auth-art__stat ${feature.className ?? ''}`.trim()}
-        >
-          <span className="auth-art__stat-num">{feature.name}</span>
-          <span className="auth-art__stat-label">{feature.description}</span>
+      <div className="auth-art__topline">
+        <span className="auth-art__signal" aria-hidden="true" />
+        GLASSRAM OPERATIONS
+      </div>
+
+      <div className="auth-art__content">
+        <div className="auth-art__visual" aria-hidden="true">
+          <div className="auth-art__visual-glow" />
+          <div className="auth-art__glass auth-art__glass--back" />
+          <div className="auth-art__glass auth-art__glass--middle" />
+          <div className="auth-art__glass auth-art__glass--front" />
+          <div className="auth-art__visual-label">
+            <span className="auth-art__visual-dot" />
+            ONE CONNECTED WORKFLOW
+          </div>
         </div>
-      ))}
-      <div className="auth-art__quote">
-        <p>From receiving bay to delivery truck, one count.</p>
+
+        <div className="auth-art__copy">
+          <p className="auth-art__eyebrow">STOCK TO DELIVERY</p>
+          <h2>Know what’s moving.<br />Keep work moving.</h2>
+          <p className="auth-art__description">
+            A shared view of products, customer orders, and delivery progress for the Glassram team.
+          </p>
+        </div>
       </div>
-      <div className="auth-art__footer" aria-hidden="true">
-        SmartStock · Inventory and order management
-      </div>
+
+      <ol className="auth-art__workflow" aria-label="SmartStock workflow">
+        {WORKFLOW.map((step) => (
+          <li className="auth-art__step" key={step.number}>
+            <span className="auth-art__step-number">{step.number}</span>
+            <span className="auth-art__step-copy">
+              <strong>{step.title}</strong>
+              <span>{step.detail}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      <footer className="auth-art__footer">
+        <span>SmartStock</span>
+        <span>Inventory · Orders · Delivery</span>
+      </footer>
     </div>
   )
 }
