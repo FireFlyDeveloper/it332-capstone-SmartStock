@@ -5304,7 +5304,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-001",
     "orderId": "ORD-001",
-    "driver": "Carlos Mendoza",
     "truckNumber": "Truck-101",
     "destination": "100 Rizal Avenue, Manila",
     "status": "delivered",
@@ -5322,7 +5321,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-002",
     "orderId": "ORD-002",
-    "driver": "Roberto Santos",
     "truckNumber": "Truck-102",
     "destination": "101 Mabini Street, Pasig",
     "status": "delivered",
@@ -5340,7 +5338,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-003",
     "orderId": "ORD-003",
-    "driver": "Juan Dela Cruz",
     "truckNumber": "Truck-103",
     "destination": "102 Quezon Avenue, Marikina",
     "status": "delivered",
@@ -5358,7 +5355,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-004",
     "orderId": "ORD-004",
-    "driver": "Maria Garcia",
     "truckNumber": "Truck-104",
     "destination": "103 Ortigas Extension, Parañaque",
     "status": "in_transit",
@@ -5376,7 +5372,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-005",
     "orderId": "ORD-005",
-    "driver": "Pedro Reyes",
     "truckNumber": "Truck-105",
     "destination": "104 EDSA Service Road, Antipolo",
     "status": "in_transit",
@@ -5394,7 +5389,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-006",
     "orderId": "ORD-006",
-    "driver": "Ana Santos",
     "truckNumber": "Truck-106",
     "destination": "105 Commerce Avenue, Bacoor",
     "status": "picked_up",
@@ -5412,7 +5406,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-007",
     "orderId": "ORD-007",
-    "driver": "Mario Cruz",
     "truckNumber": "Truck-107",
     "destination": "106 Industrial Road, San Pedro",
     "status": "assigned",
@@ -5430,7 +5423,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-008",
     "orderId": "ORD-008",
-    "driver": "Unassigned delivery",
     "truckNumber": "TBD",
     "destination": "107 National Highway, Quezon City",
     "status": "pending",
@@ -5448,7 +5440,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-009",
     "orderId": "ORD-011",
-    "driver": "Danny Garcia",
     "truckNumber": "Truck-109",
     "destination": "110 C5 Road, Las Piñas",
     "status": "delivered",
@@ -5466,7 +5457,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-010",
     "orderId": "ORD-012",
-    "driver": "Rico Martinez",
     "truckNumber": "Truck-110",
     "destination": "111 Aguinaldo Highway, Cavite City",
     "status": "delivered",
@@ -5484,7 +5474,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-011",
     "orderId": "ORD-013",
-    "driver": "Felipe Torres",
     "truckNumber": "Truck-111",
     "destination": "112 Alabang-Zapote Road, Calamba",
     "status": "delivered",
@@ -5502,7 +5491,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-012",
     "orderId": "ORD-014",
-    "driver": "Marco Lim",
     "truckNumber": "Truck-112",
     "destination": "113 Marcos Highway, Malabon",
     "status": "in_transit",
@@ -5520,7 +5508,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-013",
     "orderId": "ORD-015",
-    "driver": "Joseph Navarro",
     "truckNumber": "Truck-113",
     "destination": "114 MacArthur Highway, Makati",
     "status": "in_transit",
@@ -5538,7 +5525,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-014",
     "orderId": "ORD-016",
-    "driver": "Edwin Bautista",
     "truckNumber": "Truck-114",
     "destination": "115 Gil Puyat Avenue, Mandaluyong",
     "status": "picked_up",
@@ -5556,7 +5542,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-015",
     "orderId": "ORD-017",
-    "driver": "Lito Fernandez",
     "truckNumber": "Truck-115",
     "destination": "116 Ayala Avenue, Valenzuela",
     "status": "assigned",
@@ -5574,7 +5559,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-016",
     "orderId": "ORD-021",
-    "driver": "Arnel Ramos",
     "truckNumber": "Truck-116",
     "destination": "120 Rizal Avenue, Manila",
     "status": "delivered",
@@ -5592,7 +5576,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-017",
     "orderId": "ORD-022",
-    "driver": "Paolo Santiago",
     "truckNumber": "Truck-117",
     "destination": "121 Mabini Street, Pasig",
     "status": "delivered",
@@ -5610,7 +5593,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-018",
     "orderId": "ORD-023",
-    "driver": "Nestor Aquino",
     "truckNumber": "Truck-118",
     "destination": "122 Quezon Avenue, Marikina",
     "status": "delivered",
@@ -5628,7 +5610,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-019",
     "orderId": "ORD-024",
-    "driver": "Victor Salazar",
     "truckNumber": "Truck-119",
     "destination": "123 Ortigas Extension, Parañaque",
     "status": "in_transit",
@@ -5646,7 +5627,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-020",
     "orderId": "ORD-025",
-    "driver": "Renato Flores",
     "truckNumber": "Truck-120",
     "destination": "124 EDSA Service Road, Antipolo",
     "status": "in_transit",
@@ -5664,7 +5644,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-021",
     "orderId": "ORD-026",
-    "driver": "Carlos Mendoza",
     "truckNumber": "Truck-121",
     "destination": "125 Commerce Avenue, Bacoor",
     "status": "assigned",
@@ -5682,7 +5661,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-022",
     "orderId": "ORD-027",
-    "driver": "Roberto Santos",
     "truckNumber": "Truck-122",
     "destination": "126 Industrial Road, San Pedro",
     "status": "picked_up",
@@ -5700,7 +5678,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-023",
     "orderId": "ORD-028",
-    "driver": "Unassigned delivery",
     "truckNumber": "TBD",
     "destination": "127 National Highway, Quezon City",
     "status": "pending",
@@ -5718,7 +5695,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-024",
     "orderId": "ORD-031",
-    "driver": "Maria Garcia",
     "truckNumber": "Truck-124",
     "destination": "130 C5 Road, Las Piñas",
     "status": "delivered",
@@ -5736,7 +5712,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-025",
     "orderId": "ORD-032",
-    "driver": "Pedro Reyes",
     "truckNumber": "Truck-101",
     "destination": "131 Aguinaldo Highway, Cavite City",
     "status": "delivered",
@@ -5754,7 +5729,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-026",
     "orderId": "ORD-033",
-    "driver": "Ana Santos",
     "truckNumber": "Truck-102",
     "destination": "132 Alabang-Zapote Road, Calamba",
     "status": "delivered",
@@ -5772,7 +5746,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-027",
     "orderId": "ORD-034",
-    "driver": "Mario Cruz",
     "truckNumber": "Truck-103",
     "destination": "133 Marcos Highway, Malabon",
     "status": "in_transit",
@@ -5790,7 +5763,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-028",
     "orderId": "ORD-035",
-    "driver": "Ramon Villanueva",
     "truckNumber": "Truck-104",
     "destination": "134 MacArthur Highway, Makati",
     "status": "in_transit",
@@ -5808,7 +5780,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-029",
     "orderId": "ORD-036",
-    "driver": "Danny Garcia",
     "truckNumber": "Truck-105",
     "destination": "135 Gil Puyat Avenue, Mandaluyong",
     "status": "assigned",
@@ -5826,7 +5797,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-030",
     "orderId": "ORD-037",
-    "driver": "Rico Martinez",
     "truckNumber": "Truck-106",
     "destination": "136 Ayala Avenue, Valenzuela",
     "status": "picked_up",
@@ -5844,7 +5814,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-031",
     "orderId": "ORD-038",
-    "driver": "Unassigned delivery",
     "truckNumber": "TBD",
     "destination": "137 Katipunan Avenue, Muntinlupa",
     "status": "pending",
@@ -5862,7 +5831,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-032",
     "orderId": "ORD-041",
-    "driver": "Marco Lim",
     "truckNumber": "Truck-108",
     "destination": "140 Rizal Avenue, Manila",
     "status": "delivered",
@@ -5880,7 +5848,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-033",
     "orderId": "ORD-042",
-    "driver": "Joseph Navarro",
     "truckNumber": "Truck-109",
     "destination": "141 Mabini Street, Pasig",
     "status": "delivered",
@@ -5898,7 +5865,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-034",
     "orderId": "ORD-043",
-    "driver": "Edwin Bautista",
     "truckNumber": "Truck-110",
     "destination": "142 Quezon Avenue, Marikina",
     "status": "delivered",
@@ -5916,7 +5882,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-035",
     "orderId": "ORD-044",
-    "driver": "Lito Fernandez",
     "truckNumber": "Truck-111",
     "destination": "143 Ortigas Extension, Parañaque",
     "status": "in_transit",
@@ -5934,7 +5899,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-036",
     "orderId": "ORD-045",
-    "driver": "Arnel Ramos",
     "truckNumber": "Truck-112",
     "destination": "144 EDSA Service Road, Antipolo",
     "status": "in_transit",
@@ -5952,7 +5916,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-037",
     "orderId": "ORD-046",
-    "driver": "Paolo Santiago",
     "truckNumber": "Truck-113",
     "destination": "145 Commerce Avenue, Bacoor",
     "status": "assigned",
@@ -5970,7 +5933,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-038",
     "orderId": "ORD-047",
-    "driver": "Nestor Aquino",
     "truckNumber": "Truck-114",
     "destination": "146 Industrial Road, San Pedro",
     "status": "picked_up",
@@ -5988,7 +5950,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-039",
     "orderId": "ORD-048",
-    "driver": "Unassigned delivery",
     "truckNumber": "TBD",
     "destination": "147 National Highway, Quezon City",
     "status": "pending",
@@ -6006,7 +5967,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-040",
     "orderId": "ORD-051",
-    "driver": "Renato Flores",
     "truckNumber": "Truck-116",
     "destination": "150 C5 Road, Las Piñas",
     "status": "delivered",
@@ -6024,7 +5984,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-041",
     "orderId": "ORD-052",
-    "driver": "Carlos Mendoza",
     "truckNumber": "Truck-117",
     "destination": "151 Aguinaldo Highway, Cavite City",
     "status": "delivered",
@@ -6042,7 +6001,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-042",
     "orderId": "ORD-053",
-    "driver": "Roberto Santos",
     "truckNumber": "Truck-118",
     "destination": "152 Alabang-Zapote Road, Calamba",
     "status": "delivered",
@@ -6060,7 +6018,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-043",
     "orderId": "ORD-054",
-    "driver": "Juan Dela Cruz",
     "truckNumber": "Truck-119",
     "destination": "153 Marcos Highway, Malabon",
     "status": "in_transit",
@@ -6078,7 +6035,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-044",
     "orderId": "ORD-055",
-    "driver": "Maria Garcia",
     "truckNumber": "Truck-120",
     "destination": "154 MacArthur Highway, Makati",
     "status": "in_transit",
@@ -6096,7 +6052,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-045",
     "orderId": "ORD-056",
-    "driver": "Pedro Reyes",
     "truckNumber": "Truck-121",
     "destination": "155 Gil Puyat Avenue, Mandaluyong",
     "status": "assigned",
@@ -6114,7 +6069,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-046",
     "orderId": "ORD-057",
-    "driver": "Ana Santos",
     "truckNumber": "Truck-122",
     "destination": "156 Ayala Avenue, Valenzuela",
     "status": "picked_up",
@@ -6132,7 +6086,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-047",
     "orderId": "ORD-058",
-    "driver": "Unassigned delivery",
     "truckNumber": "TBD",
     "destination": "157 Katipunan Avenue, Muntinlupa",
     "status": "pending",
@@ -6150,7 +6103,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-048",
     "orderId": "ORD-061",
-    "driver": "Ramon Villanueva",
     "truckNumber": "Truck-124",
     "destination": "160 Rizal Avenue, Manila",
     "status": "delivered",
@@ -6168,7 +6120,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-049",
     "orderId": "ORD-062",
-    "driver": "Danny Garcia",
     "truckNumber": "Truck-101",
     "destination": "161 Mabini Street, Pasig",
     "status": "delivered",
@@ -6186,7 +6137,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-050",
     "orderId": "ORD-063",
-    "driver": "Rico Martinez",
     "truckNumber": "Truck-102",
     "destination": "162 Quezon Avenue, Marikina",
     "status": "delivered",
@@ -6204,7 +6154,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-051",
     "orderId": "ORD-064",
-    "driver": "Felipe Torres",
     "truckNumber": "Truck-103",
     "destination": "163 Ortigas Extension, Parañaque",
     "status": "in_transit",
@@ -6222,7 +6171,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-052",
     "orderId": "ORD-065",
-    "driver": "Marco Lim",
     "truckNumber": "Truck-104",
     "destination": "164 EDSA Service Road, Antipolo",
     "status": "in_transit",
@@ -6240,7 +6188,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-053",
     "orderId": "ORD-066",
-    "driver": "Joseph Navarro",
     "truckNumber": "Truck-105",
     "destination": "165 Commerce Avenue, Bacoor",
     "status": "assigned",
@@ -6258,7 +6205,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-054",
     "orderId": "ORD-067",
-    "driver": "Edwin Bautista",
     "truckNumber": "Truck-106",
     "destination": "166 Industrial Road, San Pedro",
     "status": "picked_up",
@@ -6276,7 +6222,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-055",
     "orderId": "ORD-068",
-    "driver": "Unassigned delivery",
     "truckNumber": "TBD",
     "destination": "167 National Highway, Quezon City",
     "status": "pending",
@@ -6294,7 +6239,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-056",
     "orderId": "ORD-071",
-    "driver": "Arnel Ramos",
     "truckNumber": "Truck-108",
     "destination": "170 C5 Road, Las Piñas",
     "status": "delivered",
@@ -6312,7 +6256,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-057",
     "orderId": "ORD-072",
-    "driver": "Paolo Santiago",
     "truckNumber": "Truck-109",
     "destination": "171 Aguinaldo Highway, Cavite City",
     "status": "delivered",
@@ -6330,7 +6273,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-058",
     "orderId": "ORD-073",
-    "driver": "Nestor Aquino",
     "truckNumber": "Truck-110",
     "destination": "172 Alabang-Zapote Road, Calamba",
     "status": "delivered",
@@ -6348,7 +6290,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-059",
     "orderId": "ORD-074",
-    "driver": "Victor Salazar",
     "truckNumber": "Truck-111",
     "destination": "173 Marcos Highway, Malabon",
     "status": "in_transit",
@@ -6366,7 +6307,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-060",
     "orderId": "ORD-075",
-    "driver": "Renato Flores",
     "truckNumber": "Truck-112",
     "destination": "174 MacArthur Highway, Makati",
     "status": "in_transit",
@@ -6384,7 +6324,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-061",
     "orderId": "ORD-076",
-    "driver": "Carlos Mendoza",
     "truckNumber": "Truck-113",
     "destination": "175 Gil Puyat Avenue, Mandaluyong",
     "status": "assigned",
@@ -6402,7 +6341,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-062",
     "orderId": "ORD-077",
-    "driver": "Roberto Santos",
     "truckNumber": "Truck-114",
     "destination": "176 Ayala Avenue, Valenzuela",
     "status": "picked_up",
@@ -6420,7 +6358,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-063",
     "orderId": "ORD-078",
-    "driver": "Unassigned delivery",
     "truckNumber": "TBD",
     "destination": "177 Katipunan Avenue, Muntinlupa",
     "status": "pending",
@@ -6438,7 +6375,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-064",
     "orderId": "ORD-081",
-    "driver": "Maria Garcia",
     "truckNumber": "Truck-116",
     "destination": "180 Rizal Avenue, Manila",
     "status": "delivered",
@@ -6456,7 +6392,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-065",
     "orderId": "ORD-082",
-    "driver": "Pedro Reyes",
     "truckNumber": "Truck-117",
     "destination": "181 Mabini Street, Pasig",
     "status": "delivered",
@@ -6474,7 +6409,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-066",
     "orderId": "ORD-083",
-    "driver": "Ana Santos",
     "truckNumber": "Truck-118",
     "destination": "182 Quezon Avenue, Marikina",
     "status": "delivered",
@@ -6492,7 +6426,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-067",
     "orderId": "ORD-084",
-    "driver": "Mario Cruz",
     "truckNumber": "Truck-119",
     "destination": "183 Ortigas Extension, Parañaque",
     "status": "in_transit",
@@ -6510,7 +6443,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-068",
     "orderId": "ORD-085",
-    "driver": "Ramon Villanueva",
     "truckNumber": "Truck-120",
     "destination": "184 EDSA Service Road, Antipolo",
     "status": "in_transit",
@@ -6528,7 +6460,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-069",
     "orderId": "ORD-087",
-    "driver": "Danny Garcia",
     "truckNumber": "Truck-121",
     "destination": "186 Industrial Road, San Pedro",
     "status": "assigned",
@@ -6546,7 +6477,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-070",
     "orderId": "ORD-088",
-    "driver": "Unassigned delivery",
     "truckNumber": "TBD",
     "destination": "187 National Highway, Quezon City",
     "status": "pending",
@@ -6564,7 +6494,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-071",
     "orderId": "ORD-091",
-    "driver": "Felipe Torres",
     "truckNumber": "Truck-123",
     "destination": "190 C5 Road, Las Piñas",
     "status": "delivered",
@@ -6582,7 +6511,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-072",
     "orderId": "ORD-092",
-    "driver": "Marco Lim",
     "truckNumber": "Truck-124",
     "destination": "191 Aguinaldo Highway, Cavite City",
     "status": "delivered",
@@ -6600,7 +6528,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-073",
     "orderId": "ORD-093",
-    "driver": "Joseph Navarro",
     "truckNumber": "Truck-101",
     "destination": "192 Alabang-Zapote Road, Calamba",
     "status": "delivered",
@@ -6618,7 +6545,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-074",
     "orderId": "ORD-094",
-    "driver": "Edwin Bautista",
     "truckNumber": "Truck-102",
     "destination": "193 Marcos Highway, Malabon",
     "status": "in_transit",
@@ -6636,7 +6562,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-075",
     "orderId": "ORD-095",
-    "driver": "Lito Fernandez",
     "truckNumber": "Truck-103",
     "destination": "194 MacArthur Highway, Makati",
     "status": "in_transit",
@@ -6654,7 +6579,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-076",
     "orderId": "ORD-096",
-    "driver": "Arnel Ramos",
     "truckNumber": "Truck-104",
     "destination": "195 Gil Puyat Avenue, Mandaluyong",
     "status": "picked_up",
@@ -6672,7 +6596,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-077",
     "orderId": "ORD-097",
-    "driver": "Paolo Santiago",
     "truckNumber": "Truck-105",
     "destination": "196 Ayala Avenue, Valenzuela",
     "status": "assigned",
@@ -6690,7 +6613,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-078",
     "orderId": "ORD-098",
-    "driver": "Unassigned delivery",
     "truckNumber": "TBD",
     "destination": "197 Katipunan Avenue, Muntinlupa",
     "status": "pending",
@@ -6708,7 +6630,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-079",
     "orderId": "ORD-101",
-    "driver": "Victor Salazar",
     "truckNumber": "Truck-107",
     "destination": "200 Rizal Avenue, Manila",
     "status": "delivered",
@@ -6726,7 +6647,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-080",
     "orderId": "ORD-102",
-    "driver": "Renato Flores",
     "truckNumber": "Truck-108",
     "destination": "201 Mabini Street, Pasig",
     "status": "delivered",
@@ -6744,7 +6664,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-081",
     "orderId": "ORD-103",
-    "driver": "Carlos Mendoza",
     "truckNumber": "Truck-109",
     "destination": "202 Quezon Avenue, Marikina",
     "status": "delivered",
@@ -6762,7 +6681,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-082",
     "orderId": "ORD-104",
-    "driver": "Roberto Santos",
     "truckNumber": "Truck-110",
     "destination": "203 Ortigas Extension, Parañaque",
     "status": "in_transit",
@@ -6780,7 +6698,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-083",
     "orderId": "ORD-105",
-    "driver": "Juan Dela Cruz",
     "truckNumber": "Truck-111",
     "destination": "204 EDSA Service Road, Antipolo",
     "status": "in_transit",
@@ -6798,7 +6715,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-084",
     "orderId": "ORD-106",
-    "driver": "Maria Garcia",
     "truckNumber": "Truck-112",
     "destination": "205 Commerce Avenue, Bacoor",
     "status": "picked_up",
@@ -6816,7 +6732,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-085",
     "orderId": "ORD-107",
-    "driver": "Pedro Reyes",
     "truckNumber": "Truck-113",
     "destination": "206 Industrial Road, San Pedro",
     "status": "assigned",
@@ -6834,7 +6749,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-086",
     "orderId": "ORD-108",
-    "driver": "Unassigned delivery",
     "truckNumber": "TBD",
     "destination": "207 National Highway, Quezon City",
     "status": "pending",
@@ -6852,7 +6766,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-087",
     "orderId": "ORD-111",
-    "driver": "Mario Cruz",
     "truckNumber": "Truck-115",
     "destination": "210 C5 Road, Las Piñas",
     "status": "delivered",
@@ -6870,7 +6783,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-088",
     "orderId": "ORD-112",
-    "driver": "Ramon Villanueva",
     "truckNumber": "Truck-116",
     "destination": "211 Aguinaldo Highway, Cavite City",
     "status": "delivered",
@@ -6888,7 +6800,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-089",
     "orderId": "ORD-113",
-    "driver": "Danny Garcia",
     "truckNumber": "Truck-117",
     "destination": "212 Alabang-Zapote Road, Calamba",
     "status": "delivered",
@@ -6906,7 +6817,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-090",
     "orderId": "ORD-114",
-    "driver": "Rico Martinez",
     "truckNumber": "Truck-118",
     "destination": "213 Marcos Highway, Malabon",
     "status": "in_transit",
@@ -6924,7 +6834,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-091",
     "orderId": "ORD-115",
-    "driver": "Felipe Torres",
     "truckNumber": "Truck-119",
     "destination": "214 MacArthur Highway, Makati",
     "status": "in_transit",
@@ -6942,7 +6851,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-092",
     "orderId": "ORD-116",
-    "driver": "Marco Lim",
     "truckNumber": "Truck-120",
     "destination": "215 Gil Puyat Avenue, Mandaluyong",
     "status": "picked_up",
@@ -6960,7 +6868,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-093",
     "orderId": "ORD-117",
-    "driver": "Joseph Navarro",
     "truckNumber": "Truck-121",
     "destination": "216 Ayala Avenue, Valenzuela",
     "status": "assigned",
@@ -6978,7 +6885,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-094",
     "orderId": "ORD-118",
-    "driver": "Unassigned delivery",
     "truckNumber": "TBD",
     "destination": "217 Katipunan Avenue, Muntinlupa",
     "status": "pending",
@@ -6996,7 +6902,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-095",
     "orderId": "ORD-010",
-    "driver": "Lito Fernandez",
     "truckNumber": "Truck-123",
     "destination": "109 Shaw Boulevard, Caloocan",
     "status": "failed",
@@ -7014,7 +6919,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-096",
     "orderId": "ORD-020",
-    "driver": "Arnel Ramos",
     "truckNumber": "Truck-124",
     "destination": "119 Congressional Avenue, Sta. Rosa",
     "status": "failed",
@@ -7032,7 +6936,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-097",
     "orderId": "ORD-030",
-    "driver": "Paolo Santiago",
     "truckNumber": "Truck-101",
     "destination": "129 Shaw Boulevard, Caloocan",
     "status": "failed",
@@ -7050,7 +6953,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-098",
     "orderId": "ORD-040",
-    "driver": "Nestor Aquino",
     "truckNumber": "Truck-102",
     "destination": "139 Congressional Avenue, Sta. Rosa",
     "status": "failed",
@@ -7068,7 +6970,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-099",
     "orderId": "ORD-050",
-    "driver": "Victor Salazar",
     "truckNumber": "Truck-103",
     "destination": "149 Shaw Boulevard, Caloocan",
     "status": "failed",
@@ -7086,7 +6987,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-100",
     "orderId": "ORD-060",
-    "driver": "Renato Flores",
     "truckNumber": "Truck-104",
     "destination": "159 Congressional Avenue, Sta. Rosa",
     "status": "failed",
@@ -7104,7 +7004,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-101",
     "orderId": "ORD-070",
-    "driver": "Carlos Mendoza",
     "truckNumber": "Truck-105",
     "destination": "169 Shaw Boulevard, Caloocan",
     "status": "failed",
@@ -7122,7 +7021,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-102",
     "orderId": "ORD-080",
-    "driver": "Roberto Santos",
     "truckNumber": "Truck-106",
     "destination": "179 Congressional Avenue, Sta. Rosa",
     "status": "failed",
@@ -7140,7 +7038,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-103",
     "orderId": "ORD-090",
-    "driver": "Juan Dela Cruz",
     "truckNumber": "Truck-107",
     "destination": "189 Shaw Boulevard, Caloocan",
     "status": "failed",
@@ -7158,7 +7055,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-104",
     "orderId": "ORD-100",
-    "driver": "Maria Garcia",
     "truckNumber": "Truck-108",
     "destination": "199 Congressional Avenue, Sta. Rosa",
     "status": "failed",
@@ -7176,7 +7072,6 @@ export const seedDeliveries: Delivery[] = [
   {
     "id": "DEL-105",
     "orderId": "ORD-110",
-    "driver": "Pedro Reyes",
     "truckNumber": "Truck-109",
     "destination": "209 Shaw Boulevard, Caloocan",
     "status": "failed",

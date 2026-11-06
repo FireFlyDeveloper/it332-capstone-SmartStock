@@ -6,7 +6,7 @@ vi.mock('./client.js', () => ({
   getPool: () => database.available ? { query: database.query } : null,
 }));
 
-import { listDeliveriesPageDb } from './postgresStore.js';
+import { createDeliveryDb, listDeliveriesPageDb, updateDeliveryDb } from './postgresStore.js';
 
 const item = (orderId: string, createdAt: string, status = 'pending') => ({
   order_id: orderId,
@@ -19,7 +19,6 @@ const item = (orderId: string, createdAt: string, status = 'pending') => ({
   delivery_status: status,
   page_current_step: status === 'pending' ? 0 : status === 'in_transit' ? 1 : 2,
   delivery_id: null,
-  driver: null,
   truck_number: null,
   location: null,
   current_location: null,
@@ -28,6 +27,20 @@ const item = (orderId: string, createdAt: string, status = 'pending') => ({
   route_efficiency_score: null,
   notes: null,
 });
+
+const deliveryRow = {
+  id: 'DEL-1',
+  order_id: 'ORD-1',
+  truck_number: 'Truck-1',
+  destination: '1 Test Street',
+  status: 'pending',
+  current_step: 0,
+  current_location: { x: 0, y: 0 },
+  traffic_level: 'low',
+  predicted_delay: false,
+  route_efficiency_score: 0,
+  notes: null,
+};
 
 describe('PostgreSQL Deliveries cursor query', () => {
   beforeEach(() => {
@@ -74,6 +87,8 @@ describe('PostgreSQL Deliveries cursor query', () => {
       }],
     });
     const [sql, values] = database.query.mock.calls[0] as [string, unknown[]];
+    expect(result?.items[0]).not.toHaveProperty('driver');
+    expect(sql).not.toMatch(/\bdriver(_id)?\b/i);
     expect(sql).toContain("o.order_status IN ('processing', 'in_transit', 'delivered')");
     expect(sql).toContain("LOWER(BTRIM(COALESCE(o.delivery_address, ''))) <> 'pickup'");
     expect(sql).toContain('LEFT JOIN LATERAL');
@@ -94,5 +109,35 @@ describe('PostgreSQL Deliveries cursor query', () => {
       cursorOrderId: null,
     })).resolves.toBeNull();
     expect(database.query).not.toHaveBeenCalled();
+  });
+
+  it('creates deliveries without sending or returning person-assignment data', async () => {
+    database.query.mockResolvedValueOnce({ rows: [deliveryRow] });
+
+    const result = await createDeliveryDb({
+      id: 'DEL-1',
+      orderId: 'ORD-1',
+      truckNumber: 'Truck-1',
+      destination: '1 Test Street',
+    });
+
+    const [sql, values] = database.query.mock.calls[0] as [string, unknown[]];
+    expect(sql).not.toMatch(/\bdriver(_id)?\b/i);
+    expect(values).toHaveLength(12);
+    expect(result).not.toHaveProperty('driver');
+  });
+
+  it('updates deliveries without person-assignment fields', async () => {
+    database.query
+      .mockResolvedValueOnce({ rows: [deliveryRow] })
+      .mockResolvedValueOnce({ rows: [deliveryRow] });
+
+    await updateDeliveryDb('DEL-1', { truckNumber: 'Truck-2' });
+
+    expect(database.query).toHaveBeenCalledTimes(2);
+    const [sql, values] = database.query.mock.calls[1] as [string, unknown[]];
+    expect(sql).not.toMatch(/\bdriver(_id)?\b/i);
+    expect(values).toHaveLength(11);
+    expect(values.slice(0, 4)).toEqual(['DEL-1', 'Truck-2', '1 Test Street', 'pending']);
   });
 });

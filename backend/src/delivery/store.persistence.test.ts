@@ -29,7 +29,6 @@ import {
 
 const input = {
   orderId: 'ORD-DB-1',
-  driver: 'Test Driver',
   truckNumber: 'Truck-Test',
   destination: 'Test destination',
 };
@@ -37,7 +36,6 @@ const input = {
 const persisted: Delivery = {
   id: 'DEL-DB-1',
   orderId: input.orderId,
-  driver: input.driver,
   truckNumber: input.truckNumber,
   destination: input.destination,
   status: 'pending',
@@ -66,7 +64,7 @@ describe('delivery store PostgreSQL write-through', () => {
   });
 
   it('returns and caches the record returned by PostgreSQL', async () => {
-    const saved = { ...persisted, driver: 'Persisted Driver' };
+    const saved = { ...persisted, destination: 'Saved by PostgreSQL' };
     dbMocks.createDeliveryDb.mockResolvedValueOnce(saved);
 
     await expect(createDelivery(input)).resolves.toEqual(saved);

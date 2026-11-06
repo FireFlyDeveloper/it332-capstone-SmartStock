@@ -32,7 +32,6 @@ export type TrafficLevel = 'low' | 'medium' | 'high';
 export interface Delivery {
   id: string;
   orderId: string;
-  driver: string | null;
   truckNumber: string | null;
   destination: string | null;
   status: DeliveryStatusFlow;
@@ -47,7 +46,6 @@ export interface Delivery {
 
 export interface DeliveryCreateInput {
   orderId: string;
-  driver: string;
   truckNumber: string;
   destination: string;
   status?: DeliveryStatusFlow;
@@ -72,7 +70,6 @@ function toRecord(input: DeliveryCreateInput): Delivery {
   return {
     id: makeId(),
     orderId: input.orderId.trim(),
-    driver: input.driver.trim(),
     truckNumber: input.truckNumber.trim(),
     destination: input.destination.trim(),
     status: input.status ?? 'pending',
@@ -119,7 +116,6 @@ export async function updateDelivery(id: string, input: DeliveryUpdateInput): Pr
   const next: Delivery = {
     ...current,
     orderId: input.orderId === undefined ? current.orderId : input.orderId.trim(),
-    driver: input.driver === undefined ? current.driver : input.driver.trim(),
     truckNumber: input.truckNumber === undefined ? current.truckNumber : input.truckNumber.trim(),
     destination: input.destination === undefined ? current.destination : input.destination.trim(),
     status: input.status ?? current.status,
@@ -156,7 +152,6 @@ export function _resetDeliveryStore(seed = true): void {
   const seedDeliveries: DeliveryCreateInput[] = [
     {
       orderId: 'ORD-001',
-      driver: 'Carlos Mendoza',
       truckNumber: 'Truck-101',
       destination: '123 Main St, Manila',
       status: 'in_transit',
@@ -169,7 +164,6 @@ export function _resetDeliveryStore(seed = true): void {
     },
     {
       orderId: 'ORD-002',
-      driver: 'Roberto Santos',
       truckNumber: 'Truck-103',
       destination: '456 Commercial Ave, Quezon City',
       status: 'delivered',
@@ -182,7 +176,6 @@ export function _resetDeliveryStore(seed = true): void {
     },
     {
       orderId: 'ORD-003',
-      driver: 'Pending',
       truckNumber: 'TBD',
       destination: '789 Industrial Blvd, Caloocan',
       status: 'pending',
@@ -194,7 +187,6 @@ export function _resetDeliveryStore(seed = true): void {
     },
     {
       orderId: 'ORD-004',
-      driver: 'Juan Dela Cruz',
       truckNumber: 'Truck-105',
       destination: '321 Residential Area, Pasay',
       status: 'assigned',
@@ -206,7 +198,6 @@ export function _resetDeliveryStore(seed = true): void {
     },
     {
       orderId: 'ORD-010',
-      driver: 'Danny Garcia',
       truckNumber: 'Truck-109',
       destination: '500 Main Highway, San Juan',
       status: 'arrived',

@@ -76,7 +76,6 @@ export type DeliveryStatusFlow =
 export interface Delivery {
   id: string;
   orderId: string;
-  driver: string | null;
   truckNumber: string | null;
   destination: string | null;
   status: DeliveryStatusFlow;

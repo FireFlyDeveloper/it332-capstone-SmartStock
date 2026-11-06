@@ -140,11 +140,10 @@ function normalizeStatusStep(status: DeliveryStatusFlow | undefined, step: numbe
 function parseCreate(body: unknown): ServiceResult<DeliveryCreateInput> {
   if (typeof body !== 'object' || body === null) return { ok: false, status: 400, error: 'invalid body' };
   const input = body as Record<string, unknown>;
+  if ('driver' in input) return { ok: false, status: 400, error: 'driver assignment is no longer supported' };
 
   const orderId = readString(input.orderId, 'orderId');
   if (!orderId.ok) return orderId;
-  const driver = readString(input.driver, 'driver');
-  if (!driver.ok) return driver;
   const truckNumber = readString(input.truckNumber, 'truckNumber');
   if (!truckNumber.ok) return truckNumber;
   const destination = readString(input.destination, 'destination');
@@ -168,7 +167,7 @@ function parseCreate(body: unknown): ServiceResult<DeliveryCreateInput> {
   const notes = readString(input.notes, 'notes', false);
   if (!notes.ok) return notes;
 
-  if (orderId.data === undefined || driver.data === undefined || truckNumber.data === undefined || destination.data === undefined) {
+  if (orderId.data === undefined || truckNumber.data === undefined || destination.data === undefined) {
     return { ok: false, status: 400, error: 'missing required delivery fields' };
   }
 
@@ -176,7 +175,6 @@ function parseCreate(body: unknown): ServiceResult<DeliveryCreateInput> {
     ok: true,
     data: {
       orderId: orderId.data,
-      driver: driver.data,
       truckNumber: truckNumber.data,
       destination: destination.data,
       status: status.data,
@@ -194,9 +192,10 @@ function parseCreate(body: unknown): ServiceResult<DeliveryCreateInput> {
 function parseUpdate(body: unknown): ServiceResult<DeliveryUpdateInput> {
   if (typeof body !== 'object' || body === null) return { ok: false, status: 400, error: 'invalid body' };
   const input = body as Record<string, unknown>;
+  if ('driver' in input) return { ok: false, status: 400, error: 'driver assignment is no longer supported' };
   const data: DeliveryUpdateInput = {};
 
-  for (const field of ['orderId', 'driver', 'truckNumber', 'destination', 'location', 'notes'] as const) {
+  for (const field of ['orderId', 'truckNumber', 'destination', 'location', 'notes'] as const) {
     if (field in input) {
       const parsed = readString(input[field], field, false);
       if (!parsed.ok) return parsed;
@@ -281,7 +280,6 @@ export function listDeliveryRecords(filters: DeliveryFilters = {}): Delivery[] {
     const delivery: Delivery = {
       id: existing?.id ?? order.id,
       orderId: order.id,
-      driver: existing?.driver ?? null,
       truckNumber: existing?.truckNumber ?? null,
       destination: order.deliveryAddress,
       status,
@@ -296,7 +294,7 @@ export function listDeliveryRecords(filters: DeliveryFilters = {}): Delivery[] {
 
     if (filters.status && delivery.status !== filters.status) return [];
     if (filters.trafficLevel && delivery.trafficLevel !== filters.trafficLevel) return [];
-    if (q && ![delivery.id, delivery.orderId, delivery.driver, delivery.truckNumber, delivery.destination, delivery.location, delivery.notes]
+    if (q && ![delivery.id, delivery.orderId, delivery.truckNumber, delivery.destination, delivery.location, delivery.notes]
       .filter(Boolean)
       .some((value) => value!.toLowerCase().includes(q))) return [];
     return [delivery];

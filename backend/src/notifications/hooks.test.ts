@@ -79,7 +79,6 @@ describe('notification service hooks', () => {
   it('emits delivery.status_changed when delivery status changes', async () => {
     const created = await addDeliveryRecord({
       orderId: 'ORD-900',
-      driver: 'Nina Ramos',
       truckNumber: 'Truck-900',
       destination: 'Glassram Warehouse, Batangas',
       status: 'pending',

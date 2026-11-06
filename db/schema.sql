@@ -396,8 +396,6 @@ CREATE INDEX IF NOT EXISTS idx_order_items_product ON order_items (product_id);
 CREATE TABLE IF NOT EXISTS deliveries (
     id            VARCHAR(64) PRIMARY KEY,
     order_id      VARCHAR(64) REFERENCES orders(id) ON DELETE SET NULL,
-    driver_id     UUID        REFERENCES users(id)  ON DELETE SET NULL,
-    driver        VARCHAR(160),
     truck_number  VARCHAR(32),
     vehicle_plate VARCHAR(32),
     destination   TEXT,
@@ -424,7 +422,6 @@ CREATE TABLE IF NOT EXISTS deliveries (
     created_by    UUID        REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_deliveries_order  ON deliveries (order_id);
-CREATE INDEX IF NOT EXISTS idx_deliveries_driver ON deliveries (driver_id);
 CREATE INDEX IF NOT EXISTS idx_deliveries_status ON deliveries (status);
 
 -- Append-only audit trail of every delivery status change

@@ -6,6 +6,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Hono } from 'hono';
 import { authRoutes } from '../auth/routes.js';
 import { createUser, _resetUserStore, type Role } from '../auth/users.js';
@@ -62,6 +64,16 @@ describe('delivery routes', () => {
     await seedUser(STAFF, 'staff');
   });
 
+  it('removes person-assignment fields from fresh and existing database schemas', () => {
+    const schema = readFileSync(resolve(process.cwd(), '../db/schema.sql'), 'utf8');
+    const migration = readFileSync(resolve(process.cwd(), '../db/migrations/20261106_remove_delivery_driver_assignment.sql'), 'utf8');
+
+    expect(schema).not.toMatch(/^\s*driver(?:_id)?\s+/m);
+    expect(schema).not.toContain('idx_deliveries_driver');
+    expect(migration).toContain('ALTER TABLE deliveries DROP COLUMN IF EXISTS driver_id');
+    expect(migration).toContain('ALTER TABLE deliveries DROP COLUMN IF EXISTS driver;');
+  });
+
   it('projects pending delivery orders even when no delivery row exists', async () => {
     const order = seedOrder();
     const token = await login(app, STAFF);
@@ -69,16 +81,16 @@ describe('delivery routes', () => {
       headers: { authorization: 'Bearer ' + token },
     });
     expect(res.status).toBe(200);
-    const json = (await res.json()) as Array<{ id: string; orderId: string; status: string; currentStep: number; driver: string | null }>;
+    const json = (await res.json()) as Array<{ id: string; orderId: string; status: string; currentStep: number }>;
     expect(json).toEqual([
       expect.objectContaining({
         id: order.id,
         orderId: order.id,
         status: 'pending',
         currentStep: 0,
-        driver: null,
       }),
     ]);
+    expect(json[0]).not.toHaveProperty('driver');
   });
 
   it('maps backend order states to pending, in-transit, and delivered', async () => {
@@ -162,7 +174,6 @@ describe('delivery routes', () => {
     updateOrder(order.id, { orderStatus: 'in_transit' });
     await createDelivery({
       orderId: order.id,
-      driver: 'Test Driver',
       truckNumber: 'Truck-1',
       destination: order.deliveryAddress,
       status: 'in_transit',
@@ -188,12 +199,18 @@ describe('delivery routes', () => {
 
   it('allows admin to create, advance, fail, and delete deliveries', async () => {
     const token = await login(app, ADMIN);
+    const legacyCreate = await app.request('/deliveries', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ orderId: 'ORD-LEGACY', driver: 'Nina Ramos', truckNumber: 'Truck-X', destination: 'Test' }),
+    });
+    expect(legacyCreate.status).toBe(400);
+
     const create = await app.request('/deliveries', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
       body: JSON.stringify({
         orderId: 'ORD-900',
-        driver: 'Nina Ramos',
         truckNumber: 'Truck-900',
         destination: 'Glassram Warehouse, Batangas',
         status: 'pending',
@@ -207,6 +224,14 @@ describe('delivery routes', () => {
     expect(create.status).toBe(201);
     const created = (await create.json()) as { id: string; status: string; currentStep: number };
     expect(created.status).toBe('pending');
+    expect(created).not.toHaveProperty('driver');
+
+    const legacyUpdate = await app.request('/deliveries/' + created.id, {
+      method: 'PUT',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ driver: 'Nina Ramos' }),
+    });
+    expect(legacyUpdate.status).toBe(400);
 
     const update = await app.request('/deliveries/' + created.id, {
       method: 'PUT',
@@ -241,7 +266,7 @@ describe('delivery routes', () => {
     const res = await app.request('/deliveries', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ orderId: 'ORD-X', driver: 'x', truckNumber: 'x', destination: 'x' }),
+      body: JSON.stringify({ orderId: 'ORD-X', truckNumber: 'x', destination: 'x' }),
     });
     expect(res.status).toBe(403);
   });
@@ -251,14 +276,13 @@ describe('delivery routes', () => {
     const invalid = await app.request('/deliveries', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ orderId: '', driver: '', truckNumber: '', destination: '' }),
+      body: JSON.stringify({ orderId: '', truckNumber: '', destination: '' }),
     });
     expect(invalid.status).toBe(400);
 
     const pendingOrder = seedOrder();
     await createDelivery({
       orderId: pendingOrder.id,
-      driver: 'Test Driver',
       truckNumber: 'Truck-2',
       destination: pendingOrder.deliveryAddress,
       status: 'pending',

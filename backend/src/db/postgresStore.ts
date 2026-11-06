@@ -2364,7 +2364,6 @@ function rowToDelivery(row: Record<string, unknown>): Delivery {
   return {
     id: String(row.id),
     orderId: String(row.order_id ?? row.orderId ?? ''),
-    driver: String(row.driver ?? ''),
     truckNumber: String(row.truck_number ?? row.truckNumber ?? ''),
     destination: String(row.destination ?? ''),
     status: (row.status as Delivery['status']) || 'pending',
@@ -2418,7 +2417,7 @@ export async function listDeliveriesPageDb(input: {
         o.delivery_address AS destination, o.delivery_date, o.created_at,
         CASE o.order_status WHEN 'processing' THEN 'pending' WHEN 'in_transit' THEN 'in_transit' WHEN 'delivered' THEN 'delivered' END AS delivery_status,
         CASE o.order_status WHEN 'processing' THEN 0 WHEN 'in_transit' THEN 1 WHEN 'delivered' THEN 2 END AS page_current_step,
-        d.id AS delivery_id, d.driver, d.truck_number, d.location, d.current_location,
+        d.id AS delivery_id, d.truck_number, d.location, d.current_location,
         d.traffic_level, d.predicted_delay, d.route_efficiency_score, d.notes
       FROM orders o
       LEFT JOIN LATERAL (
@@ -2460,7 +2459,6 @@ export async function listDeliveriesPageDb(input: {
     return {
       id: String(item.delivery_id ?? item.order_id),
       orderId: String(item.order_id),
-      driver: item.driver == null ? null : String(item.driver),
       truckNumber: item.truck_number == null ? null : String(item.truck_number),
       destination: item.destination == null ? null : String(item.destination),
       status: String(item.delivery_status) as Delivery['status'],
@@ -2503,14 +2501,13 @@ export async function createDeliveryDb(input: DeliveryCreateInput & { id?: strin
 
   const { rows } = await pool.query(`
     INSERT INTO deliveries (
-      id, order_id, driver, truck_number, destination, location, current_step,
+      id, order_id, truck_number, destination, location, current_step,
       current_location, traffic_level, predicted_delay, route_efficiency_score, status, notes
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     RETURNING *
   `, [
     id,
     input.orderId.trim(),
-    input.driver.trim(),
     input.truckNumber.trim(),
     input.destination.trim(),
     input.location?.trim() || null,
@@ -2531,7 +2528,6 @@ export async function updateDeliveryDb(id: string, input: DeliveryUpdateInput): 
   const current = await findDeliveryByIdDb(id);
   if (!current) return null;
 
-  const nextDriver = input.driver === undefined ? current.driver : input.driver.trim();
   const nextTruck = input.truckNumber === undefined ? current.truckNumber : input.truckNumber.trim();
   const nextDest = input.destination === undefined ? current.destination : input.destination.trim();
   const nextStatus = input.status ?? current.status;
@@ -2545,13 +2541,13 @@ export async function updateDeliveryDb(id: string, input: DeliveryUpdateInput): 
 
   const { rows } = await pool.query(`
     UPDATE deliveries
-    SET driver = $2, truck_number = $3, destination = $4, status = $5, location = $6,
-        current_step = $7, current_location = $8, traffic_level = $9, predicted_delay = $10,
-        route_efficiency_score = $11, notes = $12, updated_at = NOW()
+    SET truck_number = $2, destination = $3, status = $4, location = $5,
+        current_step = $6, current_location = $7, traffic_level = $8, predicted_delay = $9,
+        route_efficiency_score = $10, notes = $11, updated_at = NOW()
     WHERE id = $1
     RETURNING *
   `, [
-    id, nextDriver, nextTruck, nextDest, nextStatus, nextLoc,
+    id, nextTruck, nextDest, nextStatus, nextLoc,
     nextStep, JSON.stringify(nextCoords), nextTraffic, nextDelay, nextScore, nextNotes
   ]);
   return rows[0] ? rowToDelivery(rows[0]) : null;
