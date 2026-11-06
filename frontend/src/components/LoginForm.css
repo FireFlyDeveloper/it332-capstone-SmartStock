@@ -78,30 +78,10 @@
   gap: 8px;
 }
 
-.login-form__label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .login-form__label {
   color: #354157;
   font-size: 12px;
   font-weight: 650;
-}
-
-.login-form__link {
-  color: #5148d1;
-  font-size: 12px;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.login-form__link:hover {
-  color: #3730a3;
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
 .login-form__input-wrap {

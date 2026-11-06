@@ -40,11 +40,6 @@ export function LoginForm() {
     }
   }
 
-  function handleForgot(e: React.MouseEvent<HTMLAnchorElement>) {
-    e.preventDefault()
-    toast.warning('Contact your admin to reset your password.')
-  }
-
 
   return (
     <div className="login-form">
@@ -80,10 +75,7 @@ export function LoginForm() {
         </div>
 
         <div className="login-form__field">
-          <div className="login-form__label-row">
-            <label htmlFor="password" className="login-form__label">Password</label>
-            <a className="login-form__link" href="#reset" onClick={handleForgot}>Forgot?</a>
-          </div>
+          <label htmlFor="password" className="login-form__label">Password</label>
           <div className="login-form__input-wrap">
             <input
               id="password"
