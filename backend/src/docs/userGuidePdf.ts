@@ -1,3 +1,5 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import PDFDocument from 'pdfkit';
 
 export type GuideBlock =
@@ -94,7 +96,7 @@ export async function renderGuidePdf(markdown: string): Promise<Buffer> {
     });
     const chunks: Buffer[] = [];
     const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const contentBottom = doc.page.height - doc.page.margins.bottom;
+    const contentBottom = doc.page.height - doc.page.margins.bottom - 34;
     let previousList: { ordered: boolean; index: number } | null = null;
 
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -107,7 +109,7 @@ export async function renderGuidePdf(markdown: string): Promise<Buffer> {
         const size = block.level === 1 ? 23 : block.level === 2 ? 16 : 12;
         const gap = block.level === 1 ? 13 : block.level === 2 ? 10 : 7;
         doc.moveDown(block.level === 1 && doc.y === doc.page.margins.top ? 0 : 0.45);
-        doc.font(block.level === 3 ? 'Helvetica-Bold' : 'Helvetica-Bold')
+        doc.font('Helvetica-Bold')
           .fontSize(size)
           .fillColor(block.level === 1 ? '#312e81' : '#1e293b');
         const height = doc.heightOfString(block.text, { width: contentWidth, lineGap: 2 });
@@ -120,6 +122,8 @@ export async function renderGuidePdf(markdown: string): Promise<Buffer> {
       if (block.kind === 'paragraph') {
         previousList = null;
         doc.font('Helvetica').fontSize(10.5).fillColor('#334155');
+        const height = doc.heightOfString(block.text, { width: contentWidth, lineGap: 3, paragraphGap: 5 });
+        if (doc.y + height > contentBottom) doc.addPage();
         doc.text(block.text, { width: contentWidth, lineGap: 3, paragraphGap: 5 });
         doc.moveDown(0.35);
         continue;
@@ -130,6 +134,8 @@ export async function renderGuidePdf(markdown: string): Promise<Buffer> {
         previousList = { ordered: block.ordered, index };
         const prefix = block.ordered ? `${index}. ` : '- ';
         doc.font('Helvetica').fontSize(10.5).fillColor('#334155');
+        const height = doc.heightOfString(`${prefix}${block.text}`, { width: contentWidth, indent: 18, lineGap: 2 });
+        if (doc.y + height > contentBottom) doc.addPage();
         doc.text(`${prefix}${block.text}`, { width: contentWidth, indent: 18, lineGap: 2 });
         doc.moveDown(0.18);
         continue;
@@ -141,10 +147,9 @@ export async function renderGuidePdf(markdown: string): Promise<Buffer> {
       const calloutHeight = doc.heightOfString(block.text, { width: innerWidth, lineGap: 2 }) + 18;
       if (doc.y + calloutHeight > contentBottom) doc.addPage();
       const calloutY = doc.y;
-      doc.save();
       doc.roundedRect(doc.page.margins.left, calloutY, contentWidth, calloutHeight, 5)
         .fillAndStroke('#eef2ff', '#c7d2fe');
-      doc.restore();
+      doc.fillColor('#3730a3');
       doc.text(block.text, doc.page.margins.left + 12, calloutY + 9, { width: innerWidth, lineGap: 2 });
       doc.y = calloutY + calloutHeight + 10;
     }
@@ -156,19 +161,24 @@ export async function renderGuidePdf(markdown: string): Promise<Buffer> {
     const pageRange = doc.bufferedPageRange();
     for (let index = pageRange.start; index < pageRange.start + pageRange.count; index += 1) {
       doc.switchToPage(index);
-      doc.save();
       doc.font('Helvetica').fontSize(8).fillColor('#64748b');
-      doc.text(`SmartStock User Guide | Generated ${generatedAt}`, doc.page.margins.left, doc.page.height - 34, {
+      doc.text(`SmartStock User Guide | Generated ${generatedAt}`, doc.page.margins.left, doc.page.height - doc.page.margins.bottom - 22, {
         width: contentWidth - 50,
         lineBreak: false,
       });
-      doc.text(`Page ${index + 1}`, doc.page.width - doc.page.margins.right - 45, doc.page.height - 34, {
+      doc.text(`Page ${index + 1}`, doc.page.width - doc.page.margins.right - 45, doc.page.height - doc.page.margins.bottom - 22, {
         width: 45,
         align: 'right',
         lineBreak: false,
       });
-      doc.restore();
     }
     doc.end();
   });
+}
+
+export async function writeGuidePdf(inputPath: string, outputPath: string): Promise<void> {
+  const markdown = await readFile(inputPath, 'utf8');
+  const pdf = await renderGuidePdf(markdown);
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, pdf);
 }

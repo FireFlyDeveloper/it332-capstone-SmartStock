@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "bootstrap-admin": "tsx src/cli/bootstrapInitialAdmin.ts",
-    "test": "vitest run src"
+    "test": "vitest run src",
+    "user-guide:pdf": "tsx scripts/generateUserGuide.ts"
   },
   "keywords": [],
   "author": "",

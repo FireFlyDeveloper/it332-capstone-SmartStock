@@ -1,5 +1,8 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { renderGuidePdf, parseGuideMarkdown } from './userGuidePdf.js';
+import { parseGuideMarkdown, renderGuidePdf, writeGuidePdf } from './userGuidePdf.js';
 
 describe('parseGuideMarkdown', () => {
   it('preserves headings, paragraphs, and list items in order', () => {
@@ -37,5 +40,21 @@ describe('renderGuidePdf', () => {
   it('returns a PDF buffer for guide content', async () => {
     const pdf = await renderGuidePdf('# SmartStock User Guide\n\nSign in with your organization-issued account.');
     expect(pdf.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+});
+
+describe('writeGuidePdf', () => {
+  it('reads Markdown and writes a PDF to the requested path', async () => {
+    const directory = await mkdtemp(join(process.env.TMPDIR ?? tmpdir(), 'smartstock-guide-'));
+    try {
+      const inputPath = join(directory, 'guide.md');
+      const outputPath = join(directory, 'nested', 'guide.pdf');
+      await writeFile(inputPath, '# Writer test');
+      await writeGuidePdf(inputPath, outputPath);
+      const pdf = await readFile(outputPath);
+      expect(pdf.subarray(0, 4).toString('ascii')).toBe('%PDF');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
