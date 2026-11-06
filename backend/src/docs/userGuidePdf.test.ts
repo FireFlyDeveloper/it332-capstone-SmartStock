@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseGuideMarkdown } from './userGuidePdf.js';
+import { renderGuidePdf, parseGuideMarkdown } from './userGuidePdf.js';
 
 describe('parseGuideMarkdown', () => {
   it('preserves headings, paragraphs, and list items in order', () => {
@@ -30,5 +30,12 @@ describe('parseGuideMarkdown', () => {
   it('rejects unsupported Markdown blocks rather than dropping their content', () => {
     expect(() => parseGuideMarkdown('| Item | Action |\n| --- | --- |'))
       .toThrow(/Unsupported Markdown block/);
+  });
+});
+
+describe('renderGuidePdf', () => {
+  it('returns a PDF buffer for guide content', async () => {
+    const pdf = await renderGuidePdf('# SmartStock User Guide\n\nSign in with your organization-issued account.');
+    expect(pdf.subarray(0, 4).toString('ascii')).toBe('%PDF');
   });
 });
