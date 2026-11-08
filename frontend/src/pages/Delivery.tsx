@@ -258,8 +258,8 @@ export const DeliveryPage: React.FC = () => {
               >
                 {/* Header */}
                 <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-indigo-50/40 via-white to-white">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0">
                         <Truck className="w-5 h-5" />
                       </div>
@@ -268,7 +268,7 @@ export const DeliveryPage: React.FC = () => {
                         <p className="text-xs text-slate-400 truncate">Order: {delivery.orderId}</p>
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold shrink-0 ${getStatusColor(delivery.status)}`}>
+                    <span className={`self-start rounded-full px-3 py-1 text-xs font-bold shrink-0 sm:self-auto ${getStatusColor(delivery.status)}`}>
                       {delivery.status.replace('_', ' ')}
                     </span>
                   </div>

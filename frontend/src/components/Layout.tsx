@@ -105,7 +105,7 @@ export function Layout({ children }: LayoutProps) {
       <aside
       className={`layout-sidebar
           fixed inset-y-0 left-0 z-50
-          w-[280px] min-w-[280px] bg-[#0f172a] border-r border-[#1e293b]
+          w-[min(280px,calc(100vw-1.5rem))] min-w-0 max-w-[calc(100vw-1.5rem)] bg-[#0f172a] border-r border-[#1e293b]
           flex flex-col justify-between
           transform transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
@@ -205,7 +205,7 @@ export function Layout({ children }: LayoutProps) {
       {/* Main Content Area */}
       <div className="app-layout__content flex-1 flex flex-col lg:pl-[280px] min-w-0">
         {/* Sticky Header: 80px height, #ffffff, border-bottom #f1f5f9 */}
-        <header className="layout-topbar sticky top-0 z-30 h-[80px] bg-white border-b border-[#f1f5f9] px-4 lg:px-8 flex items-center justify-between shadow-[0_1px_3px_rgb(0_0_0/0.02)]">
+        <header className="layout-topbar sticky top-0 z-30 h-16 sm:h-20 bg-white border-b border-[#f1f5f9] px-3 sm:px-4 lg:px-8 flex items-center justify-between gap-2 shadow-[0_1px_3px_rgb(0_0_0/0.02)]">
           {/* Mobile navigation toggle; global search is intentionally absent. */}
           <div className="flex flex-1 items-center gap-4">
             <button
@@ -320,7 +320,7 @@ export function Layout({ children }: LayoutProps) {
         </header>
 
         {/* Fluid Workspace Body */}
-        <main className="layout-main flex-1 p-4 sm:p-6 lg:p-8 max-w-[1720px] w-full mx-auto">
+        <main className="layout-main min-w-0 flex-1 p-3 sm:p-4 md:p-6 lg:p-8 max-w-[1720px] w-full mx-auto">
           {error && (
             <div role="alert" className="mb-5 flex flex-col gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between">
               <span>Live data could not be loaded: {error}. Sample data is not being substituted.</span>

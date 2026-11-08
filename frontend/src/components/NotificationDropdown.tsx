@@ -268,7 +268,7 @@ export const NotificationDropdown: React.FC = () => {
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute right-0 mt-2.5 w-80 sm:w-96 bg-white rounded-[24px] border border-[#f1f5f9] shadow-2xl z-50 overflow-hidden animate-fadeIn">
+        <div className="absolute -right-[4.5rem] mt-2.5 w-[min(24rem,calc(100vw-1.5rem))] rounded-[24px] border border-[#f1f5f9] bg-white shadow-2xl z-50 overflow-hidden animate-fadeIn sm:right-0 sm:w-96">
           {/* Header */}
           <div className="p-4 border-b border-[#f1f5f9] flex items-center justify-between">
             <div className="flex items-center gap-2.5">

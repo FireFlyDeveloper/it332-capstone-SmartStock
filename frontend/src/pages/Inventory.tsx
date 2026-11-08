@@ -627,7 +627,7 @@ export const Inventory: React.FC = () => {
 
         {/* Add/Edit Modal */}
         {isModalOpen && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="responsive-dialog-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slideIn">
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <h3 className="text-xl font-semibold text-gray-900">
@@ -799,7 +799,7 @@ export const Inventory: React.FC = () => {
 
         {/* Restock Modal */}
         {isRestockModalOpen && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="responsive-dialog-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl w-full max-w-md animate-slideIn">
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <h3 className="text-xl font-semibold text-gray-900">Restock Product</h3>
@@ -882,7 +882,7 @@ export const Inventory: React.FC = () => {
 
         {/* Delete Confirmation Modal */}
         {isDeleteConfirmOpen && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="responsive-dialog-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl w-full max-w-md animate-slideIn">
               <div className="p-6 text-center">
                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">

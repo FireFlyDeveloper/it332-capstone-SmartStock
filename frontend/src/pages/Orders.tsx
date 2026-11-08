@@ -849,7 +849,7 @@ export const Orders: React.FC = () => {
           CREATE / EDIT MODAL
          ═══════════════════════════════════════════════════════════════ */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="responsive-dialog-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideIn">
             <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
               <div>
@@ -986,8 +986,8 @@ export const Orders: React.FC = () => {
                 </div>
 
                 {form.items.length > 0 && (
-                  <div className="bg-gray-50 rounded-lg overflow-hidden border border-gray-200">
-                    <table className="w-full">
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-x-auto">
+                    <table className="w-full min-w-[34rem]">
                       <thead className="bg-gray-100">
                         <tr>
                           <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Item</th>
@@ -1081,7 +1081,7 @@ export const Orders: React.FC = () => {
           VIEW ORDER MODAL
          ═══════════════════════════════════════════════════════════════ */}
       {viewOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="responsive-dialog-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideIn">
             <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
               <div>
@@ -1247,8 +1247,8 @@ export const Orders: React.FC = () => {
                     />
                   </div>
                 )}
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <table className="w-full">
+                <div className="border border-gray-200 rounded-xl overflow-x-auto">
+                  <table className="w-full min-w-[30rem]">
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Item</th>
@@ -1357,7 +1357,7 @@ export const Orders: React.FC = () => {
           CANCEL CONFIRMATION
          ═══════════════════════════════════════════════════════════════ */}
       {confirmCancel && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+        <div className="responsive-dialog-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-slideIn text-center">
             <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Cancel Order?</h3>
@@ -1374,7 +1374,7 @@ export const Orders: React.FC = () => {
           PAYMENT MODAL
          ═══════════════════════════════════════════════════════════════ */}
       {payModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+        <div className="responsive-dialog-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-slideIn">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Process Payment</h3>
             <p className="text-sm text-gray-500 mb-1">Order: {payModal.referenceNumber}</p>
@@ -1399,7 +1399,7 @@ export const Orders: React.FC = () => {
           REFUND MODAL
          ═══════════════════════════════════════════════════════════════ */}
       {refundModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+        <div className="responsive-dialog-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-slideIn">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Process Refund</h3>
             <p className="text-sm text-gray-500 mb-1">Order: {refundModal.referenceNumber}</p>
