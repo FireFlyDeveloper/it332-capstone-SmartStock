@@ -137,6 +137,7 @@ export interface DailySalesSummary {
 
 export interface DemandForecastProduct {
   productId: string; sku: string; name: string; category: string; unit: string; currentStock: number; reorderPoint: number;
+  price: number;
   history: { month: string; quantity: number }[]; positiveMonths: number; forecastQuantity: number | null;
   status: 'available' | 'insufficient_history'; stockCoverageDays: number | null; recommendedOrderQuantity: number | null;
   policyAssessment: 'below_reorder_point' | 'below_forecast' | 'adequate' | 'insufficient_history'
@@ -571,6 +572,7 @@ export interface ProductsPageResponse {
     activeProductCount: number
     activeGlassCount: number
     activeAluminumCount: number
+    activeAccessoryCount: number
     activeLowStockCount: number
     healthyStockCount: number
     lowStockStatusCount: number

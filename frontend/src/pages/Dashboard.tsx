@@ -216,9 +216,11 @@ export const Dashboard: React.FC = () => {
 
   const glassSkuCount = inventorySummary?.activeGlassCount ?? 0;
   const aluminumSkuCount = inventorySummary?.activeAluminumCount ?? 0;
+  const accessorySkuCount = inventorySummary?.activeAccessoryCount ?? 0;
   const distributionData: DonutSegment[] = [
     { label: 'Glass products', shortLabel: 'Glass', value: glassSkuCount, color: '#10b981' },
     { label: 'Aluminum products', shortLabel: 'Aluminum', value: aluminumSkuCount, color: '#4f46e5' },
+    { label: 'Accessory products', shortLabel: 'Accessory', value: accessorySkuCount, color: '#8b5cf6' },
   ];
 
   const orderStatusCounts = (orderSummary?.orderStatusCounts ?? []).map(({ status, count }) => [status, count] as [string, number]);
@@ -506,8 +508,8 @@ export const Dashboard: React.FC = () => {
                     className="flex items-center justify-between p-2.5 rounded-2xl hover:bg-slate-50 transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs flex-shrink-0 ${item.category === 'glass' ? 'bg-blue-50 text-blue-600' : item.category === 'aluminum' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
-                        {item.category === 'glass' ? 'GL' : item.category === 'aluminum' ? 'AL' : '—'}
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs flex-shrink-0 ${item.category === 'glass' ? 'bg-blue-50 text-blue-600' : item.category === 'aluminum' ? 'bg-emerald-50 text-emerald-600' : item.category === 'accessory' ? 'bg-violet-50 text-violet-600' : 'bg-slate-100 text-slate-500'}`}>
+                        {item.category === 'glass' ? 'GL' : item.category === 'aluminum' ? 'AL' : item.category === 'accessory' ? 'AC' : '—'}
                       </div>
                       <div className="truncate">
                         <p className="font-bold text-xs text-slate-800 truncate">{item.name}</p>

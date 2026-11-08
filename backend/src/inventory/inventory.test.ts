@@ -114,7 +114,7 @@ describe('product inventory routes', () => {
       summary: {
         totalProducts: number; glassCount: number; aluminumCount: number; lowStockCount: number; outOfStockCount: number;
         totalInventoryValue: number; glassInventoryValue: number; aluminumInventoryValue: number; accessoryInventoryValue: number; activeProductCount: number;
-        activeGlassCount: number; activeAluminumCount: number; activeLowStockCount: number; healthyStockCount: number;
+        activeGlassCount: number; activeAluminumCount: number; activeAccessoryCount: number; activeLowStockCount: number; healthyStockCount: number;
         lowStockStatusCount: number; criticalStockCount: number; stockAlertProducts: { outOfStock: { id: string; name: string; stock: number; unit: string; threshold: number } | null; critical: { id: string; name: string; stock: number; unit: string; threshold: number } | null; low: { id: string; name: string; stock: number; unit: string; threshold: number } | null };
       };
     };
@@ -122,7 +122,7 @@ describe('product inventory routes', () => {
     expect(firstBody.summary).toEqual({
       totalProducts: 3, glassCount: 2, aluminumCount: 1, lowStockCount: 2, outOfStockCount: 1,
       totalInventoryValue: 36300, glassInventoryValue: 30000, aluminumInventoryValue: 6300, accessoryInventoryValue: 0,
-      activeProductCount: 3, activeGlassCount: 2, activeAluminumCount: 1, activeLowStockCount: 2,
+      activeProductCount: 3, activeGlassCount: 2, activeAluminumCount: 1, activeAccessoryCount: 0, activeLowStockCount: 2,
       healthyStockCount: 1, lowStockStatusCount: 1, criticalStockCount: 0,
       stockAlertProducts: {
         outOfStock: { id: 'PRD-003', name: 'Tempered Glass 10mm', stock: 0, unit: 'sheet', threshold: 6 },
@@ -176,7 +176,7 @@ describe('product inventory routes', () => {
       headers: { authorization: 'Bearer ' + token },
     });
     expect(page.status).toBe(200);
-    expect((await page.json() as { summary: { accessoryInventoryValue: number } }).summary.accessoryInventoryValue).toBe(120);
+    expect((await page.json() as { summary: { accessoryInventoryValue: number; activeAccessoryCount: number } }).summary).toMatchObject({ accessoryInventoryValue: 120, activeAccessoryCount: 1 });
   });
 
   it('blocks anonymous product access', async () => {

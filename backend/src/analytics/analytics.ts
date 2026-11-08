@@ -886,6 +886,7 @@ export function simpleExponentialSmoothingForecast(quantities: number[], alpha =
 export type PolicyAssessment = 'below_reorder_point' | 'below_forecast' | 'adequate' | 'insufficient_history';
 export interface DemandForecastProduct {
   productId: string; sku: string; name: string; category: Product['category']; unit: string;
+  price: number;
   currentStock: number; reorderPoint: number; history: MonthlyQuantity[]; positiveMonths: number;
   forecastQuantity: number | null; status: 'available' | 'insufficient_history';
   stockCoverageDays: number | null; recommendedOrderQuantity: number | null;
@@ -933,7 +934,7 @@ export function buildDemandForecast(orders: Order[], products: Product[], histor
     const policyAssessment: PolicyAssessment = !available ? 'insufficient_history'
       : product.stock <= product.threshold ? 'below_reorder_point'
       : product.stock < (forecastQuantity ?? 0) ? 'below_forecast' : 'adequate';
-    return { productId: product.id, sku: product.sku, name: product.name, category: product.category, unit: product.unit,
+    return { productId: product.id, sku: product.sku, name: product.name, category: product.category, unit: product.unit, price: product.price,
       currentStock: product.stock, reorderPoint: product.threshold, history, positiveMonths, forecastQuantity,
       status: available ? 'available' : 'insufficient_history', stockCoverageDays: coverage,
       recommendedOrderQuantity: recommended, policyAssessment };

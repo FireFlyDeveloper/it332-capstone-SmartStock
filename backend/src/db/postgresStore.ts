@@ -127,6 +127,7 @@ export interface ProductsDbPage {
   activeProductCount: number;
   activeGlassCount: number;
   activeAluminumCount: number;
+  activeAccessoryCount: number;
   activeLowStockCount: number;
   healthyStockCount: number;
   lowStockStatusCount: number;
@@ -279,6 +280,7 @@ export async function listProductsPageDb(input: {
         COUNT(*) FILTER (WHERE status = 'active')::int AS active_product_count,
         COUNT(*) FILTER (WHERE status = 'active' AND category = 'glass')::int AS active_glass_count,
         COUNT(*) FILTER (WHERE status = 'active' AND category = 'aluminum')::int AS active_aluminum_count,
+        COUNT(*) FILTER (WHERE status = 'active' AND category = 'accessory')::int AS active_accessory_count,
         COUNT(*) FILTER (WHERE status = 'active' AND stock <= threshold)::int AS active_low_stock_count,
         COUNT(*) FILTER (WHERE stock > threshold)::int AS healthy_stock_count,
         COUNT(*) FILTER (WHERE stock > 0 AND stock > threshold * 0.5 AND stock <= threshold)::int AS low_stock_status_count,
@@ -306,7 +308,7 @@ export async function listProductsPageDb(input: {
     SELECT (SELECT COUNT(*)::int FROM filtered) AS filtered_count,
       summary.total_products, summary.glass_count, summary.aluminum_count, summary.low_stock_count, summary.out_of_stock_count,
       summary.total_inventory_value, summary.glass_inventory_value, summary.aluminum_inventory_value, summary.accessory_inventory_value,
-      summary.active_product_count, summary.active_glass_count, summary.active_aluminum_count, summary.active_low_stock_count,
+      summary.active_product_count, summary.active_glass_count, summary.active_aluminum_count, summary.active_accessory_count, summary.active_low_stock_count,
       summary.healthy_stock_count, summary.low_stock_status_count, summary.critical_stock_count,
       stock_alerts.out_of_stock AS stock_alert_out_of_stock,
       stock_alerts.critical AS stock_alert_critical,
@@ -341,6 +343,7 @@ export async function listProductsPageDb(input: {
     activeProductCount: Number(row.active_product_count ?? 0),
     activeGlassCount: Number(row.active_glass_count ?? 0),
     activeAluminumCount: Number(row.active_aluminum_count ?? 0),
+    activeAccessoryCount: Number(row.active_accessory_count ?? 0),
     activeLowStockCount: Number(row.active_low_stock_count ?? 0),
     healthyStockCount: Number(row.healthy_stock_count ?? 0),
     lowStockStatusCount: Number(row.low_stock_status_count ?? 0),
@@ -1161,7 +1164,7 @@ export async function listDemandForecastPageDb(input: {
         AND o.created_at < (bounds.current_month AT TIME ZONE 'UTC')
       GROUP BY item.value->>'productId', date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))::date
     ), product_months AS (
-      SELECT p.id::text AS product_id, p.sku, p.name, COALESCE(NULLIF(p.category, ''), 'glass') AS category, p.unit, p.stock, p.threshold,
+      SELECT p.id::text AS product_id, p.sku, p.name, COALESCE(NULLIF(p.category, ''), 'glass') AS category, p.unit, p.stock, p.threshold, p.unit_price AS price,
         m.month, COALESCE(ol.quantity, 0)::int AS quantity
       FROM products p CROSS JOIN months m
       LEFT JOIN order_lines ol ON ol.product_id = p.id::text AND ol.month = m.month
@@ -1182,14 +1185,14 @@ export async function listDemandForecastPageDb(input: {
         ROUND(forecast::numeric, 2)::double precision AS forecast_quantity
       FROM forecast_steps ORDER BY product_id, month_number DESC
     ), product_metrics AS (
-      SELECT n.product_id, n.sku, n.name, n.category, n.unit, n.stock, n.threshold,
+      SELECT n.product_id, n.sku, n.name, n.category, n.unit, n.stock, n.threshold, n.price,
         jsonb_agg(jsonb_build_object('month', to_char(n.month, 'YYYY-MM'), 'quantity', n.quantity) ORDER BY n.month) AS history,
         COUNT(*) FILTER (WHERE n.quantity > 0)::int AS positive_months,
         f.forecast_quantity
       FROM numbered n JOIN forecast_values f ON f.product_id = n.product_id
-      GROUP BY n.product_id, n.sku, n.name, n.category, n.unit, n.stock, n.threshold, f.forecast_quantity
+      GROUP BY n.product_id, n.sku, n.name, n.category, n.unit, n.stock, n.threshold, n.price, f.forecast_quantity
     ), report_rows AS (
-      SELECT product_id, sku, name, category, unit, stock, threshold, history, positive_months,
+      SELECT product_id, sku, name, category, unit, stock, threshold, price, history, positive_months,
         CASE WHEN positive_months >= 3 THEN forecast_quantity END AS forecast_quantity,
         CASE WHEN positive_months >= 3 THEN 'available' ELSE 'insufficient_history' END AS status,
         CASE WHEN positive_months >= 3 AND forecast_quantity > 0 THEN ROUND(stock::numeric / forecast_quantity * 30)::int END AS stock_coverage_days,
@@ -1226,7 +1229,7 @@ export async function listDemandForecastPageDb(input: {
     const rawHistory = typeof row.history === 'string' ? JSON.parse(row.history) : row.history;
     const history = (Array.isArray(rawHistory) ? rawHistory : []) as Array<Record<string, unknown>>;
     return {
-      productId: String(row.product_id), sku: String(row.sku), name: String(row.name), category: String(row.category), unit: String(row.unit),
+      productId: String(row.product_id), sku: String(row.sku), name: String(row.name), category: String(row.category), unit: String(row.unit), price: Number(row.price ?? 0),
       currentStock: Number(row.stock ?? 0), reorderPoint: Number(row.threshold ?? 0),
       history: history.map((entry) => ({ month: String(entry.month), quantity: Number(entry.quantity ?? 0) })),
       positiveMonths: Number(row.positive_months ?? 0),

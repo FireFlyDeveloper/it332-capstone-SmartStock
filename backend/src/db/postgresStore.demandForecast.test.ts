@@ -16,6 +16,7 @@ const forecastRow = (product_id: string, name: string, forecast_quantity: number
   unit: 'sheet',
   stock: 8,
   threshold: 5,
+  price: 125,
   history: [
     { month: '2025-01', quantity: 2 }, { month: '2025-02', quantity: 0 },
     { month: '2025-03', quantity: 4 }, { month: '2025-04', quantity: 1 },
@@ -50,7 +51,7 @@ describe('PostgreSQL demand forecast cursor query', () => {
 
     expect(result).toMatchObject({
       products: [{
-        productId: 'p-1', name: 'Alpha', currentStock: 8, reorderPoint: 5,
+        productId: 'p-1', name: 'Alpha', price: 125, currentStock: 8, reorderPoint: 5,
         history: [{ month: '2025-01', quantity: 2 }, { month: '2025-02', quantity: 0 }, { month: '2025-03', quantity: 4 }, { month: '2025-04', quantity: 1 }],
         positiveMonths: 3, forecastQuantity: 2, status: 'available', stockCoverageDays: 40,
         recommendedOrderQuantity: 0, policyAssessment: 'adequate',
@@ -62,6 +63,7 @@ describe('PostgreSQL demand forecast cursor query', () => {
     expect(sql).toContain('jsonb_array_elements(COALESCE(o.items');
     expect(sql).toContain("o.order_status = 'delivered'");
     expect(sql).toContain('WITH RECURSIVE bounds');
+    expect(sql).toContain('p.unit_price AS price');
     expect(sql).toContain('ORDER BY name COLLATE "C" ASC, product_id COLLATE "C" ASC');
     expect(sql).toContain('LIMIT $5');
     expect(values).toEqual([now, 4, null, null, 2]);

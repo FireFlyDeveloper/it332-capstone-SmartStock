@@ -74,6 +74,7 @@ describe('PostgreSQL product cursor query', () => {
       active_product_count: 3,
       active_glass_count: 2,
       active_aluminum_count: 1,
+      active_accessory_count: 0,
       active_low_stock_count: 1,
       healthy_stock_count: 2,
       low_stock_status_count: 1,
@@ -107,6 +108,7 @@ describe('PostgreSQL product cursor query', () => {
       activeProductCount: 3,
       activeGlassCount: 2,
       activeAluminumCount: 1,
+      activeAccessoryCount: 0,
       activeLowStockCount: 1,
       healthyStockCount: 2,
       lowStockStatusCount: 1,
@@ -126,6 +128,7 @@ describe('PostgreSQL product cursor query', () => {
     expect(sql).toContain('name COLLATE "C" > $4::text COLLATE "C"');
     expect(sql).toContain('ORDER BY page_rows.name COLLATE "C" ASC');
     expect(sql).toContain("SUM(stock * unit_price) FILTER (WHERE category = 'accessory')");
+    expect(sql).toContain("COUNT(*) FILTER (WHERE status = 'active' AND category = 'accessory')::int AS active_accessory_count");
     expect(sql).toContain('LIMIT $6');
     expect(values).toEqual(['glass', 'low', ['clear', 'sheet'], 'Before', 'p-00', 2]);
   });
@@ -135,6 +138,8 @@ describe('PostgreSQL product cursor query', () => {
       filtered_count: 1,
       total_products: 1,
       accessory_inventory_value: '1200',
+      active_product_count: 1,
+      active_accessory_count: 1,
       page_items: [{ ...product('accessory-01', 'Accessory item'), category: 'accessory' }],
     }] });
 
@@ -149,6 +154,7 @@ describe('PostgreSQL product cursor query', () => {
 
     expect(result?.items).toMatchObject([{ category: 'accessory', sku: 'ACCESSORY-01' }]);
     expect(result?.accessoryInventoryValue).toBe(1200);
+    expect(result?.activeAccessoryCount).toBe(1);
     const [query, values] = database.query.mock.calls[0] as [string, unknown[]];
     expect(query).toContain("$1::text = 'all' OR p.category = $1::text");
     expect(values[0]).toBe('accessory');

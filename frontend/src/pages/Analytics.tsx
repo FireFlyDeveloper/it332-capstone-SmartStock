@@ -814,7 +814,7 @@ export const Analytics: React.FC = () => {
               <div><h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">What you can do</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{aiInsight.recommendations.map((item, index) => <li key={`rec-${index}`}>{simplifyInsightText(item)}</li>)}</ul></div>
               <div><h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">Things to watch</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{aiInsight.risks.map((item, index) => <li key={`risk-${index}`}>{simplifyInsightText(item)}</li>)}</ul></div>
             </div>
-            <InsightBreakdown interpretations={aiInsight.interpretations} />
+            <InsightBreakdown interpretations={aiInsight.interpretations} forecastProducts={availableForecastRows} forecastLoading={forecastLoading} />
           </div>}
         </section>
 

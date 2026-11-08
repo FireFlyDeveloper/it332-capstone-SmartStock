@@ -90,6 +90,7 @@ export async function listProductPageController(c: Context) {
         activeProductCount: result.activeProductCount,
         activeGlassCount: result.activeGlassCount,
         activeAluminumCount: result.activeAluminumCount,
+        activeAccessoryCount: result.activeAccessoryCount,
         activeLowStockCount: result.activeLowStockCount,
         healthyStockCount: result.healthyStockCount,
         lowStockStatusCount: result.lowStockStatusCount,

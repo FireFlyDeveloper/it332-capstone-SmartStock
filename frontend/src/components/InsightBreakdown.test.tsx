@@ -42,4 +42,19 @@ describe('InsightBreakdown', () => {
 
     expect(html).toContain('Detailed metric interpretations are unavailable from the current API version.')
   })
+
+  it('shows the local per-product quantity, listed price, and estimated sales value', () => {
+    const interpretations = Object.fromEntries(cases.map(([key, , text]) => [key, text])) as Record<AnalyticsInsightKey, string>
+    const html = renderToStaticMarkup(<InsightBreakdown interpretations={interpretations} forecastProducts={[{
+      productId: 'p-1', sku: 'SKU-1', name: 'Clear Glass Panel', category: 'glass', unit: 'sqm', price: 100,
+      currentStock: 4, reorderPoint: 2, history: [], positiveMonths: 3, forecastQuantity: 2.24,
+      status: 'available', stockCoverageDays: 20, recommendedOrderQuantity: 0, policyAssessment: 'adequate',
+    }]} />)
+
+    expect(html).toContain('Clear Glass Panel')
+    expect(html).toContain('2.24 sqm')
+    expect(html).toContain('Listed price:')
+    expect(html).toContain('Estimated sales value:')
+    expect(html).toContain('square metres')
+  })
 })

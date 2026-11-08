@@ -312,6 +312,7 @@ export async function listProductPageRecords(input: ProductPageInput) {
     activeProductCount: products.filter((product) => product.status === 'active').length,
     activeGlassCount: products.filter((product) => product.status === 'active' && product.category === 'glass').length,
     activeAluminumCount: products.filter((product) => product.status === 'active' && product.category === 'aluminum').length,
+    activeAccessoryCount: products.filter((product) => product.status === 'active' && product.category === 'accessory').length,
     activeLowStockCount: products.filter((product) => product.status === 'active' && product.stock <= product.threshold).length,
     healthyStockCount: products.filter((product) => product.stock > product.threshold).length,
     lowStockStatusCount: products.filter((product) => product.stock > 0 && product.stock > product.threshold * 0.5 && product.stock <= product.threshold).length,
