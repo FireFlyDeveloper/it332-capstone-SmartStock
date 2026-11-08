@@ -18,7 +18,14 @@ import {
   listProductRecords,
   removeProductRecord,
 } from './service.js';
-import type { ProductCategory, ProductStatus } from './store.js';
+import type { Product, ProductCategory, ProductStatus } from './store.js';
+
+function visibleProduct(c: Context, product: Product): Product {
+  if (c.get('user').role === 'admin') return product;
+  const visible = { ...product };
+  delete visible.costPrice;
+  return visible;
+}
 
 function toCategory(value: string | undefined): ProductCategory | undefined {
   if (value === 'glass' || value === 'aluminum') return value;
@@ -68,7 +75,7 @@ export async function listProductPageController(c: Context) {
     });
     const nextCursor = result.nextCursor ? Buffer.from(JSON.stringify(result.nextCursor)).toString('base64url') : null;
     return c.json({
-      items: result.items,
+      items: result.items.map((product) => visibleProduct(c, product)),
       page: { limit, totalCount: result.totalCount, hasMore: result.hasMore, nextCursor },
       summary: {
         totalProducts: result.totalProducts,
@@ -103,7 +110,7 @@ export async function listProductsController(c: Context) {
   const category = toCategory(categoryQuery);
   if (statusQuery && !status) return c.json({ error: 'invalid status filter' }, 400);
   if (categoryQuery && !category) return c.json({ error: 'invalid category filter' }, 400);
-  return c.json(listProductRecords({ q: c.req.query('q'), status, category }));
+  return c.json(listProductRecords({ q: c.req.query('q'), status, category }).map((product) => visibleProduct(c, product)));
 }
 
 export function getProductController(c: Context) {
@@ -111,7 +118,7 @@ export function getProductController(c: Context) {
   if (!id) return c.json({ error: 'product id is required' }, 400);
   const result = getProductRecord(id);
   if (!result.ok) return c.json({ error: result.error }, result.status);
-  return c.json(result.data);
+  return c.json(visibleProduct(c, result.data));
 }
 
 export async function createProductController(c: Context) {
@@ -144,7 +151,7 @@ export async function inboundStockController(c: Context) {
   const body = await c.req.json().catch(() => null);
   const result = await addInboundStockRecord(id, { ...(typeof body === 'object' && body !== null ? body : {}), createdBy: c.get('user').email });
   if (!result.ok) return c.json({ error: result.error }, result.status);
-  return c.json(result.data, 201);
+  return c.json({ ...result.data, product: visibleProduct(c, result.data.product) }, 201);
 }
 
 export async function outboundStockController(c: Context) {
@@ -165,5 +172,5 @@ export function listProductMovementsController(c: Context) {
 }
 
 export function listLowStockProductsController(c: Context) {
-  return c.json(listLowStockProductRecords());
+  return c.json(listLowStockProductRecords().map((product) => visibleProduct(c, product)));
 }

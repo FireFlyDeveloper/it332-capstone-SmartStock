@@ -103,6 +103,8 @@ function parseCreate(body: unknown): ServiceResult<ProductCreateInput> {
   if (!stock.ok) return stock;
   const price = readNumber(input.price, 'price');
   if (!price.ok) return price;
+  const costPrice = readNumber(input.costPrice, 'costPrice');
+  if (!costPrice.ok) return costPrice;
   const threshold = readNumber(input.threshold, 'threshold');
   if (!threshold.ok) return threshold;
   const status = readStatus(input.status, false);
@@ -117,6 +119,7 @@ function parseCreate(body: unknown): ServiceResult<ProductCreateInput> {
     unit.data === undefined ||
     stock.data === undefined ||
     price.data === undefined ||
+    costPrice.data === undefined ||
     threshold.data === undefined
   ) {
     return { ok: false, status: 400, error: 'missing required product fields' };
@@ -131,6 +134,7 @@ function parseCreate(body: unknown): ServiceResult<ProductCreateInput> {
       unit: unit.data,
       stock: stock.data,
       price: price.data,
+      costPrice: costPrice.data,
       threshold: threshold.data,
       status: status.data,
       description: description.data,
@@ -165,7 +169,7 @@ function parseUpdate(body: unknown): ServiceResult<ProductUpdateInput> {
     data.status = parsed.data;
   }
 
-  for (const field of ['stock', 'price', 'threshold'] as const) {
+  for (const field of ['stock', 'price', 'costPrice', 'threshold'] as const) {
     if (field in input) {
       const parsed = readNumber(input[field], field, false);
       if (!parsed.ok) return parsed;

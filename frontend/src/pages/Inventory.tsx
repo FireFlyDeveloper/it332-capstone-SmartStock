@@ -24,6 +24,7 @@ type ProductFormData = {
   unit: string;
   stock: string;
   price: string;
+  costPrice: string;
   threshold: string;
   status: Product['status'] | '';
   description: string;
@@ -36,6 +37,7 @@ const emptyProductForm: ProductFormData = {
   unit: '',
   stock: '',
   price: '',
+  costPrice: '',
   threshold: '',
   status: '',
   description: '',
@@ -49,6 +51,7 @@ function toProductFormData(product: Product): ProductFormData {
     unit: product.unit,
     stock: String(product.stock),
     price: String(product.price),
+    costPrice: product.costPrice === undefined ? '' : String(product.costPrice),
     threshold: String(product.threshold),
     status: product.status,
     description: product.description ?? '',
@@ -56,7 +59,7 @@ function toProductFormData(product: Product): ProductFormData {
 }
 
 function toProductPayload(form: ProductFormData): Omit<Product, 'id'> {
-  const numericValues = [form.stock, form.price, form.threshold];
+  const numericValues = [form.stock, form.price, form.costPrice, form.threshold];
   if (!form.name.trim() || !form.sku.trim() || !form.category || !form.unit.trim() || !form.status ||
       numericValues.some((value) => value.trim() === '' || !Number.isFinite(Number(value)) || Number(value) < 0)) {
     throw new Error('Complete all required product fields with valid values.');
@@ -69,6 +72,7 @@ function toProductPayload(form: ProductFormData): Omit<Product, 'id'> {
     unit: form.unit.trim(),
     stock: Number(form.stock),
     price: Number(form.price),
+    costPrice: Number(form.costPrice),
     threshold: Number(form.threshold),
     status: form.status,
     description: form.description.trim(),
@@ -325,7 +329,8 @@ export const Inventory: React.FC = () => {
         { key: 'category', header: 'Category' },
         { key: 'unit', header: 'Unit' },
         { key: 'stock', header: 'Stock' },
-        { key: 'price', header: 'Price (PHP)' },
+        ...(isAdmin ? [{ key: 'costPrice' as const, header: 'Supplier Cost (PHP)' }] : []),
+        { key: 'price', header: 'Selling Price (PHP)' },
         { key: 'threshold', header: 'Restock Level' },
         { key: 'status', header: 'Status' },
       ]);
@@ -476,7 +481,8 @@ export const Inventory: React.FC = () => {
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Product Name</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Price</th>
+                  {isAdmin && <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Supplier Cost</th>}
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Selling Price</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -510,6 +516,7 @@ export const Inventory: React.FC = () => {
                           }`} />
                         </div>
                       </td>
+                      {isAdmin && <td className="px-6 py-4 font-medium text-gray-700">{formatCurrency(product.costPrice ?? 0)}</td>}
                       <td className="px-6 py-4 font-medium text-gray-900">{formatCurrency(product.price)}</td>
                       <td className="px-6 py-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(product.status)}`}>
@@ -695,7 +702,21 @@ export const Inventory: React.FC = () => {
                   </div>
                   
                   <div>
-                    <label className="label">Price (₱)</label>
+                    <label className="label">Supplier / Original Price (₱)</label>
+                    <input
+                      type="number"
+                      name="costPrice"
+                      value={formData.costPrice}
+                      onChange={(e) => setFormData((current) => ({ ...current, costPrice: e.target.value }))}
+                      className="input"
+                      min="0"
+                      step="0.01"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="label">Selling Price (Customer) (₱)</label>
                     <input
                       type="number"
                       name="price"

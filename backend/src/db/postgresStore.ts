@@ -104,6 +104,7 @@ function rowToProduct(row: Record<string, unknown>): Product {
     unit: String(row.unit),
     stock: Number(row.stock),
     price: Number(row.unit_price ?? row.price ?? 0),
+    costPrice: Number(row.cost_price ?? row.costPrice ?? 0),
     threshold: Number(row.threshold ?? row.min_stock ?? 0),
     status: (row.status as 'active' | 'discontinued') || 'active',
     description: row.description ? String(row.description) : undefined,
@@ -386,8 +387,8 @@ export async function createProductDb(input: ProductCreateInput & { id?: string 
   const sku = input.sku.trim().toUpperCase();
 
   const { rows } = await pool.query(`
-    INSERT INTO products (id, sku, name, category, unit, stock, threshold, min_stock, unit_price, status, description)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10)
+    INSERT INTO products (id, sku, name, category, unit, stock, threshold, min_stock, unit_price, cost_price, status, description)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, $11)
     RETURNING *
   `, [
     id,
@@ -398,6 +399,7 @@ export async function createProductDb(input: ProductCreateInput & { id?: string 
     input.stock,
     input.threshold,
     input.price,
+    input.costPrice ?? 0,
     input.status ?? 'active',
     input.description?.trim() || null,
   ]);
@@ -416,18 +418,19 @@ export async function updateProductDb(id: string, input: ProductUpdateInput): Pr
   const nextUnit = input.unit === undefined ? current.unit : input.unit.trim();
   const nextStock = input.stock ?? current.stock;
   const nextPrice = input.price ?? current.price;
+  const nextCostPrice = input.costPrice ?? current.costPrice ?? 0;
   const nextThreshold = input.threshold ?? current.threshold;
   const nextStatus = input.status ?? current.status;
   const nextDescription = input.description === undefined ? current.description : input.description.trim() || null;
 
   const { rows } = await pool.query(`
     UPDATE products
-    SET sku = $2, name = $3, category = $4, unit = $5, stock = $6, unit_price = $7,
-        threshold = $8, min_stock = $8, status = $9, description = $10, updated_at = NOW()
+    SET sku = $2, name = $3, category = $4, unit = $5, stock = $6, unit_price = $7, cost_price = $8,
+        threshold = $9, min_stock = $9, status = $10, description = $11, updated_at = NOW()
     WHERE id = $1 AND deleted_at IS NULL
     RETURNING *
   `, [
-    id, nextSku, nextName, nextCategory, nextUnit, nextStock, nextPrice, nextThreshold, nextStatus, nextDescription
+    id, nextSku, nextName, nextCategory, nextUnit, nextStock, nextPrice, nextCostPrice, nextThreshold, nextStatus, nextDescription
   ]);
   return rows[0] ? rowToProduct(rows[0]) : null;
 }

@@ -220,6 +220,50 @@ describe('auth routes', () => {
     });
   });
 
+  describe('PATCH /auth/profile', () => {
+    it('allows an admin to update only their own email and returns a refreshed token', async () => {
+      const admin = await seedUser(E4, 'admin-pass', 'admin');
+      const token = signToken({ sub: admin.id, email: admin.email, role: admin.role });
+      const newEmail = 'updated-admin' + AT + 'example.com';
+      const response = await app.request('/auth/profile', {
+        method: 'PATCH',
+        headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+        body: JSON.stringify({ email: '  ' + newEmail.toUpperCase() + '  ' }),
+      });
+      expect(response.status).toBe(200);
+      const body = await response.json() as { token: string; user: { id: string; email: string; role: string } };
+      expect(body.user).toMatchObject({ id: admin.id, email: newEmail, role: 'admin' });
+      expect(body.token).toBeTruthy();
+      expect(findByEmail(E4)).toBeNull();
+      expect(findByEmail(newEmail)?.id).toBe(admin.id);
+      const me = await app.request('/auth/me', { headers: { authorization: 'Bearer ' + body.token } });
+      expect(me.status).toBe(200);
+      expect((await me.json()).user.email).toBe(newEmail);
+    });
+
+    it('rejects invalid or duplicate email changes without changing the account', async () => {
+      const admin = await seedUser(E4, 'admin-pass', 'admin');
+      await seedUser(E2, 'staff-pass', 'staff');
+      const token = signToken({ sub: admin.id, email: admin.email, role: admin.role });
+      const headers = { authorization: 'Bearer ' + token, 'content-type': 'application/json' };
+      expect((await app.request('/auth/profile', { method: 'PATCH', headers, body: JSON.stringify({ email: 'not-an-email' }) })).status).toBe(400);
+      expect((await app.request('/auth/profile', { method: 'PATCH', headers, body: JSON.stringify({ email: E2 }) })).status).toBe(409);
+      expect(findByEmail(E4)?.id).toBe(admin.id);
+    });
+
+    it('does not allow staff to change their own email', async () => {
+      const staff = await seedUser(E2, 'staff-pass', 'staff');
+      const token = signToken({ sub: staff.id, email: staff.email, role: staff.role });
+      const response = await app.request('/auth/profile', {
+        method: 'PATCH',
+        headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+        body: JSON.stringify({ email: E3 }),
+      });
+      expect(response.status).toBe(403);
+      expect(findByEmail(E2)?.id).toBe(staff.id);
+    });
+  });
+
   describe('staff CRUD', () => {
     it('requires an admin for every staff operation', async () => {
       const anonymous = await app.request('/auth/staff');

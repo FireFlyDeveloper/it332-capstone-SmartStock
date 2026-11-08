@@ -72,7 +72,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
 };
 
 export const ProfilePage: React.FC = () => {
-  const { user, updateUser, isAdmin } = useAuth();
+  const { user, updateUser, setAuth, isAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = (searchParams.get('tab') as ProfileTab) || 'profile';
 
@@ -82,7 +82,7 @@ export const ProfilePage: React.FC = () => {
 
   // ── Profile Form State ──────────────────────────────────────────
   const [name, setName] = useState(user?.name || '');
-  const [email] = useState(user?.email || '');
+  const [email, setEmail] = useState(user?.email || '');
   const [profileSaving, setProfileSaving] = useState(false);
 
   // ── Password Form State ─────────────────────────────────────────
@@ -174,7 +174,7 @@ export const ProfilePage: React.FC = () => {
   useEffect(() => {
     if (user) {
       setName(user.name || '');
-
+      setEmail(user.email || '');
     }
   }, [user]);
 
@@ -196,15 +196,24 @@ export const ProfilePage: React.FC = () => {
       toast.error('Name cannot be empty.');
       return;
     }
+    if (isAdmin && !email.trim()) {
+      toast.error('Email cannot be empty.');
+      return;
+    }
 
     setProfileSaving(true);
     try {
-      const response = await apiFetch<{ ok: boolean; user: { name: string } }>('/auth/profile', {
+      const response = await apiFetch<{ ok: boolean; user: { id: string; email: string; name: string; role: 'admin' | 'staff' }; token?: string }>('/auth/profile', {
         method: 'PATCH',
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({ name: name.trim(), ...(isAdmin ? { email: email.trim() } : {}) }),
       });
 
-      updateUser({ name: response.user.name });
+      if (response.token) {
+        setAuth({ token: response.token, user: response.user });
+      } else {
+        updateUser({ name: response.user.name, email: response.user.email });
+      }
+      setEmail(response.user.email);
       toast.success('Profile information saved successfully!');
     } catch (err) {
       toast.error((err as Error).message || 'Failed to update profile.');
@@ -429,7 +438,7 @@ export const ProfilePage: React.FC = () => {
         <div className="bg-white rounded-[28px] p-6 sm:p-8 border border-[#f1f5f9] shadow-sm space-y-6">
           <div className="border-b border-slate-100 pb-4">
             <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Personal &amp; Contact Details</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Update the name associated with your account.</p>
+            <p className="text-xs text-slate-400 mt-0.5">Update your name and, for administrators, your login email.</p>
           </div>
 
           <form onSubmit={handleSaveProfile} className="space-y-5">
@@ -451,10 +460,15 @@ export const ProfilePage: React.FC = () => {
                 <input
                   type="email"
                   value={email}
-                  disabled
-                  className="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-500 cursor-not-allowed"
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={!isAdmin}
+                  required={isAdmin}
+                  autoComplete="email"
+                  className={isAdmin
+                    ? 'w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none'
+                    : 'w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-500 cursor-not-allowed'}
                 />
-                <p className="text-[10px] text-slate-400">Email is managed by organization admin</p>
+                <p className="text-[10px] text-slate-400">{isAdmin ? 'This email is also your login address.' : 'Email is managed by organization admin'}</p>
               </div>
 
 

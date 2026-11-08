@@ -77,6 +77,7 @@ describe('product inventory routes', () => {
     const json = (await res.json()) as Array<{ sku: string; stock: number; threshold: number; price: number }>;
     expect(json).toHaveLength(3);
     expect(json[0]).toHaveProperty('price');
+    expect(json[0]).not.toHaveProperty('costPrice');
     expect(json[0]).toHaveProperty('threshold');
     expect(json[0]).toHaveProperty('stock');
   });
@@ -130,6 +131,7 @@ describe('product inventory routes', () => {
       },
     });
     expect(firstBody.items).toHaveLength(1);
+    expect(firstBody.items[0]).not.toHaveProperty('costPrice');
 
     const second = await app.request(`/products?mode=page&limit=1&cursor=${encodeURIComponent(firstBody.page.nextCursor!)}`, { headers });
     expect(second.status).toBe(200);
@@ -168,24 +170,27 @@ describe('product inventory routes', () => {
         unit: 'set',
         stock: 5,
         price: 320,
+        costPrice: 125,
         threshold: 6,
         status: 'active',
         description: 'Door lock accessory',
       }),
     });
     expect(create.status).toBe(201);
-    const created = (await create.json()) as { id: string; sku: string; stock: number };
+    const created = (await create.json()) as { id: string; sku: string; stock: number; costPrice: number };
     expect(created.sku).toBe('ACC-LOCK-01');
     expect(created.stock).toBe(5);
+    expect(created.costPrice).toBe(125);
 
     const update = await app.request('/products/' + created.id, {
       method: 'PUT',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ stock: 12 }),
+      body: JSON.stringify({ stock: 12, costPrice: 140 }),
     });
     expect(update.status).toBe(200);
-    const updated = (await update.json()) as { stock: number };
+    const updated = (await update.json()) as { stock: number; costPrice: number };
     expect(updated.stock).toBe(12);
+    expect(updated.costPrice).toBe(140);
 
     const remove = await app.request('/products/' + created.id, {
       method: 'DELETE',
@@ -207,6 +212,7 @@ describe('product inventory routes', () => {
         unit: 'sqm',
         stock: 0,
         price: 100,
+        costPrice: 70,
         threshold: 10,
         status: 'active',
         description: '',
@@ -249,9 +255,16 @@ describe('product inventory routes', () => {
     const duplicate = await app.request('/products', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ sku: 'GLS-CLR-6MM', name: 'Duplicate', category: 'glass', unit: 'sheet', stock: 1, price: 1, threshold: 1 }),
+      body: JSON.stringify({ sku: 'GLS-CLR-6MM', name: 'Duplicate', category: 'glass', unit: 'sheet', stock: 1, price: 1, costPrice: 0.5, threshold: 1 }),
     });
     expect(duplicate.status).toBe(409);
+
+    const missingSupplierPrice = await app.request('/products', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ sku: 'NO-SUPPLIER-PRICE', name: 'Missing Supplier Price', category: 'glass', unit: 'sheet', stock: 1, price: 5, threshold: 1 }),
+    });
+    expect(missingSupplierPrice.status).toBe(400);
 
     const invalid = await app.request('/products', {
       method: 'POST',

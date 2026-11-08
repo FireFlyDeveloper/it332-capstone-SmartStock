@@ -11,6 +11,7 @@ export interface Product {
   unit: string;
   stock: number;
   price: number;
+  costPrice?: number;
   threshold: number;
   status: 'active' | 'discontinued';
   description?: string;

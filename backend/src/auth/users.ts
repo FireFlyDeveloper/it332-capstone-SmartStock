@@ -8,7 +8,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { isDbSyncActive } from '../db/syncState.js';
-import { createUserDb, deleteUserDb, findUserByEmailDb, listStaffUsersDb, listStaffUsersPageDb, updateUserDb } from '../db/postgresStore.js';
+import { createUserDb, deleteUserDb, findUserByEmailDb, listStaffUsersDb, listStaffUsersPageDb, updateOwnUserProfileDb, updateUserDb } from '../db/postgresStore.js';
 
 export type Role = 'admin' | 'staff';
 
@@ -143,6 +143,34 @@ export async function listStaffUserPageRecords(input: {
     hasMore,
     nextCursor: hasMore && lastVisible ? { createdAt: lastVisible.createdAt, id: lastVisible.id } : null,
   };
+}
+
+export async function updateOwnUserProfileRecord(
+  id: string,
+  updates: { email?: string; name?: string },
+): Promise<UserRecord | null> {
+  if (!isDbSyncActive()) {
+    const current = users.get(id);
+    if (!current) return null;
+    if (updates.email !== undefined) {
+      const email = updates.email.trim().toLowerCase();
+      const existingId = byEmail.get(email);
+      if (existingId && existingId !== id) throw new Error('email already registered');
+      byEmail.delete(current.email.toLowerCase());
+      current.email = email;
+      byEmail.set(email, id);
+    }
+    if (updates.name !== undefined) current.name = updates.name.trim();
+    return current;
+  }
+
+  const record = await updateOwnUserProfileDb(id, updates);
+  if (!record) return null;
+  const previous = users.get(id);
+  if (previous) byEmail.delete(previous.email.toLowerCase());
+  users.set(record.id, record);
+  byEmail.set(record.email.toLowerCase(), record.id);
+  return record;
 }
 
 export async function updateUserRecord(

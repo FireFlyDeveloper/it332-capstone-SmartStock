@@ -80,6 +80,7 @@ export interface Product {
   unit: string;
   stock: number;
   price: number;
+  costPrice?: number;
   threshold: number;
   status: ProductStatus;
   description?: string;
@@ -92,6 +93,7 @@ export interface ProductCreateInput {
   unit: string;
   stock: number;
   price: number;
+  costPrice?: number;
   threshold: number;
   status?: ProductStatus;
   description?: string;
@@ -143,6 +145,7 @@ function toRecord(input: ProductCreateInput): Product {
     unit: input.unit.trim(),
     stock: input.stock,
     price: input.price,
+    costPrice: input.costPrice ?? 0,
     threshold: input.threshold,
     status: input.status ?? 'active',
     description: input.description?.trim() || undefined,
@@ -205,6 +208,7 @@ export async function updateProduct(id: string, input: ProductUpdateInput): Prom
     unit: input.unit === undefined ? current.unit : input.unit.trim(),
     stock: input.stock ?? current.stock,
     price: input.price ?? current.price,
+    costPrice: input.costPrice ?? current.costPrice ?? 0,
     threshold: input.threshold ?? current.threshold,
     status: input.status ?? current.status,
     description: input.description === undefined ? current.description : input.description.trim() || undefined,

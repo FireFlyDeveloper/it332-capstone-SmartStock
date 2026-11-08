@@ -9,7 +9,7 @@ import { Hono } from 'hono';
 import { setCookie, deleteCookie } from 'hono/cookie';
 import { hashPassword, verifyPassword } from './hash.js';
 import { signToken } from './jwt.js';
-import { createUserRecord, findByEmail, findById, findUserByEmailRecord, updateUserRecord, listStaffUserPageRecords, deleteStaffUserRecord, type Role, type UserRecord } from './users.js';
+import { createUserRecord, findByEmail, findById, findUserByEmailRecord, updateOwnUserProfileRecord, updateUserRecord, listStaffUserPageRecords, deleteStaffUserRecord, type Role, type UserRecord } from './users.js';
 import { requireAuth, requireRole } from './middleware.js';
 
 export const authRoutes = new Hono();
@@ -86,18 +86,46 @@ authRoutes.get('/me', requireAuth, (c) => {
 authRoutes.patch('/profile', requireAuth, async (c) => {
   const authUser = c.get('user');
   const body = await c.req.json().catch(() => null);
-  if (!body || typeof body !== 'object') return c.json({ error: 'invalid body' }, 400);
-  const name = typeof body.name === 'string' ? body.name.trim() : undefined;
-  if (name !== undefined && name.length === 0) return c.json({ error: 'name cannot be empty' }, 400);
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return c.json({ error: 'invalid body' }, 400);
+  const updates = body as Record<string, unknown>;
+  if (Object.keys(updates).length === 0 || Object.keys(updates).some((key) => !['name', 'email'].includes(key))) {
+    return c.json({ error: 'only name and email can be updated' }, 400);
+  }
+  if ('name' in updates && (typeof updates.name !== 'string' || !updates.name.trim())) {
+    return c.json({ error: 'name cannot be empty' }, 400);
+  }
+  if ('email' in updates) {
+    if (authUser.role !== 'admin') return c.json({ error: 'only admins can update their own email' }, 403);
+    if (typeof updates.email !== 'string' || !EMAIL_RE.test(updates.email.trim())) {
+      return c.json({ error: 'invalid email' }, 400);
+    }
+  }
+
+  const email = typeof updates.email === 'string' ? updates.email.trim().toLowerCase() : undefined;
+  const name = typeof updates.name === 'string' ? updates.name.trim() : undefined;
   let updated;
   try {
-    updated = await updateUserRecord(authUser.id, { name });
+    updated = await updateOwnUserProfileRecord(authUser.id, { email, name });
   } catch (error) {
+    if ((typeof error === 'object' && error !== null && 'code' in error && error.code === '23505')
+      || (error instanceof Error && error.message === 'email already registered')) {
+      return c.json({ error: 'email already registered' }, 409);
+    }
     console.error('[auth] profile update could not be saved:', error);
     return c.json({ error: 'profile update could not be saved' }, 503);
   }
   if (!updated) return c.json({ error: 'user not found' }, 404);
-  return c.json({ ok: true, user: { id: updated.id, email: updated.email, name: updated.name, role: updated.role } });
+
+  const response: { ok: boolean; user: { id: string; email: string; name: string; role: Role }; token?: string } = {
+    ok: true,
+    user: { id: updated.id, email: updated.email, name: updated.name, role: updated.role },
+  };
+  if (email !== undefined) {
+    const token = signToken({ sub: updated.id, email: updated.email, role: updated.role });
+    setCookie(c, 'auth_token', token, { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 60 * 60 * 24 * 7 });
+    response.token = token;
+  }
+  return c.json(response);
 });
 
 authRoutes.post('/change-password', requireAuth, async (c) => {

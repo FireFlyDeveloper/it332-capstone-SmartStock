@@ -26,6 +26,7 @@ const PRODUCT: ProductCreateInput = {
   unit: 'sheet',
   stock: 0,
   price: 100,
+  costPrice: 70,
   threshold: 4,
 };
 

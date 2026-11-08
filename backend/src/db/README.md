@@ -44,6 +44,16 @@ This migration permanently drops `deliveries.driver` and `deliveries.driver_id`,
 
 Daily Sales is derived directly from backend order records; no cashier cash-reconciliation workflow or tender-method field is used.
 
+## Product supplier-cost migration
+
+Fresh databases already include `products.cost_price` in `db/schema.sql`. Existing databases must apply the additive migration before running backend code that reads or writes supplier cost:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/20261107_add_product_cost_price.sql
+```
+
+Existing `unit_price` values remain selling prices and are not rewritten. New `cost_price` values default to zero for existing rows until an administrator updates them.
+
 ## Browser Web Push setup
 
 Real background push requires a secure frontend origin, a database-backed subscription table, and server-side VAPID keys. For an existing PostgreSQL database, apply the additive subscription migration from the repository root:

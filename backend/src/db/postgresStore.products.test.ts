@@ -6,7 +6,7 @@ vi.mock('./client.js', () => ({
   getPool: () => database.available ? { query: database.query } : null,
 }));
 
-import { listProductsPageDb } from './postgresStore.js';
+import { createProductDb, listProductsPageDb, updateProductDb } from './postgresStore.js';
 
 const product = (id: string, name: string) => ({
   id,
@@ -16,6 +16,7 @@ const product = (id: string, name: string) => ({
   unit: 'sheet',
   stock: 10,
   unit_price: 125,
+  cost_price: 75,
   threshold: 5,
   status: 'active',
   description: 'clear panel',
@@ -25,6 +26,37 @@ describe('PostgreSQL product cursor query', () => {
   beforeEach(() => {
     database.available = true;
     vi.clearAllMocks();
+  });
+
+  it('writes and reads the supplier cost price separately from the selling price', async () => {
+    const createdRow = { ...product('cost-product', 'Cost item'), unit_price: '120', cost_price: '75', stock: 4, threshold: 2 };
+    database.query.mockResolvedValueOnce({ rows: [createdRow] });
+
+    const created = await createProductDb({
+      id: 'cost-product',
+      sku: 'cost-product',
+      name: 'Cost item',
+      category: 'glass',
+      unit: 'sheet',
+      stock: 4,
+      price: 120,
+      costPrice: 75,
+      threshold: 2,
+      status: 'active',
+    });
+    expect(created).toMatchObject({ price: 120, costPrice: 75 });
+    const [insertSql, insertValues] = database.query.mock.calls[0] as [string, unknown[]];
+    expect(insertSql).toContain('unit_price, cost_price, status');
+    expect(insertValues).toEqual(['cost-product', 'COST-PRODUCT', 'Cost item', 'glass', 'sheet', 4, 2, 120, 75, 'active', null]);
+
+    const currentRow = { ...createdRow, cost_price: '75' };
+    const updatedRow = { ...createdRow, cost_price: '95' };
+    database.query.mockResolvedValueOnce({ rows: [currentRow] }).mockResolvedValueOnce({ rows: [updatedRow] });
+    const updated = await updateProductDb('cost-product', { costPrice: 95 });
+    expect(updated).toMatchObject({ price: 120, costPrice: 95 });
+    const [updateSql, updateValues] = database.query.mock.calls[2] as [string, unknown[]];
+    expect(updateSql).toContain('unit_price = $7, cost_price = $8');
+    expect(updateValues).toEqual(['cost-product', 'COST-PRODUCT', 'Cost item', 'glass', 'sheet', 4, 120, 95, 2, 'active', 'clear panel']);
   });
 
   it('filters, summarizes and keyset-pages inventory products', async () => {
@@ -84,7 +116,7 @@ describe('PostgreSQL product cursor query', () => {
       },
       hasMore: true,
       nextCursor: { name: 'Aluminum?', id: 'p-01' },
-      items: [{ id: 'p-01', name: 'Aluminum?', price: 125, threshold: 5 }],
+      items: [{ id: 'p-01', name: 'Aluminum?', price: 125, costPrice: 75, threshold: 5 }],
     });
     const [sql, values] = database.query.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain('FROM unnest($3::text[]) AS tokens(term)');
