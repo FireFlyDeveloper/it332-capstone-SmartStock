@@ -69,7 +69,7 @@ export async function readInventoryPolicyHistory(): Promise<InventoryPolicyEvent
   return isDbSyncActive() ? listInventoryPolicyHistoryDb() : listInventoryPolicyHistory();
 }
 
-export type ProductCategory = 'glass' | 'aluminum';
+export type ProductCategory = 'glass' | 'aluminum' | 'accessory';
 export type ProductStatus = 'active' | 'discontinued';
 export type StockMovementType = 'inbound' | 'outbound';
 

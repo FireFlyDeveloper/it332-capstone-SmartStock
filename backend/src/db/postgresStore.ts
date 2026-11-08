@@ -100,7 +100,7 @@ function rowToProduct(row: Record<string, unknown>): Product {
   return {
     id: String(row.id),
     name: String(row.name),
-    category: (row.category as 'glass' | 'aluminum') || 'glass',
+    category: (row.category as 'glass' | 'aluminum' | 'accessory') || 'glass',
     unit: String(row.unit),
     stock: Number(row.stock),
     price: Number(row.unit_price ?? row.price ?? 0),
@@ -247,7 +247,7 @@ export async function listAnnualPurchasesPageDb(input: {
 
 export async function listProductsPageDb(input: {
   limit: number;
-  category: 'all' | 'glass' | 'aluminum';
+  category: 'all' | 'glass' | 'aluminum' | 'accessory';
   stock: 'all' | 'low' | 'healthy';
   searchTokens: string[];
   cursorName: string | null;

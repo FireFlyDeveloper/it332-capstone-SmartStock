@@ -200,6 +200,34 @@ describe('product inventory routes', () => {
     expect(await remove.json()).toEqual({ ok: true });
   });
 
+  it('creates and filters products in the accessory category', async () => {
+    const token = await login(app, ADMIN);
+    const create = await app.request('/products', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sku: 'ACC-HANDLE-01',
+        name: 'Door Handle',
+        category: 'accessory',
+        unit: 'pcs',
+        stock: 8,
+        price: 50,
+        costPrice: 20,
+        threshold: 2,
+      }),
+    });
+    expect(create.status).toBe(201);
+    expect(await create.json()).toMatchObject({ sku: 'ACC-HANDLE-01', category: 'accessory' });
+
+    const filtered = await app.request('/products?mode=page&category=accessory', {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(filtered.status).toBe(200);
+    const result = await filtered.json() as { items: Array<{ sku: string; category: string }>; page: { totalCount: number } };
+    expect(result.page.totalCount).toBe(1);
+    expect(result.items).toContainEqual(expect.objectContaining({ sku: 'ACC-HANDLE-01', category: 'accessory' }));
+  });
+
   it('accepts an empty optional description when creating a product', async () => {
     const token = await login(app, ADMIN);
     const res = await app.request('/products', {

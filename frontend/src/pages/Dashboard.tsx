@@ -222,12 +222,6 @@ export const Dashboard: React.FC = () => {
   ];
 
   const orderStatusCounts = (orderSummary?.orderStatusCounts ?? []).map(({ status, count }) => [status, count] as [string, number]);
-  const deliveryStatusCounts = ([
-    ['pending', deliverySummary.pendingCount],
-    ['in_transit', deliverySummary.inTransitCount],
-    ['delivered', deliverySummary.deliveredCount],
-  ] as [string, number][]).filter(([, count]) => count > 0).sort(([a], [b]) => a.localeCompare(b));
-
   const customTooltipFormatter = (value: number, name: string) => [formatCurrency(value), name];
 
   const retryDashboard = () => {
@@ -630,8 +624,8 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Current order and delivery status counts from backend records */}
-          <div className="lg:col-span-3 bg-white rounded-[40px] p-6 sm:p-8 border border-[#f1f5f9] shadow-[0_4px_6px_-1px_rgb(0_0_0/0.05)] flex flex-col">
+          {/* Current order status counts from backend records */}
+          <div className="lg:col-span-3 bg-white rounded-[40px] p-6 sm:p-8 border border-[#f1f5f9] shadow-[0_4px_6px_-1px_rgb(0_0_0/0.05)]">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
                 CURRENT SNAPSHOT
@@ -640,7 +634,7 @@ export const Dashboard: React.FC = () => {
                 Record Status
               </h3>
 
-              <div className="space-y-5">
+              <div>
                 <section aria-label="Order status counts">
                   <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Orders</h4>
                   {orderSummaryLoading ? (
@@ -660,26 +654,10 @@ export const Dashboard: React.FC = () => {
                     </ul>
                   )}
                 </section>
-
-                <section aria-label="Delivery status counts">
-                  <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Deliveries</h4>
-                  {deliveryStatusCounts.length === 0 ? (
-                    <p className="text-xs text-slate-400">No delivery records.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {deliveryStatusCounts.map(([status, count]) => (
-                        <li key={status} className="flex items-center justify-between gap-2 text-xs">
-                          <span className="capitalize text-slate-600">{status.replaceAll('_', ' ')}</span>
-                          <span className="font-bold text-slate-900">{count}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
               </div>
             </div>
-            <p className="mt-auto border-t border-slate-100 pt-3 text-[11px] text-slate-400">
-              Counts reflect current order and delivery records.
+            <p className="mt-3 border-t border-slate-100 pt-3 text-[11px] text-slate-400">
+              Counts reflect current order records.
             </p>
           </div>
         </div>

@@ -28,7 +28,7 @@ function visibleProduct(c: Context, product: Product): Product {
 }
 
 function toCategory(value: string | undefined): ProductCategory | undefined {
-  if (value === 'glass' || value === 'aluminum') return value;
+  if (value === 'glass' || value === 'aluminum' || value === 'accessory') return value;
   return undefined;
 }
 

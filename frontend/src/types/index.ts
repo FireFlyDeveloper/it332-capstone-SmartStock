@@ -7,7 +7,7 @@
 export interface Product {
   id: string;
   name: string;
-  category: 'glass' | 'aluminum';
+  category: 'glass' | 'aluminum' | 'accessory';
   unit: string;
   stock: number;
   price: number;

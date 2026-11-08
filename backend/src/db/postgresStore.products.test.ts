@@ -127,6 +127,28 @@ describe('PostgreSQL product cursor query', () => {
     expect(values).toEqual(['glass', 'low', ['clear', 'sheet'], 'Before', 'p-00', 2]);
   });
 
+  it('reads and filters accessory-category products', async () => {
+    database.query.mockResolvedValueOnce({ rows: [{
+      filtered_count: 1,
+      total_products: 1,
+      page_items: [{ ...product('accessory-01', 'Accessory item'), category: 'accessory' }],
+    }] });
+
+    const result = await listProductsPageDb({
+      limit: 10,
+      category: 'accessory',
+      stock: 'all',
+      searchTokens: [],
+      cursorName: null,
+      cursorId: null,
+    });
+
+    expect(result?.items).toMatchObject([{ category: 'accessory', sku: 'ACCESSORY-01' }]);
+    const [query, values] = database.query.mock.calls[0] as [string, unknown[]];
+    expect(query).toContain("$1::text = 'all' OR p.category = $1::text");
+    expect(values[0]).toBe('accessory');
+  });
+
   it('returns null if the PostgreSQL pool is unavailable', async () => {
     database.available = false;
     await expect(listProductsPageDb({

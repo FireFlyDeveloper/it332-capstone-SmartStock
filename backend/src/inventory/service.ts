@@ -73,8 +73,8 @@ function readPositiveNumber(value: unknown, field: string): ServiceResult<number
 function readCategory(value: unknown, required = true): ServiceResult<ProductCategory | undefined> {
   const parsed = readString(value, 'category', required);
   if (!parsed.ok || parsed.data === undefined) return parsed as ServiceResult<ProductCategory | undefined>;
-  if (parsed.data !== 'glass' && parsed.data !== 'aluminum') {
-    return { ok: false, status: 400, error: 'category must be glass or aluminum' };
+  if (parsed.data !== 'glass' && parsed.data !== 'aluminum' && parsed.data !== 'accessory') {
+    return { ok: false, status: 400, error: 'category must be glass, aluminum, or accessory' };
   }
   return { ok: true, data: parsed.data };
 }

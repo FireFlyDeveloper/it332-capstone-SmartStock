@@ -87,7 +87,7 @@ export const Inventory: React.FC = () => {
   const { addProduct, updateProduct, deleteProduct, restockProduct } = useData();
   const { isAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'glass' | 'aluminum'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'glass' | 'aluminum' | 'accessory'>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'healthy'>('all');
   const [batchSize, setBatchSize] = useState<number>(25);
   const [pagedProducts, setPagedProducts] = useState<Product[]>([]);
@@ -389,6 +389,7 @@ export const Inventory: React.FC = () => {
               <option value="all">All Categories</option>
               <option value="glass">Glass</option>
               <option value="aluminum">Aluminum</option>
+              <option value="accessory">Accessory</option>
             </select>
             
             {/* Stock Filter */}
@@ -501,7 +502,7 @@ export const Inventory: React.FC = () => {
                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${
-                          product.category === 'glass' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                          product.category === 'glass' ? 'bg-blue-100 text-blue-700' : product.category === 'aluminum' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
                         }`}>
                           {product.category}
                         </span>
@@ -676,6 +677,7 @@ export const Inventory: React.FC = () => {
                       <option value="">Select category</option>
                       <option value="glass">Glass</option>
                       <option value="aluminum">Aluminum</option>
+                      <option value="accessory">Accessory</option>
                     </select>
                   </div>
                   

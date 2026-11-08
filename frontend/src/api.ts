@@ -585,7 +585,7 @@ export interface ProductsPageResponse {
 export function getProductsPage(options: {
   limit?: number
   cursor?: string | null
-  category?: 'all' | 'glass' | 'aluminum'
+  category?: 'all' | 'glass' | 'aluminum' | 'accessory'
   stock?: 'all' | 'low' | 'healthy'
   search?: string
 } = {}): Promise<ProductsPageResponse> {
