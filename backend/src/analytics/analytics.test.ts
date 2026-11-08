@@ -11,7 +11,7 @@ import { authRoutes } from '../auth/routes.js';
 import { createUser, _resetUserStore, type Role } from '../auth/users.js';
 import { hashPassword } from '../auth/hash.js';
 import { _resetOrderStore, createOrder, listOrders } from '../orders/store.js';
-import { _resetInventoryStore, createProduct, recordInboundStock, recordOutboundStock } from '../inventory/store.js';
+import { _resetInventoryStore, createProduct, listProducts, recordInboundStock, recordOutboundStock } from '../inventory/store.js';
 import { analyticsRoutes } from './routes.js';
 import {
   buildAnnualPurchaseSummary,
@@ -106,6 +106,41 @@ async function seedDeterministicInventory() {
 }
 
 describe('analytics pure functions', () => {
+  it('compares delivered order-line selling prices with current listed prices for the same quantities', async () => {
+    _resetOrderStore(false);
+    _resetInventoryStore(false);
+    const product = await createProduct({ sku: 'AN-CMP-01', name: 'Price Sample', category: 'glass', unit: 'sheet', stock: 10, price: 120, threshold: 3 });
+    const createSale = (referenceNumber: string, deliveryDate: string, quantity: number, unitPrice: number) => createOrder({
+      referenceNumber,
+      customerName: 'Analytics Customer',
+      customerPhone: '+639000000000',
+      deliveryAddress: 'Batangas',
+      deliveryDate,
+      paidAmount: quantity * unitPrice,
+      items: [{ productId: product.id, name: product.name, quantity, unitPrice }],
+    });
+
+    createSale('SS-CMP-001', '2026-01-12', 2, 80).orderStatus = 'delivered';
+    createSale('SS-CMP-002', '2026-01-15', 1, 110).orderStatus = 'delivered';
+    createSale('SS-CMP-003', '2026-01-18', 5, 40);
+    createSale('SS-CMP-004', '2026-01-19', 7, 25).orderStatus = 'cancelled';
+    createSale('SS-CMP-005', '2026-02-01', 9, 90).orderStatus = 'delivered';
+
+    const summary = buildAnalyticsOrderSummary(listOrders(), listProducts(), '2026-01-01', '2026-01-31', new Date('2026-02-15T12:00:00.000Z'));
+    expect(summary.priceComparisonByProduct).toEqual([{
+      productId: product.id,
+      name: 'Price Sample',
+      category: 'glass',
+      unit: 'sheet',
+      quantitySold: 3,
+      averageSellingUnitPrice: 90,
+      actualSellingRevenue: 270,
+      currentListedUnitPrice: 120,
+      currentListedValue: 360,
+      listedPriceDifference: 90,
+    }]);
+  });
+
   it('groups gross order value by order month while separating delivered sales and all transactions', () => {
     _resetOrderStore(false);
     seedDeterministicOrders();

@@ -25,6 +25,19 @@ export interface DashboardMonthlySalesTrendRow {
 
 export type DashboardSalesRange = '6M' | '1Y' | 'ALL';
 
+export interface ProductPriceComparisonRow {
+  productId: string;
+  name: string;
+  category: string;
+  unit: string;
+  quantitySold: number;
+  averageSellingUnitPrice: number;
+  actualSellingRevenue: number;
+  currentListedUnitPrice: number | null;
+  currentListedValue: number | null;
+  listedPriceDifference: number | null;
+}
+
 export interface AnalyticsOrderSummary {
   totalOrderCount: number;
   averageOrderValue: number;
@@ -32,6 +45,7 @@ export interface AnalyticsOrderSummary {
   mostOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>;
   leastOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>;
   orderedQuantities: Record<string, number>;
+  priceComparisonByProduct: ProductPriceComparisonRow[];
   salesTrendData: Array<{
     month: string;
     sales: number;
@@ -172,6 +186,53 @@ function monthFromOrdinal(ordinal: number): string {
   return `${Math.floor(ordinal / 12).toString().padStart(4, '0')}-${String(ordinal % 12 + 1).padStart(2, '0')}`;
 }
 
+export function buildProductPriceComparison(orders: Order[], products: Product[]): ProductPriceComparisonRow[] {
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const totals = new Map<string, {
+    productId: string;
+    name: string;
+    category: string;
+    unit: string;
+    quantitySold: number;
+    actualSellingRevenue: number;
+    currentListedUnitPrice: number | null;
+  }>();
+
+  for (const order of orders) {
+    if (order.orderStatus !== 'delivered') continue;
+    for (const line of order.items) {
+      const product = productById.get(line.productId);
+      const row = totals.get(line.productId) ?? {
+        productId: line.productId,
+        name: product?.name ?? line.name,
+        category: product?.category ?? 'Unclassified',
+        unit: product?.unit?.trim() || 'unknown',
+        quantitySold: 0,
+        actualSellingRevenue: 0,
+        currentListedUnitPrice: product?.price ?? null,
+      };
+      row.quantitySold += line.quantity;
+      row.actualSellingRevenue += line.quantity * line.unitPrice;
+      totals.set(line.productId, row);
+    }
+  }
+
+  return [...totals.values()].map((row) => {
+    const actualSellingRevenue = roundTwo(row.actualSellingRevenue);
+    const currentListedValue = row.currentListedUnitPrice === null
+      ? null
+      : roundTwo(row.quantitySold * row.currentListedUnitPrice);
+    return {
+      ...row,
+      averageSellingUnitPrice: row.quantitySold > 0 ? roundTwo(row.actualSellingRevenue / row.quantitySold) : 0,
+      actualSellingRevenue,
+      currentListedValue,
+      listedPriceDifference: currentListedValue === null ? null : roundTwo(currentListedValue - actualSellingRevenue),
+    };
+  }).sort((left, right) => right.actualSellingRevenue - left.actualSellingRevenue
+    || (left.productId < right.productId ? -1 : left.productId > right.productId ? 1 : 0));
+}
+
 export function buildAnalyticsOrderSummary(
   orders: Order[], products: Product[], fromDate?: string, toDate?: string, now = new Date(),
 ): AnalyticsOrderSummary {
@@ -269,6 +330,7 @@ export function buildAnalyticsOrderSummary(
     mostOrderedItems,
     leastOrderedItems,
     orderedQuantities,
+    priceComparisonByProduct: buildProductPriceComparison(filtered, products),
     salesTrendData: monthlyTrend,
     deliveryDateMonthlySeries: buildDeliveryDateMonthlySeries(filtered, fromDate, toDate),
     aiProductRankings: buildInsightProductRankings(orders, products, fromDate, toDate),

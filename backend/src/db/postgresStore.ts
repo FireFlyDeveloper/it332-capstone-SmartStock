@@ -1438,6 +1438,26 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
       CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS item(value)
       WHERE o.order_status <> 'cancelled'
       GROUP BY item.value->>'productId'
+    ), price_comparison AS (
+      SELECT item.value->>'productId' AS product_id,
+        COALESCE(p.name, (ARRAY_AGG(item.value->>'name' ORDER BY o.order_no COLLATE "C"))[1], item.value->>'productId') AS name,
+        COALESCE(NULLIF(p.category, ''), 'Unclassified') AS category,
+        COALESCE(NULLIF(BTRIM(p.unit), ''), 'unknown') AS unit,
+        SUM((item.value->>'quantity')::numeric)::double precision AS quantity_sold,
+        ROUND(SUM((item.value->>'quantity')::numeric * (item.value->>'unitPrice')::numeric), 2)::double precision AS actual_selling_revenue,
+        ROUND(SUM((item.value->>'quantity')::numeric * (item.value->>'unitPrice')::numeric)
+          / NULLIF(SUM((item.value->>'quantity')::numeric), 0), 2)::double precision AS average_selling_unit_price,
+        CASE WHEN p.id IS NULL THEN NULL ELSE p.unit_price::double precision END AS current_listed_unit_price,
+        CASE WHEN p.id IS NULL THEN NULL ELSE ROUND(SUM((item.value->>'quantity')::numeric) * p.unit_price, 2)::double precision END AS current_listed_value,
+        CASE WHEN p.id IS NULL THEN NULL ELSE ROUND(
+          SUM((item.value->>'quantity')::numeric * p.unit_price)
+            - SUM((item.value->>'quantity')::numeric * (item.value->>'unitPrice')::numeric), 2
+        )::double precision END AS listed_price_difference
+      FROM filtered_orders o
+      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS item(value)
+      LEFT JOIN products p ON p.id::text = item.value->>'productId' AND p.deleted_at IS NULL
+      WHERE o.order_status = 'delivered'
+      GROUP BY item.value->>'productId', p.id, p.name, p.category, p.unit, p.unit_price
     ), top_selling AS (
       SELECT r.product_id, r.name, COALESCE(NULLIF(p.category, ''), 'Unclassified') AS category, r.quantity
       FROM range_item_quantities r
@@ -1537,6 +1557,12 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
         'unitsOrdered', r.units_ordered, 'status', r.status) ORDER BY r.units_ordered ASC, r.name COLLATE "C", r.product_id COLLATE "C")
         FROM (SELECT * FROM rankings ORDER BY units_ordered ASC, name COLLATE "C", product_id COLLATE "C" LIMIT 5) r), '[]'::jsonb) AS least_ordered_items,
       COALESCE((SELECT jsonb_object_agg(product_id, quantity) FROM range_item_quantities), '{}'::jsonb) AS ordered_quantities,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object(
+        'productId', product_id, 'name', name, 'category', category, 'unit', unit,
+        'quantitySold', quantity_sold, 'averageSellingUnitPrice', average_selling_unit_price,
+        'actualSellingRevenue', actual_selling_revenue, 'currentListedUnitPrice', current_listed_unit_price,
+        'currentListedValue', current_listed_value, 'listedPriceDifference', listed_price_difference
+      ) ORDER BY actual_selling_revenue DESC, product_id COLLATE "C") FROM price_comparison), '[]'::jsonb) AS price_comparison_by_product,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('month', to_char(month, 'YYYY-MM'),
         'sales', gross_order_value, 'orders', order_count, 'grossOrderValue', gross_order_value,
         'grossSales', gross_sales, 'cancelledOrders', cancelled_order_count, 'nonCancelledOrders', non_cancelled_order_count)
@@ -1582,6 +1608,16 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
       unitsOrdered: Number(item.unitsOrdered ?? 0), status: String(item.status ?? 'healthy'),
     })),
     orderedQuantities: quantities,
+    priceComparisonByProduct: array(row.price_comparison_by_product).map((item) => ({
+      productId: String(item.productId ?? ''), name: String(item.name ?? ''),
+      category: String(item.category ?? 'Unclassified'), unit: String(item.unit ?? 'unknown'),
+      quantitySold: Number(item.quantitySold ?? 0),
+      averageSellingUnitPrice: Number(item.averageSellingUnitPrice ?? 0),
+      actualSellingRevenue: Number(item.actualSellingRevenue ?? 0),
+      currentListedUnitPrice: item.currentListedUnitPrice == null ? null : Number(item.currentListedUnitPrice),
+      currentListedValue: item.currentListedValue == null ? null : Number(item.currentListedValue),
+      listedPriceDifference: item.listedPriceDifference == null ? null : Number(item.listedPriceDifference),
+    })),
     salesTrendData: array(row.sales_trend_data).map((item) => ({
       month: String(item.month),
       sales: Number(item.sales ?? 0),

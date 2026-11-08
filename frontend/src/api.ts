@@ -281,6 +281,18 @@ export interface AnalyticsOrderSummary {
   mostOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>
   leastOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>
   orderedQuantities: Record<string, number>
+  priceComparisonByProduct: Array<{
+    productId: string
+    name: string
+    category: string
+    unit: string
+    quantitySold: number
+    averageSellingUnitPrice: number
+    actualSellingRevenue: number
+    currentListedUnitPrice: number | null
+    currentListedValue: number | null
+    listedPriceDifference: number | null
+  }>
   salesTrendData: Array<{
     month: string
     sales: number

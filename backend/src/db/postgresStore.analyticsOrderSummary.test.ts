@@ -23,6 +23,15 @@ describe('PostgreSQL Analytics order summary query', () => {
       most_ordered_items: [{ name: 'Aluminum', category: 'aluminum', stock: 8, unitsOrdered: 3, status: 'healthy' }],
       least_ordered_items: [{ name: 'Glass', category: 'glass', stock: 2, unitsOrdered: 2, status: 'critical' }],
       ordered_quantities: { 'ALU-1': 3 },
+      price_comparison_by_product: [{
+        productId: 'ALU-1', name: 'Aluminum', category: 'aluminum', unit: 'length', quantitySold: '3',
+        averageSellingUnitPrice: '80', actualSellingRevenue: '240', currentListedUnitPrice: '100',
+        currentListedValue: '300', listedPriceDifference: '60',
+      }, {
+        productId: 'OLD-1', name: 'Old item', category: 'Unclassified', unit: 'unknown', quantitySold: 2,
+        averageSellingUnitPrice: 45, actualSellingRevenue: 90, currentListedUnitPrice: null,
+        currentListedValue: null, listedPriceDifference: null,
+      }],
       sales_trend_data: [{ month: '2026-01', sales: 300, orders: 3, grossOrderValue: 300, grossSales: 200, cancelledOrders: 1, nonCancelledOrders: 2 }],
       delivery_monthly_series: [{ month: '2026-01', orderCount: 3, grossSales: '300' }],
       omitted_month_count: 4,
@@ -43,6 +52,15 @@ describe('PostgreSQL Analytics order summary query', () => {
       mostOrderedItems: [{ name: 'Aluminum', category: 'aluminum', stock: 8, unitsOrdered: 3, status: 'healthy' }],
       leastOrderedItems: [{ name: 'Glass', category: 'glass', stock: 2, unitsOrdered: 2, status: 'critical' }],
       orderedQuantities: { 'ALU-1': 3 },
+      priceComparisonByProduct: [{
+        productId: 'ALU-1', name: 'Aluminum', category: 'aluminum', unit: 'length', quantitySold: 3,
+        averageSellingUnitPrice: 80, actualSellingRevenue: 240, currentListedUnitPrice: 100,
+        currentListedValue: 300, listedPriceDifference: 60,
+      }, {
+        productId: 'OLD-1', name: 'Old item', category: 'Unclassified', unit: 'unknown', quantitySold: 2,
+        averageSellingUnitPrice: 45, actualSellingRevenue: 90, currentListedUnitPrice: null,
+        currentListedValue: null, listedPriceDifference: null,
+      }],
       salesTrendData: [{ month: '2026-01', sales: 300, orders: 3, grossOrderValue: 300, grossSales: 200, cancelledOrders: 1, nonCancelledOrders: 2 }],
       deliveryDateMonthlySeries: { months: [{ month: '2026-01', orderCount: 3, grossSales: 300 }], omittedMonthCount: 4, omittedBefore: '2025-09', omittedAfter: null },
       aiProductRankings: { allTime: [{ unit: 'sheet', items: [{ name: 'Clear Glass', category: 'glass', quantity: 3, stock: 5, unit: 'sheet', status: 'healthy' }] }], allTimeFewest: [{ unit: 'sheet', items: [{ name: 'Clear Glass', category: 'glass', quantity: 3, stock: 5, unit: 'sheet', status: 'healthy' }] }], selectedRange: [{ unit: 'sheet', items: [{ name: 'Clear Glass', category: 'glass', quantity: 3, stock: 5, unit: 'sheet', status: 'healthy' }] }], omittedUnitGroups: { allTime: 2, allTimeFewest: 3, selectedRange: 1 } },
@@ -53,6 +71,10 @@ describe('PostgreSQL Analytics order summary query', () => {
     expect(sql).toContain('o.delivery_date >= $1::date');
     expect(sql).toContain('o.delivery_date <= $2::date');
     expect(sql).toContain("o.order_status <> 'cancelled'");
+    expect(sql).toContain("o.order_status = 'delivered'");
+    expect(sql).toContain("item.value->>'unitPrice'");
+    expect(sql).toContain('p.unit_price');
+    expect(sql).toContain('price_comparison_by_product');
     expect(sql).toContain('jsonb_array_elements(COALESCE(o.items');
     expect(sql).toContain('LIMIT 5');
     expect(sql).toContain('generate_series(b.first_month, b.last_month, interval \'1 month\')');

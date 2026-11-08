@@ -35,6 +35,8 @@ import {
   Legend
 } from 'recharts';
 
+const EMPTY_PRICE_COMPARISON_ROWS: AnalyticsOrderSummary['priceComparisonByProduct'] = [];
+
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 type MovementPeriodMode = 'month' | 'range';
 
@@ -585,6 +587,16 @@ export const Analytics: React.FC = () => {
 
   const mostOrderedItems = orderSummary?.mostOrderedItems ?? [];
   const leastOrderedItems = orderSummary?.leastOrderedItems ?? [];
+  const priceComparisonRows = orderSummary?.priceComparisonByProduct ?? EMPTY_PRICE_COMPARISON_ROWS;
+  const priceComparisonTotals = useMemo(() => {
+    const comparableRows = priceComparisonRows.filter((row) => row.currentListedValue !== null);
+    return {
+      actualSellingRevenue: priceComparisonRows.reduce((total, row) => total + row.actualSellingRevenue, 0),
+      currentListedValue: comparableRows.reduce((total, row) => total + (row.currentListedValue ?? 0), 0),
+      listedPriceDifference: comparableRows.reduce((total, row) => total + (row.listedPriceDifference ?? 0), 0),
+      missingListedPriceCount: priceComparisonRows.length - comparableRows.length,
+    };
+  }, [priceComparisonRows]);
 
 
   const stockDistribution = [
@@ -986,6 +998,98 @@ export const Analytics: React.FC = () => {
             </ResponsiveContainer>
           </div>
         </div>
+
+        {/* Actual selling-price revenue compared with current listed-price value */}
+        <section className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6" aria-labelledby="price-comparison-title">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5">
+            <div>
+              <h2 id="price-comparison-title" className="text-lg font-bold text-slate-900">Actual Selling Price vs Today&apos;s Listed Price</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-500">
+                Delivered orders in the selected delivery-date range. Actual revenue uses each order line&apos;s recorded selling price; current listed value applies today&apos;s catalog price to those same quantities. Positive differences mean the current-list value is higher; negative differences mean recorded sales are higher. This is a price comparison, not profit.
+              </p>
+            </div>
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+              <Banknote className="w-4 h-4" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs font-medium text-slate-500">Actual sold revenue</p>
+              <p className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(priceComparisonTotals.actualSellingRevenue)}</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs font-medium text-slate-500">Value at current listed prices (available products)</p>
+              <p className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(priceComparisonTotals.currentListedValue)}</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs font-medium text-slate-500">Difference (list − sold, priced products only)</p>
+              <p className={`mt-1 text-lg font-bold ${priceComparisonTotals.listedPriceDifference >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                {formatCurrency(priceComparisonTotals.listedPriceDifference)}
+              </p>
+            </div>
+          </div>
+
+          {priceComparisonRows.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+              No delivered products in this delivery-date range.
+            </p>
+          ) : (
+            <div className="max-h-[28rem] overflow-auto rounded-xl border border-slate-200">
+              <table className="min-w-[950px] w-full text-sm">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Product</th>
+                    <th className="px-4 py-3 text-right font-semibold">Qty sold</th>
+                    <th className="px-4 py-3 text-right font-semibold">Avg. sold / unit</th>
+                    <th className="px-4 py-3 text-right font-semibold">Actual revenue</th>
+                    <th className="px-4 py-3 text-right font-semibold">Current list / unit</th>
+                    <th className="px-4 py-3 text-right font-semibold">At current list</th>
+                    <th className="px-4 py-3 text-right font-semibold">Difference</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {priceComparisonRows.map((row) => (
+                    <tr key={row.productId} className="text-slate-700">
+                      <td className="px-4 py-3">
+                        <span className="font-semibold text-slate-900">{row.name}</span>
+                        <span className="ml-2 text-xs text-slate-500">{row.category}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">{row.quantitySold} {row.unit}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(row.averageSellingUnitPrice)}</td>
+                      <td className="px-4 py-3 text-right font-medium tabular-nums">{formatCurrency(row.actualSellingRevenue)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {row.currentListedUnitPrice === null ? 'Unavailable' : formatCurrency(row.currentListedUnitPrice)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium tabular-nums">
+                        {row.currentListedValue === null ? '—' : formatCurrency(row.currentListedValue)}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-medium tabular-nums ${row.listedPriceDifference === null ? 'text-slate-400' : row.listedPriceDifference >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        {row.listedPriceDifference === null ? '—' : formatCurrency(row.listedPriceDifference)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="sticky bottom-0 bg-slate-50 font-semibold text-slate-900">
+                  <tr>
+                    <td colSpan={3} className="px-4 py-3">Totals</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(priceComparisonTotals.actualSellingRevenue)}</td>
+                    <td className="px-4 py-3" />
+                    <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(priceComparisonTotals.currentListedValue)}</td>
+                    <td className={`px-4 py-3 text-right tabular-nums ${priceComparisonTotals.listedPriceDifference >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {formatCurrency(priceComparisonTotals.listedPriceDifference)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+          {priceComparisonTotals.missingListedPriceCount > 0 && (
+            <p className="mt-3 text-xs text-amber-700">
+              {priceComparisonTotals.missingListedPriceCount} product(s) had no current catalog listing; their actual revenue is included, but no listed-price value or difference is available.
+            </p>
+          )}
+        </section>
 
         {/* Charts Row 2 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
