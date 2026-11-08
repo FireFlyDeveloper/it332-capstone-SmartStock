@@ -1320,9 +1320,9 @@ export const Analytics: React.FC = () => {
           {movementPage?.hasMore && <div ref={movementSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">More products are available below.</div>}
           </div>}
           {movementPage && <p className="text-xs text-slate-500">Showing {movementRows.length} of {movementPage.totalCount} products for {movementPeriodLabel}; stock movement uses its recorded UTC date, and fast-moving means {describeFastMovingCutoff(Number(movementThreshold))}.</p>}
-          {movementPage?.hasMore && <div className="flex justify-center py-3"><button type="button" onClick={() => void loadMoreMovement()} disabled={movementLoadingMore} className="rounded-lg border border-indigo-200 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">{movementLoadingMore ? 'Loading…' : movementLoadMoreError ? 'Retry loading products' : 'Load more products'}</button></div>}
+          {movementPage?.hasMore && typeof IntersectionObserver === 'undefined' && <div className="flex justify-center py-3"><button type="button" onClick={() => void loadMoreMovement()} disabled={movementLoadingMore} className="rounded-lg border border-indigo-200 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">{movementLoadingMore ? 'Loading…' : 'Load more products'}</button></div>}
           {movementLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more products…</p>}
-          {movementLoadMoreError && <p role="alert" className="text-center text-sm text-rose-700">{movementLoadMoreError}</p>}
+          {movementLoadMoreError && <div role="alert" className="text-center text-sm text-rose-700"><p>{movementLoadMoreError}</p><button type="button" onClick={() => void loadMoreMovement()} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
         </section>
 
         {/* Inventory and order snapshot */}
@@ -1338,7 +1338,7 @@ export const Analytics: React.FC = () => {
           {snapshotError && (
             <div role="alert" className="py-4 text-center text-sm text-rose-700">
               <p>{snapshotError}</p>
-              <button type="button" onClick={() => setSnapshotRetry((value) => value + 1)} className="mt-2 font-bold underline">Retry</button>
+              <button type="button" onClick={() => snapshotPage?.hasMore ? void loadMoreSnapshot() : setSnapshotRetry((value) => value + 1)} className="mt-2 font-bold underline">Retry</button>
             </div>
           )}
           <div ref={snapshotScrollerRef} className="max-h-96 overflow-auto rounded-xl border border-slate-100">
@@ -1379,7 +1379,7 @@ export const Analytics: React.FC = () => {
             </table></div>
             {snapshotPage?.hasMore && <div ref={snapshotSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">More products are available below.</div>}
           </div>
-          {snapshotPage?.hasMore && <div className="flex justify-center py-3"><button type="button" onClick={() => void loadMoreSnapshot()} disabled={snapshotLoadingMore} className="rounded-lg border border-indigo-200 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">{snapshotLoadingMore ? 'Loading…' : snapshotError ? 'Retry loading products' : 'Load more products'}</button></div>}
+          {snapshotPage?.hasMore && typeof IntersectionObserver === 'undefined' && <div className="flex justify-center py-3"><button type="button" onClick={() => void loadMoreSnapshot()} disabled={snapshotLoadingMore} className="rounded-lg border border-indigo-200 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">{snapshotLoadingMore ? 'Loading…' : 'Load more products'}</button></div>}
           {snapshotLoadingMore && <div role="status" className="py-3 text-center text-xs text-slate-400">Loading more products…</div>}
           {!snapshotLoading && !snapshotError && snapshotPage?.totalCount === 0 && (
             <p className="py-8 text-center text-sm text-slate-500">No products are available.</p>
