@@ -308,6 +308,7 @@ export async function listProductPageRecords(input: ProductPageInput) {
     totalInventoryValue: products.reduce((total, product) => total + product.stock * product.price, 0),
     glassInventoryValue: products.filter((product) => product.category === 'glass').reduce((total, product) => total + product.stock * product.price, 0),
     aluminumInventoryValue: products.filter((product) => product.category === 'aluminum').reduce((total, product) => total + product.stock * product.price, 0),
+    accessoryInventoryValue: products.filter((product) => product.category === 'accessory').reduce((total, product) => total + product.stock * product.price, 0),
     activeProductCount: products.filter((product) => product.status === 'active').length,
     activeGlassCount: products.filter((product) => product.status === 'active' && product.category === 'glass').length,
     activeAluminumCount: products.filter((product) => product.status === 'active' && product.category === 'aluminum').length,

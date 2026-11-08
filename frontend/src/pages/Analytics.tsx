@@ -562,11 +562,12 @@ export const Analytics: React.FC = () => {
 
   // Inventory statistics are aggregated by the backend over the full catalog.
   const totalInventoryValue = inventorySummary?.totalInventoryValue ?? 0;
-  const glassValue = inventorySummary?.glassInventoryValue ?? 0;
-  const aluminumValue = inventorySummary?.aluminumInventoryValue ?? 0;
-  const categoryListedPriceTotal = glassValue + aluminumValue;
-  const glassListedPriceShare = categoryListedPriceTotal > 0 ? glassValue / categoryListedPriceTotal * 100 : 0;
-  const aluminumListedPriceShare = categoryListedPriceTotal > 0 ? aluminumValue / categoryListedPriceTotal * 100 : 0;
+  const categoryListedPriceBreakdown = [
+    { label: 'Glass stock at list price', value: inventorySummary?.glassInventoryValue ?? 0, colorClass: 'bg-sky-500' },
+    { label: 'Aluminum stock at list price', value: inventorySummary?.aluminumInventoryValue ?? 0, colorClass: 'bg-emerald-500' },
+    { label: 'Accessory stock at list price', value: inventorySummary?.accessoryInventoryValue ?? 0, colorClass: 'bg-violet-500' },
+  ];
+  const categoryListedPriceTotal = categoryListedPriceBreakdown.reduce((total, item) => total + item.value, 0);
 
   const avgOrderValue = orderSummary?.averageOrderValue ?? 0;
   const lowStockCount = inventorySummary?.activeLowStockCount ?? 0;
@@ -1104,24 +1105,20 @@ export const Analytics: React.FC = () => {
               </div>
             </div>
             <div className="space-y-4 mt-4">
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-slate-600 font-medium">Glass stock at list price</span>
-                  <span className="font-bold text-slate-900">{formatCurrency(glassValue)}</span>
+              {categoryListedPriceBreakdown.map((item) => (
+                <div key={item.label}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-slate-600 font-medium">{item.label}</span>
+                    <span className="font-bold text-slate-900">{formatCurrency(item.value)}</span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-2">
+                    <div
+                      className={`${item.colorClass} h-2 rounded-full transition-all duration-500`}
+                      style={{ width: `${categoryListedPriceTotal > 0 ? item.value / categoryListedPriceTotal * 100 : 0}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-slate-100 rounded-full h-2">
-                  <div className="bg-sky-500 h-2 rounded-full transition-all duration-500" style={{ width: `${glassListedPriceShare}%` }} />
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-slate-600 font-medium">Aluminum stock at list price</span>
-                  <span className="font-bold text-slate-900">{formatCurrency(aluminumValue)}</span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-2">
-                  <div className="bg-emerald-500 h-2 rounded-full transition-all duration-500" style={{ width: `${aluminumListedPriceShare}%` }} />
-                </div>
-              </div>
+              ))}
             </div>
             <div className="mt-6 pt-4 border-t border-[#f1f5f9]">
               <div className="flex justify-between text-sm">

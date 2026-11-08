@@ -567,6 +567,7 @@ export interface ProductsPageResponse {
     totalInventoryValue: number
     glassInventoryValue: number
     aluminumInventoryValue: number
+    accessoryInventoryValue: number
     activeProductCount: number
     activeGlassCount: number
     activeAluminumCount: number

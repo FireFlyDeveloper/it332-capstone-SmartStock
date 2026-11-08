@@ -86,6 +86,7 @@ export async function listProductPageController(c: Context) {
         totalInventoryValue: Number(result.totalInventoryValue),
         glassInventoryValue: Number(result.glassInventoryValue),
         aluminumInventoryValue: Number(result.aluminumInventoryValue),
+        accessoryInventoryValue: Number(result.accessoryInventoryValue),
         activeProductCount: result.activeProductCount,
         activeGlassCount: result.activeGlassCount,
         activeAluminumCount: result.activeAluminumCount,

@@ -113,7 +113,7 @@ describe('product inventory routes', () => {
       page: { totalCount: number; hasMore: boolean; nextCursor: string | null };
       summary: {
         totalProducts: number; glassCount: number; aluminumCount: number; lowStockCount: number; outOfStockCount: number;
-        totalInventoryValue: number; glassInventoryValue: number; aluminumInventoryValue: number; activeProductCount: number;
+        totalInventoryValue: number; glassInventoryValue: number; aluminumInventoryValue: number; accessoryInventoryValue: number; activeProductCount: number;
         activeGlassCount: number; activeAluminumCount: number; activeLowStockCount: number; healthyStockCount: number;
         lowStockStatusCount: number; criticalStockCount: number; stockAlertProducts: { outOfStock: { id: string; name: string; stock: number; unit: string; threshold: number } | null; critical: { id: string; name: string; stock: number; unit: string; threshold: number } | null; low: { id: string; name: string; stock: number; unit: string; threshold: number } | null };
       };
@@ -121,7 +121,7 @@ describe('product inventory routes', () => {
     expect(firstBody.page).toMatchObject({ totalCount: 3, hasMore: true });
     expect(firstBody.summary).toEqual({
       totalProducts: 3, glassCount: 2, aluminumCount: 1, lowStockCount: 2, outOfStockCount: 1,
-      totalInventoryValue: 36300, glassInventoryValue: 30000, aluminumInventoryValue: 6300,
+      totalInventoryValue: 36300, glassInventoryValue: 30000, aluminumInventoryValue: 6300, accessoryInventoryValue: 0,
       activeProductCount: 3, activeGlassCount: 2, activeAluminumCount: 1, activeLowStockCount: 2,
       healthyStockCount: 1, lowStockStatusCount: 1, criticalStockCount: 0,
       stockAlertProducts: {
@@ -151,6 +151,32 @@ describe('product inventory routes', () => {
     expect((await app.request('/products?mode=page&category=wood', { headers })).status).toBe(400);
     expect((await app.request('/products?mode=page&stock=critical', { headers })).status).toBe(400);
     expect((await app.request('/products?mode=page&cursor=invalid', { headers })).status).toBe(400);
+  });
+
+  it('includes Accessory listed-price value in the paginated inventory summary', async () => {
+    const token = await login(app, ADMIN);
+    const created = await app.request('/products', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sku: 'ACCESSORY-ANALYTICS',
+        name: 'Analytics Accessory',
+        category: 'accessory',
+        unit: 'set',
+        stock: 3,
+        price: 40,
+        costPrice: 20,
+        threshold: 5,
+        status: 'active',
+      }),
+    });
+    expect(created.status).toBe(201);
+
+    const page = await app.request('/products?mode=page&limit=1', {
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(page.status).toBe(200);
+    expect((await page.json() as { summary: { accessoryInventoryValue: number } }).summary.accessoryInventoryValue).toBe(120);
   });
 
   it('blocks anonymous product access', async () => {

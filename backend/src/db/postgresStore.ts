@@ -123,6 +123,7 @@ export interface ProductsDbPage {
   totalInventoryValue: number;
   glassInventoryValue: number;
   aluminumInventoryValue: number;
+  accessoryInventoryValue: number;
   activeProductCount: number;
   activeGlassCount: number;
   activeAluminumCount: number;
@@ -274,6 +275,7 @@ export async function listProductsPageDb(input: {
         COALESCE(SUM(stock * unit_price), 0)::numeric AS total_inventory_value,
         COALESCE(SUM(stock * unit_price) FILTER (WHERE category = 'glass'), 0)::numeric AS glass_inventory_value,
         COALESCE(SUM(stock * unit_price) FILTER (WHERE category = 'aluminum'), 0)::numeric AS aluminum_inventory_value,
+        COALESCE(SUM(stock * unit_price) FILTER (WHERE category = 'accessory'), 0)::numeric AS accessory_inventory_value,
         COUNT(*) FILTER (WHERE status = 'active')::int AS active_product_count,
         COUNT(*) FILTER (WHERE status = 'active' AND category = 'glass')::int AS active_glass_count,
         COUNT(*) FILTER (WHERE status = 'active' AND category = 'aluminum')::int AS active_aluminum_count,
@@ -303,7 +305,7 @@ export async function listProductsPageDb(input: {
     )
     SELECT (SELECT COUNT(*)::int FROM filtered) AS filtered_count,
       summary.total_products, summary.glass_count, summary.aluminum_count, summary.low_stock_count, summary.out_of_stock_count,
-      summary.total_inventory_value, summary.glass_inventory_value, summary.aluminum_inventory_value,
+      summary.total_inventory_value, summary.glass_inventory_value, summary.aluminum_inventory_value, summary.accessory_inventory_value,
       summary.active_product_count, summary.active_glass_count, summary.active_aluminum_count, summary.active_low_stock_count,
       summary.healthy_stock_count, summary.low_stock_status_count, summary.critical_stock_count,
       stock_alerts.out_of_stock AS stock_alert_out_of_stock,
@@ -335,6 +337,7 @@ export async function listProductsPageDb(input: {
     totalInventoryValue: Number(row.total_inventory_value ?? 0),
     glassInventoryValue: Number(row.glass_inventory_value ?? 0),
     aluminumInventoryValue: Number(row.aluminum_inventory_value ?? 0),
+    accessoryInventoryValue: Number(row.accessory_inventory_value ?? 0),
     activeProductCount: Number(row.active_product_count ?? 0),
     activeGlassCount: Number(row.active_glass_count ?? 0),
     activeAluminumCount: Number(row.active_aluminum_count ?? 0),

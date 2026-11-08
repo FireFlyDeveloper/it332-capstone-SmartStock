@@ -62,14 +62,15 @@ describe('PostgreSQL product cursor query', () => {
   it('filters, summarizes and keyset-pages inventory products', async () => {
     database.query.mockResolvedValue({ rows: [{
       filtered_count: 3,
-      total_products: 4,
+      total_products: 5,
       glass_count: 2,
       aluminum_count: 2,
       low_stock_count: 1,
       out_of_stock_count: 0,
-      total_inventory_value: '36300',
+      total_inventory_value: '37500',
       glass_inventory_value: '30000',
       aluminum_inventory_value: '6300',
+      accessory_inventory_value: '1200',
       active_product_count: 3,
       active_glass_count: 2,
       active_aluminum_count: 1,
@@ -94,14 +95,15 @@ describe('PostgreSQL product cursor query', () => {
 
     expect(result).toMatchObject({
       totalCount: 3,
-      totalProducts: 4,
+      totalProducts: 5,
       glassCount: 2,
       aluminumCount: 2,
       lowStockCount: 1,
       outOfStockCount: 0,
-      totalInventoryValue: 36300,
+      totalInventoryValue: 37500,
       glassInventoryValue: 30000,
       aluminumInventoryValue: 6300,
+      accessoryInventoryValue: 1200,
       activeProductCount: 3,
       activeGlassCount: 2,
       activeAluminumCount: 1,
@@ -123,6 +125,7 @@ describe('PostgreSQL product cursor query', () => {
     expect(sql).toContain('POSITION(term IN LOWER(CONCAT_WS');
     expect(sql).toContain('name COLLATE "C" > $4::text COLLATE "C"');
     expect(sql).toContain('ORDER BY page_rows.name COLLATE "C" ASC');
+    expect(sql).toContain("SUM(stock * unit_price) FILTER (WHERE category = 'accessory')");
     expect(sql).toContain('LIMIT $6');
     expect(values).toEqual(['glass', 'low', ['clear', 'sheet'], 'Before', 'p-00', 2]);
   });
@@ -131,6 +134,7 @@ describe('PostgreSQL product cursor query', () => {
     database.query.mockResolvedValueOnce({ rows: [{
       filtered_count: 1,
       total_products: 1,
+      accessory_inventory_value: '1200',
       page_items: [{ ...product('accessory-01', 'Accessory item'), category: 'accessory' }],
     }] });
 
@@ -144,6 +148,7 @@ describe('PostgreSQL product cursor query', () => {
     });
 
     expect(result?.items).toMatchObject([{ category: 'accessory', sku: 'ACCESSORY-01' }]);
+    expect(result?.accessoryInventoryValue).toBe(1200);
     const [query, values] = database.query.mock.calls[0] as [string, unknown[]];
     expect(query).toContain("$1::text = 'all' OR p.category = $1::text");
     expect(values[0]).toBe('accessory');
