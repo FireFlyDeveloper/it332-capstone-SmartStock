@@ -2699,6 +2699,22 @@ export async function updateUserDb(
   return rows[0] ? rowToUser(rows[0]) : null;
 }
 
+export async function updateOwnUserProfileDb(
+  id: string,
+  updates: { email?: string; name?: string }
+): Promise<UserRecord | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const email = updates.email?.trim().toLowerCase() ?? null;
+  const name = updates.name?.trim() ?? null;
+  const { rows } = await pool.query(`
+    UPDATE users SET email = COALESCE($2, email), full_name = COALESCE($3, full_name), updated_at = NOW()
+    WHERE id = $1 AND deleted_at IS NULL
+    RETURNING *
+  `, [id, email, name]);
+  return rows[0] ? rowToUser(rows[0]) : null;
+}
+
 export async function deleteUserDb(id: string): Promise<boolean> {
   const pool = getPool();
   if (!pool) return false;
