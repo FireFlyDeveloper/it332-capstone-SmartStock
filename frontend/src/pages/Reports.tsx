@@ -18,7 +18,7 @@ import { formatCurrency, formatDate, formatDateInput } from '../utils/helpers';
 import { toast } from 'sonner';
 import { getProductsPage, apiFetchBlob, getAnalyticsPurchasesPage, getDemandForecastPage, getPolicyPerformancePage, getReportOrdersSummary, type ProductsPageResponse, type ApiError, type ReportOrdersSummary, type PurchaseAnalyticsPageResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
 import { compareObservedPolicyPeriods } from '../utils/policyPeriodComparison';
-import { buildReportDocumentHtml } from '../utils/reportDocument';
+import { buildReportDocumentHtml, printReportDocument } from '../utils/reportDocument';
 import { useAuth } from '../components/AuthContext';
 
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
@@ -413,13 +413,6 @@ export const Reports: React.FC = () => {
       return;
     }
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Allow pop-ups for SmartStock to open the report document.');
-      return;
-    }
-    printWindow.document.write('<!doctype html><title>Preparing SmartStock report…</title><p style="font:16px Arial;padding:24px">Preparing complete report document…</p>');
-    printWindow.document.close();
     setPrintPreparing(true);
     try {
       let purchaseGroups = purchaseData?.groups ?? [];
@@ -497,13 +490,9 @@ export const Reports: React.FC = () => {
           { title: 'Observed stock history', columns: ['Product', 'SKU', 'Unit', 'Tracking days', 'Average on hand', 'Days at/below level', 'Time at/below level', 'Out-of-stock days', 'Level changes', 'Restock-level periods'], rows: completeObservedRows.map((row) => [row.name, row.sku, row.unit, row.trackingDays, row.timeWeightedAverageOnHand ?? '—', row.daysAtOrBelowReorderPoint, row.percentTimeAtOrBelowReorderPoint === null ? '—' : `${row.percentTimeAtOrBelowReorderPoint}%`, row.outOfStockDays, row.reorderPointChanges, (row.policyPeriods ?? []).map((period) => `${period.reorderPoint}: ${formatDate(period.startedAt)}–${period.endedAt ? formatDate(period.endedAt) : 'Current'}`).join('; ') || 'No tracked periods']) },
         ],
       });
-      printWindow.document.open();
-      printWindow.document.write(html);
-      printWindow.document.close();
-      printWindow.focus();
-      toast.info('Prepared a standalone report document for printing.');
+      await printReportDocument(html);
+      toast.info('Print dialog opened. Choose a printer or Save as PDF.');
     } catch (error) {
-      printWindow.close();
       toast.error(error instanceof Error ? `Could not prepare the complete report for printing: ${error.message}` : 'Could not prepare the complete report for printing.');
     } finally {
       setPrintPreparing(false);
