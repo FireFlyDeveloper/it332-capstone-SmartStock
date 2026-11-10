@@ -14,14 +14,14 @@ import {
   Banknote
 } from 'lucide-react';
 
-import { formatCurrency, formatDate, formatDateInput } from '../utils/helpers';
+import { formatCurrency, formatDate } from '../utils/helpers';
+import { getDateRangeForPreset, type DateRangePreset, type QuickDateRangePreset } from '../utils/dateRange';
 import { toast } from 'sonner';
 import { getProductsPage, apiFetchBlob, getAnalyticsPurchasesPage, getDemandForecastPage, getPolicyPerformancePage, getReportOrdersSummary, type ProductsPageResponse, type ApiError, type ReportOrdersSummary, type PurchaseAnalyticsPageResponse, type DemandForecastPageResponse, type DemandForecastProduct, type PolicyPerformancePageResponse } from '../api';
 import { compareObservedPolicyPeriods } from '../utils/policyPeriodComparison';
 import { buildReportDocumentHtml, printReportDocument } from '../utils/reportDocument';
 import { useAuth } from '../components/AuthContext';
 
-type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 type ExportType = 'sales' | 'purchases' | 'inventory' | 'spending';
 
 const STOCK_CHECK_LABELS: Record<DemandForecastProduct['policyAssessment'], string> = {
@@ -105,9 +105,10 @@ const ReportCard: React.FC<ReportCardProps> = ({
 export const Reports: React.FC = () => {
   const navigate = useNavigate();
   const { canExportReports } = useAuth();
-  const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
+  const [defaultDateRange] = useState(() => getDateRangeForPreset('30d'));
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('30d');
+  const [fromDate, setFromDate] = useState(defaultDateRange.fromDate);
+  const [toDate, setToDate] = useState(defaultDateRange.toDate);
   const [exportType, setExportType] = useState<ExportType>('sales');
   const [generatedAt] = useState(() => new Date().toLocaleString());
   const [purchaseYear, setPurchaseYear] = useState(String(new Date().getFullYear()));
@@ -348,42 +349,34 @@ export const Reports: React.FC = () => {
     return () => observer.disconnect();
   }, [observedPolicy?.page.hasMore, observedPolicyLoading, observedPolicyLoadingMore, observedPolicyLoadMoreError, loadMoreObservedPolicy]);
 
-  const dateRangeAnchor = new Date();
-
-  const handleDatePreset = (preset: '7d' | '30d' | 'all') => {
+  const handleDatePreset = (preset: QuickDateRangePreset) => {
     setDatePreset(preset);
-    if (preset === 'all') {
-      setFromDate('');
-      setToDate('');
-      toast.info('Showing all-time records.');
-    } else {
-      const end = new Date(dateRangeAnchor);
-      const start = new Date(dateRangeAnchor);
-      const days = preset === '7d' ? 7 : 30;
-      start.setDate(start.getDate() - days);
-      const startStr = formatDateInput(start);
-      const endStr = formatDateInput(end);
-      setFromDate(startStr);
-      setToDate(endStr);
-      toast.success(`Filtered to last ${days} days (${startStr} to ${endStr})`);
-    }
+    const range = getDateRangeForPreset(preset);
+    setFromDate(range.fromDate);
+    setToDate(range.toDate);
+    toast.success(`Filtered to last ${range.days} days (${range.fromDate} to ${range.toDate})`);
   };
 
   const handleFromDateChange = (val: string) => {
+    if (!val && !toDate) {
+      handleDatePreset('30d');
+      return;
+    }
     setFromDate(val);
     setDatePreset('custom');
   };
 
   const handleToDateChange = (val: string) => {
+    if (!val && !fromDate) {
+      handleDatePreset('30d');
+      return;
+    }
     setToDate(val);
     setDatePreset('custom');
   };
 
   const handleClearDates = () => {
-    setFromDate('');
-    setToDate('');
-    setDatePreset('all');
-    toast.info('Date filters cleared.');
+    handleDatePreset('30d');
   };
 
   const availablePolicyRows = policyRows;
@@ -400,7 +393,7 @@ export const Reports: React.FC = () => {
   const totalInventoryValue = inventorySummary?.totalInventoryValue ?? 0;
   const reportPeriodLabel = fromDate || toDate
     ? `${fromDate || 'Earliest available'} to ${toDate || 'Today'}`
-    : 'All available dates';
+    : 'No date range selected';
 
   const handlePrint = async () => {
     if (purchaseLoading || purchaseLoadingMore || policyLoading || policyLoadingMore || observedPolicyLoading || observedPolicyLoadingMore || orderSummaryLoading || inventorySummaryLoading) {
@@ -635,7 +628,6 @@ export const Reports: React.FC = () => {
                 }}
                 className="input w-full sm:w-44"
               >
-                <option value="all">All time</option>
                 <option value="30d">Last 30 days</option>
                 <option value="7d">Last 7 days</option>
                 <option value="custom">Custom range</option>
@@ -670,15 +662,15 @@ export const Reports: React.FC = () => {
                 />
               </div>
 
-              {(fromDate || toDate) && (
+              {datePreset !== '30d' && (fromDate || toDate) && (
                 <button
                   type="button"
                   onClick={handleClearDates}
-                  title="Clear date filters"
+                  title="Reset date range to the last 30 days"
                   className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/70 transition-colors shadow-2xs"
                 >
                   <X className="w-3.5 h-3.5" />
-                  <span>Clear</span>
+                  <span>Reset</span>
                 </button>
               )}
             </div>

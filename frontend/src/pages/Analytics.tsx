@@ -14,7 +14,8 @@ import {
   Banknote
 } from 'lucide-react';
 
-import { formatCurrency, formatDateInput } from '../utils/helpers';
+import { formatCurrency } from '../utils/helpers';
+import { getDateRangeForPreset, type DateRangePreset, type QuickDateRangePreset } from '../utils/dateRange';
 import { formatCalendarMonth, latestConsecutiveCompleteMonths } from '../utils/monthlyTrend';
 import InsightBreakdown from '../components/InsightBreakdown';
 import { getAnalyticsInsights, getAnalyticsItemMovementPage, getAnalyticsMonthlyMovement, getAnalyticsOrderSummary, getAnalyticsPurchasesPage, getDemandForecastPage, getProductsPage, type AnalyticsInsightsResponse, type AnalyticsMonthlyMovementResponse, type AnalyticsItemMovementPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse, type PurchaseAnalyticsPageResponse } from '../api';
@@ -37,7 +38,6 @@ import {
 
 const EMPTY_PRICE_COMPARISON_ROWS: AnalyticsOrderSummary['priceComparisonByProduct'] = [];
 
-type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 type MovementPeriodMode = 'month' | 'range';
 
 function formatStockCheck(value: DemandForecastProduct['policyAssessment']): string {
@@ -69,7 +69,7 @@ function formatMonthlyLabel(month: string): string {
 }
 
 function formatAnalyticsDateRange(fromDate: string, toDate: string): string {
-  if (!fromDate && !toDate) return 'All time';
+  if (!fromDate && !toDate) return 'No date range selected';
   return `${fromDate || 'Any date'} to ${toDate || 'Any date'}`;
 }
 
@@ -107,15 +107,16 @@ function simplifyInsightText(text: string): string {
 
 export const Analytics: React.FC = () => {
   const navigate = useNavigate();
-  const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
+  const [defaultDateRange] = useState(() => getDateRangeForPreset('30d'));
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('30d');
   const [monthlyMovement, setMonthlyMovement] = useState<AnalyticsMonthlyMovementResponse | null>(null);
   const [monthlyMovementUnit, setMonthlyMovementUnit] = useState('');
   const [monthlyMovementLoading, setMonthlyMovementLoading] = useState(true);
   const [monthlyMovementError, setMonthlyMovementError] = useState('');
   const [monthlyMovementRetry, setMonthlyMovementRetry] = useState(0);
   const monthlyMovementRequestRef = useRef(0);
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
+  const [fromDate, setFromDate] = useState(defaultDateRange.fromDate);
+  const [toDate, setToDate] = useState(defaultDateRange.toDate);
   const [orderSummary, setOrderSummary] = useState<AnalyticsOrderSummary | null>(null);
   const [orderSummaryLoading, setOrderSummaryLoading] = useState(true);
   const [orderSummaryError, setOrderSummaryError] = useState('');
@@ -374,7 +375,7 @@ export const Analytics: React.FC = () => {
     getAnalyticsItemMovementPage({
       ...(movementPeriodMode === 'month'
         ? { month: movementMonth }
-        : { fromDate: fromDate || undefined, toDate: toDate || undefined, allTime: !fromDate && !toDate }),
+        : { fromDate: fromDate || undefined, toDate: toDate || undefined }),
       threshold,
       limit: 25,
     })
@@ -406,7 +407,7 @@ export const Analytics: React.FC = () => {
       const response = await getAnalyticsItemMovementPage({
         ...(movementPeriodMode === 'month'
           ? { month: movementMonth }
-          : { fromDate: fromDate || undefined, toDate: toDate || undefined, allTime: !fromDate && !toDate }),
+          : { fromDate: fromDate || undefined, toDate: toDate || undefined }),
         threshold,
         limit: 25,
         cursor: movementPage.nextCursor,
@@ -460,40 +461,34 @@ export const Analytics: React.FC = () => {
     }
   }, [fromDate, toDate, movementThreshold]);
 
-  const handleDatePreset = (preset: '7d' | '30d' | 'all') => {
+  const handleDatePreset = (preset: QuickDateRangePreset) => {
     setDatePreset(preset);
-    if (preset === 'all') {
-      setFromDate('');
-      setToDate('');
-      toast.info('Showing all-time analytics.');
-    } else {
-      const end = new Date();
-      const start = new Date(end);
-      const days = preset === '7d' ? 7 : 30;
-      start.setDate(start.getDate() - (days - 1));
-      const startStr = formatDateInput(start);
-      const endStr = formatDateInput(end);
-      setFromDate(startStr);
-      setToDate(endStr);
-      toast.success(`Filtered to last ${days} days (${startStr} to ${endStr})`);
-    }
+    const range = getDateRangeForPreset(preset);
+    setFromDate(range.fromDate);
+    setToDate(range.toDate);
+    toast.success(`Filtered to last ${range.days} days (${range.fromDate} to ${range.toDate})`);
   };
 
   const handleFromDateChange = (val: string) => {
+    if (!val && !toDate) {
+      handleDatePreset('30d');
+      return;
+    }
     setFromDate(val);
     setDatePreset('custom');
   };
 
   const handleToDateChange = (val: string) => {
+    if (!val && !fromDate) {
+      handleDatePreset('30d');
+      return;
+    }
     setToDate(val);
     setDatePreset('custom');
   };
 
   const handleClearDates = () => {
-    setFromDate('');
-    setToDate('');
-    setDatePreset('all');
-    toast.info('Date filters cleared.');
+    handleDatePreset('30d');
   };
 
   useEffect(() => {
@@ -744,7 +739,6 @@ export const Analytics: React.FC = () => {
                 }}
                 className="input w-full sm:w-44"
               >
-                <option value="all">All time</option>
                 <option value="30d">Last 30 days</option>
                 <option value="7d">Last 7 days</option>
                 <option value="custom">Custom range</option>
@@ -779,15 +773,15 @@ export const Analytics: React.FC = () => {
                 />
               </div>
 
-              {(fromDate || toDate) && (
+              {datePreset !== '30d' && (fromDate || toDate) && (
                 <button
                   type="button"
                   onClick={handleClearDates}
-                  title="Clear date filters"
+                  title="Reset date range to the last 30 days"
                   className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/70 transition-colors shadow-2xs"
                 >
                   <X className="w-3.5 h-3.5" />
-                  <span>Clear</span>
+                  <span>Reset</span>
                 </button>
               )}
 
