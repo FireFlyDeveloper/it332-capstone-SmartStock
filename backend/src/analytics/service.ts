@@ -6,7 +6,7 @@
  */
 
 import { isDbSyncActive } from '../db/syncState.js';
-import { getAnalyticsOrderSummaryDb, getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listItemMovementPageDb, listMonthlySalesTrendDb, listMonthlyStockMovementAggregatesDb, listOutboundMovementByUnitDb, listRecentActivityDb, listInsightMovementSummaryDb, listInsightPurchaseSummaryDb, listInsightYtdPurchaseSummaryDb, listInsightInventorySummaryDb } from '../db/postgresStore.js';
+import { getAnalyticsOrderSummaryDb, getDashboardOrderSummaryDb, listAnnualPurchasesPageDb, listDemandForecastPageDb, listDemandForecastMonthlyHistoryDb, listItemMovementPageDb, listMonthlySalesTrendDb, listMonthlyStockMovementAggregatesDb, listOutboundMovementByUnitDb, listRecentActivityDb, listInsightMovementSummaryDb, listInsightPurchaseSummaryDb, listInsightYtdPurchaseSummaryDb, listInsightInventorySummaryDb } from '../db/postgresStore.js';
 import { listProducts, listProductMovements } from '../inventory/store.js';
 import { listOrders } from '../orders/store.js';
 import { buildInventoryInsightSummary } from '../inventory/service.js';
@@ -26,6 +26,8 @@ import {
   paginateItemMovement,
   simpleExponentialSmoothingForecast,
   buildDemandForecast,
+  buildDemandForecastBacktest,
+  buildDemandForecastBacktestFromMonthlyHistory,
   DEMAND_FORECAST_ASSUMPTION,
   paginateDemandForecast,
   paginateAnnualPurchaseSummary,
@@ -234,6 +236,23 @@ export async function getItemMovementPage(
 
 export function getDemandForecast(historyMonths = 12, now = new Date()) {
   return buildDemandForecast(listOrders(), listProducts(), historyMonths, now);
+}
+
+export async function getDemandForecastBacktest(
+  productId: string,
+  backtestMonths = 6,
+  historyMonths = 12,
+  now = new Date(),
+) {
+  if (!productId.trim() || productId.length > 64) throw new Error('productId is required and must not exceed 64 characters');
+  if (isDbSyncActive()) {
+    const monthlyHistory = await listDemandForecastMonthlyHistoryDb({ now, productId, backtestMonths, historyMonths });
+    if (monthlyHistory === null) throw new Error('PostgreSQL is unavailable for demand-forecast backtesting');
+    if (monthlyHistory.length === 0) return null;
+    return buildDemandForecastBacktestFromMonthlyHistory(productId, monthlyHistory, backtestMonths, historyMonths, now);
+  }
+  if (!listProducts().some((product) => product.id === productId)) return null;
+  return buildDemandForecastBacktest(listOrders(), productId, backtestMonths, historyMonths, now);
 }
 
 export async function getDemandForecastPage(historyMonths: number, limit: number, cursor: DemandForecastCursor | null, now = new Date()) {

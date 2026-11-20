@@ -25,6 +25,19 @@ export interface DashboardMonthlySalesTrendRow {
 
 export type DashboardSalesRange = '6M' | '1Y' | 'ALL';
 
+export interface ProductPriceComparisonRow {
+  productId: string;
+  name: string;
+  category: string;
+  unit: string;
+  quantitySold: number;
+  averageSellingUnitPrice: number;
+  actualSellingRevenue: number;
+  currentListedUnitPrice: number | null;
+  currentListedValue: number | null;
+  listedPriceDifference: number | null;
+}
+
 export interface AnalyticsOrderSummary {
   totalOrderCount: number;
   averageOrderValue: number;
@@ -32,6 +45,7 @@ export interface AnalyticsOrderSummary {
   mostOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>;
   leastOrderedItems: Array<{ name: string; category: string; stock: number; unitsOrdered: number; status: string }>;
   orderedQuantities: Record<string, number>;
+  priceComparisonByProduct: ProductPriceComparisonRow[];
   salesTrendData: Array<{
     month: string;
     sales: number;
@@ -172,6 +186,53 @@ function monthFromOrdinal(ordinal: number): string {
   return `${Math.floor(ordinal / 12).toString().padStart(4, '0')}-${String(ordinal % 12 + 1).padStart(2, '0')}`;
 }
 
+export function buildProductPriceComparison(orders: Order[], products: Product[]): ProductPriceComparisonRow[] {
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const totals = new Map<string, {
+    productId: string;
+    name: string;
+    category: string;
+    unit: string;
+    quantitySold: number;
+    actualSellingRevenue: number;
+    currentListedUnitPrice: number | null;
+  }>();
+
+  for (const order of orders) {
+    if (order.orderStatus !== 'delivered') continue;
+    for (const line of order.items) {
+      const product = productById.get(line.productId);
+      const row = totals.get(line.productId) ?? {
+        productId: line.productId,
+        name: product?.name ?? line.name,
+        category: product?.category ?? 'Unclassified',
+        unit: product?.unit?.trim() || 'unknown',
+        quantitySold: 0,
+        actualSellingRevenue: 0,
+        currentListedUnitPrice: product?.price ?? null,
+      };
+      row.quantitySold += line.quantity;
+      row.actualSellingRevenue += line.quantity * line.unitPrice;
+      totals.set(line.productId, row);
+    }
+  }
+
+  return [...totals.values()].map((row) => {
+    const actualSellingRevenue = roundTwo(row.actualSellingRevenue);
+    const currentListedValue = row.currentListedUnitPrice === null
+      ? null
+      : roundTwo(row.quantitySold * row.currentListedUnitPrice);
+    return {
+      ...row,
+      averageSellingUnitPrice: row.quantitySold > 0 ? roundTwo(row.actualSellingRevenue / row.quantitySold) : 0,
+      actualSellingRevenue,
+      currentListedValue,
+      listedPriceDifference: currentListedValue === null ? null : roundTwo(currentListedValue - actualSellingRevenue),
+    };
+  }).sort((left, right) => right.actualSellingRevenue - left.actualSellingRevenue
+    || (left.productId < right.productId ? -1 : left.productId > right.productId ? 1 : 0));
+}
+
 export function buildAnalyticsOrderSummary(
   orders: Order[], products: Product[], fromDate?: string, toDate?: string, now = new Date(),
 ): AnalyticsOrderSummary {
@@ -269,6 +330,7 @@ export function buildAnalyticsOrderSummary(
     mostOrderedItems,
     leastOrderedItems,
     orderedQuantities,
+    priceComparisonByProduct: buildProductPriceComparison(filtered, products),
     salesTrendData: monthlyTrend,
     deliveryDateMonthlySeries: buildDeliveryDateMonthlySeries(filtered, fromDate, toDate),
     aiProductRankings: buildInsightProductRankings(orders, products, fromDate, toDate),
@@ -948,6 +1010,101 @@ export function buildDemandForecast(orders: Order[], products: Product[], histor
       belowReorderPoint: reportProducts.filter((p) => p.policyAssessment === 'below_reorder_point').length,
       recommendedOrderQuantity: reportProducts.reduce((sum, p) => sum + (p.recommendedOrderQuantity ?? 0), 0) },
   };
+}
+
+export interface DemandForecastBacktestPeriod {
+  month: string;
+  positiveHistoryMonths: number;
+  forecastQuantity: number | null;
+  actualQuantity: number;
+  absoluteError: number | null;
+}
+
+export interface DemandForecastBacktest {
+  productId: string;
+  method: 'simple_exponential_smoothing';
+  alpha: 0.3;
+  historyMonths: number;
+  minimumPositiveMonths: 3;
+  salesDateBasis: 'delivered_order_created_month_utc';
+  generatedAt: string;
+  periods: DemandForecastBacktestPeriod[];
+  summary: { evaluatedMonths: number; meanAbsoluteError: number | null };
+}
+
+export function buildDemandForecastBacktestFromMonthlyHistory(
+  productId: string,
+  monthlyHistory: MonthlyQuantity[],
+  backtestMonths = 6,
+  historyMonths = 12,
+  now = new Date(),
+): DemandForecastBacktest {
+  if (!Number.isInteger(backtestMonths) || backtestMonths < 1 || backtestMonths > 12) throw new Error('backtestMonths must be an integer between 1 and 12');
+  if (!Number.isInteger(historyMonths) || historyMonths < 1 || historyMonths > 60) throw new Error('historyMonths must be an integer between 1 and 60');
+  const quantities = new Map(monthlyHistory.map(({ month, quantity }) => [month, quantity]));
+  const targetMonths = completeMonthKeys(now, backtestMonths);
+  const periods = targetMonths.map((month): DemandForecastBacktestPeriod => {
+    const [year, monthNumber] = month.split('-').map(Number);
+    const firstHistoryMonth = new Date(Date.UTC(year, monthNumber - 1 - historyMonths, 1));
+    const history = Array.from({ length: historyMonths }, (_, index) => {
+      const historyMonth = new Date(Date.UTC(firstHistoryMonth.getUTCFullYear(), firstHistoryMonth.getUTCMonth() + index, 1)).toISOString().slice(0, 7);
+      return { month: historyMonth, quantity: quantities.get(historyMonth) ?? 0 };
+    });
+    const positiveHistoryMonths = history.filter((entry) => entry.quantity > 0).length;
+    const forecastQuantity = positiveHistoryMonths >= 3
+      ? simpleExponentialSmoothingForecast(history.map((entry) => entry.quantity)).forecast
+      : null;
+    const actualQuantity = quantities.get(month) ?? 0;
+    return {
+      month,
+      positiveHistoryMonths,
+      forecastQuantity,
+      actualQuantity,
+      absoluteError: forecastQuantity === null ? null : roundTwo(Math.abs(forecastQuantity - actualQuantity)),
+    };
+  });
+  const errors = periods.flatMap((period) => period.absoluteError === null ? [] : [period.absoluteError]);
+  return {
+    productId,
+    method: 'simple_exponential_smoothing',
+    alpha: 0.3,
+    historyMonths,
+    minimumPositiveMonths: 3,
+    salesDateBasis: 'delivered_order_created_month_utc',
+    generatedAt: now.toISOString(),
+    periods,
+    summary: {
+      evaluatedMonths: errors.length,
+      meanAbsoluteError: errors.length ? roundTwo(errors.reduce((sum, value) => sum + value, 0) / errors.length) : null,
+    },
+  };
+}
+
+export function buildDemandForecastBacktest(
+  orders: Order[],
+  productId: string,
+  backtestMonths = 6,
+  historyMonths = 12,
+  now = new Date(),
+): DemandForecastBacktest {
+  if (!Number.isInteger(backtestMonths) || backtestMonths < 1 || backtestMonths > 12) throw new Error('backtestMonths must be an integer between 1 and 12');
+  if (!Number.isInteger(historyMonths) || historyMonths < 1 || historyMonths > 60) throw new Error('historyMonths must be an integer between 1 and 60');
+  const firstMonth = completeMonthKeys(now, backtestMonths + historyMonths)[0];
+  const quantities = new Map<string, number>();
+  for (const order of orders) {
+    if (order.orderStatus !== 'delivered') continue;
+    const month = monthKey(order.createdAt);
+    if (month < firstMonth || month >= now.toISOString().slice(0, 7)) continue;
+    for (const item of order.items) {
+      if (item.productId === productId) quantities.set(month, (quantities.get(month) ?? 0) + item.quantity);
+    }
+  }
+  const monthlyHistory = Array.from({ length: backtestMonths + historyMonths }, (_, index) => {
+    const [year, month] = firstMonth.split('-').map(Number);
+    const monthKeyValue = new Date(Date.UTC(year, month - 1 + index, 1)).toISOString().slice(0, 7);
+    return { month: monthKeyValue, quantity: quantities.get(monthKeyValue) ?? 0 };
+  });
+  return buildDemandForecastBacktestFromMonthlyHistory(productId, monthlyHistory, backtestMonths, historyMonths, now);
 }
 
 export interface DemandForecastCursor { name: string; productId: string }

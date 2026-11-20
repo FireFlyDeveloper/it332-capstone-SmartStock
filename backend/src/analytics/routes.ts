@@ -21,6 +21,7 @@ import {
   getSalesTrends,
   getDemandForecast,
   getDemandForecastPage,
+  getDemandForecastBacktest,
 } from './service.js';
 import type { AnnualPurchaseCursor, DashboardSalesRange, DemandForecastCursor, ItemMovementCursor } from './analytics.js';
 
@@ -61,6 +62,27 @@ analyticsRoutes.get('/demand-forecast/page', requireRole('admin'), async (c) => 
     ? Buffer.from(JSON.stringify(result.page.nextCursor)).toString('base64url')
     : null;
   return c.json({ ...result, page: { ...result.page, nextCursor } });
+});
+
+analyticsRoutes.get('/demand-forecast/backtest', requireRole('admin'), async (c) => {
+  const productId = c.req.query('productId') ?? '';
+  if (!productId.trim() || productId.length > 64) return c.json({ error: 'productId is required and must not exceed 64 characters' }, 400);
+  const rawMonths = c.req.query('months');
+  const months = rawMonths === undefined ? 6 : Number(rawMonths);
+  if (!Number.isInteger(months) || months < 1 || months > 12) return c.json({ error: 'months must be an integer between 1 and 12' }, 400);
+  const rawHistoryMonths = c.req.query('historyMonths');
+  const historyMonths = rawHistoryMonths === undefined ? 12 : Number(rawHistoryMonths);
+  if (!Number.isInteger(historyMonths) || historyMonths < 1 || historyMonths > 60) {
+    return c.json({ error: 'historyMonths must be an integer between 1 and 60' }, 400);
+  }
+  try {
+    const result = await getDemandForecastBacktest(productId, months, historyMonths);
+    if (!result) return c.json({ error: 'Product not found' }, 404);
+    return c.json(result);
+  } catch (error) {
+    console.error('[analytics/demand-forecast/backtest] Failed:', error instanceof Error ? error.message : 'unknown error');
+    return c.json({ error: 'The forecast backtest could not be prepared.' }, 503);
+  }
 });
 
 analyticsRoutes.get('/demand-forecast', requireRole('admin'), (c) => {

@@ -220,6 +220,7 @@ describe('AI insight generation', () => {
     expect(serialized).not.toContain('"sku":');
     expect(serialized).not.toContain('"referenceNo":');
     expect(serialized).not.toContain('"orderedQuantities":');
+    expect(serialized).not.toContain('"priceComparisonByProduct":');
     expect(serialized).not.toContain('"productId":');
     expect(serialized).not.toContain('"supplier":');
     expect(serialized).toContain('AI Glass'); // bounded display label in the requested product ranking

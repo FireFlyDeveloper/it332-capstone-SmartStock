@@ -6,7 +6,7 @@ vi.mock('./client.js', () => ({
   getPool: () => database.available ? { query: database.query } : null,
 }));
 
-import { listDemandForecastPageDb } from './postgresStore.js';
+import { listDemandForecastPageDb, listDemandForecastMonthlyHistoryDb } from './postgresStore.js';
 
 const forecastRow = (product_id: string, name: string, forecast_quantity: number) => ({
   product_id,
@@ -88,6 +88,31 @@ describe('PostgreSQL demand forecast cursor query', () => {
     expect(result?.page).toEqual({ limit: 1, totalCount: 3, hasMore: false, nextCursor: null });
     const [, values] = database.query.mock.calls[0] as [string, unknown[]];
     expect(values).toEqual([now, 4, 'Beta', 'p-2', 2]);
+  });
+
+  it('loads only aggregate monthly sales for one product without exposing order records', async () => {
+    const now = new Date('2026-11-20T08:00:00.000Z');
+    database.query.mockResolvedValue({ rows: [{
+      product_id: 'p-1',
+      monthly_history: [{ month: '2026-09', quantity: 12 }, { month: '2026-10', quantity: 8 }],
+    }] });
+
+    const result = await listDemandForecastMonthlyHistoryDb({ now, productId: 'p-1', backtestMonths: 6, historyMonths: 12 });
+
+    expect(result).toEqual([{ month: '2026-09', quantity: 12 }, { month: '2026-10', quantity: 8 }]);
+    const [sql, values] = database.query.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("o.order_status = 'delivered'");
+    expect(sql).toContain("item.value->>'productId' = $2::text");
+    expect(sql).toContain('date_trunc(\'month\', (o.created_at AT TIME ZONE \'UTC\'))');
+    expect(sql).not.toContain('customer_name');
+    expect(values).toEqual([now, 'p-1', 18]);
+  });
+
+  it('returns an empty monthly history for an unknown product and null when PostgreSQL is unavailable', async () => {
+    database.query.mockResolvedValue({ rows: [] });
+    await expect(listDemandForecastMonthlyHistoryDb({ now: new Date(), productId: 'missing', backtestMonths: 6, historyMonths: 12 })).resolves.toEqual([]);
+    database.available = false;
+    await expect(listDemandForecastMonthlyHistoryDb({ now: new Date(), productId: 'p-1', backtestMonths: 6, historyMonths: 12 })).resolves.toBeNull();
   });
 
   it('returns null when PostgreSQL is unavailable', async () => {
