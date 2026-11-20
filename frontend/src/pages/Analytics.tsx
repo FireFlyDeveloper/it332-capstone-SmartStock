@@ -18,6 +18,7 @@ import { formatCurrency } from '../utils/helpers';
 import { getDateRangeForPreset, type DateRangePreset, type QuickDateRangePreset } from '../utils/dateRange';
 import { formatCalendarMonth, latestConsecutiveCompleteMonths } from '../utils/monthlyTrend';
 import InsightBreakdown from '../components/InsightBreakdown';
+import DemandForecastEvidence from '../components/DemandForecastEvidence';
 import { getAnalyticsInsights, getAnalyticsItemMovementPage, getAnalyticsMonthlyMovement, getAnalyticsOrderSummary, getAnalyticsPurchasesPage, getDemandForecastPage, getProductsPage, type AnalyticsInsightsResponse, type AnalyticsMonthlyMovementResponse, type AnalyticsItemMovementPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse, type PurchaseAnalyticsPageResponse } from '../api';
 import { toast } from 'sonner';
 import { 
@@ -1503,6 +1504,7 @@ export const Analytics: React.FC = () => {
             </div>
           </div>
           
+          {!forecastLoading && !forecastError && availableForecastRows.length > 0 && <DemandForecastEvidence products={availableForecastRows} />}
           <div className="mb-6 overflow-hidden rounded-2xl border border-violet-100/80 bg-white shadow-2xs">
             <div className="border-b border-violet-100 bg-violet-50/60 p-4 text-xs text-slate-600">
               {forecastMetadata ? <><p className="font-semibold text-slate-700">Method: {forecastMetadata.method === 'simple_exponential_smoothing' ? 'Simple Exponential Smoothing (SES)' : forecastMetadata.method} · α = {forecastMetadata.alpha} · {forecastMetadata.horizonMonths}-month forecast horizon.</p><p className="mt-1">History: up to the previous {forecastMetadata.historyMonths} complete UTC calendar months. Delivered orders are grouped by their order-created month, independent of this page’s delivery-date filter. A product needs sales in at least {forecastMetadata.minimumPositiveMonths} different months.</p><p className="mt-1">{forecastMetadata.assumption}</p></> : <p>Loading forecast method and history details…</p>}

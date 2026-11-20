@@ -1260,6 +1260,50 @@ export async function listDemandForecastPageDb(input: {
   };
 }
 
+export async function listDemandForecastMonthlyHistoryDb(input: {
+  now: Date;
+  productId: string;
+  backtestMonths: number;
+  historyMonths: number;
+}): Promise<Array<{ month: string; quantity: number }> | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query(`
+    WITH bounds AS (
+      SELECT date_trunc('month', ($1::timestamptz AT TIME ZONE 'UTC')) AS current_month,
+        date_trunc('month', ($1::timestamptz AT TIME ZONE 'UTC')) - ($3::int * INTERVAL '1 month') AS start_month
+    ), months AS (
+      SELECT generate_series(bounds.start_month, bounds.current_month - INTERVAL '1 month', INTERVAL '1 month')::date AS month
+      FROM bounds
+    ), order_lines AS (
+      SELECT date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))::date AS month,
+        SUM((item.value->>'quantity')::int)::int AS quantity
+      FROM orders o
+      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS item(value)
+      CROSS JOIN bounds
+      WHERE o.deleted_at IS NULL AND o.order_status = 'delivered'
+        AND item.value->>'productId' = $2::text
+        AND o.created_at >= (bounds.start_month AT TIME ZONE 'UTC')
+        AND o.created_at < (bounds.current_month AT TIME ZONE 'UTC')
+      GROUP BY date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))::date
+    )
+    SELECT p.id::text AS product_id,
+      jsonb_agg(jsonb_build_object('month', to_char(m.month, 'YYYY-MM'), 'quantity', COALESCE(ol.quantity, 0)::int) ORDER BY m.month) AS monthly_history
+    FROM products p
+    CROSS JOIN months m
+    LEFT JOIN order_lines ol ON ol.month = m.month
+    WHERE p.id::text = $2::text AND p.deleted_at IS NULL
+    GROUP BY p.id
+  `, [input.now, input.productId, input.backtestMonths + input.historyMonths]);
+  const row = rows[0] as { product_id?: unknown; monthly_history?: unknown } | undefined;
+  if (!row) return [];
+  const history = typeof row.monthly_history === 'string' ? JSON.parse(row.monthly_history) : row.monthly_history;
+  return (Array.isArray(history) ? history : []).map((entry: Record<string, unknown>) => ({
+    month: String(entry.month),
+    quantity: Number(entry.quantity ?? 0),
+  }));
+}
+
 const NOTIFICATION_FEED_CTE = `WITH notification_feed AS NOT MATERIALIZED (
   SELECT 'stock-' || p.id AS id, 'stock'::text AS type, 0::int AS type_rank,
     CASE WHEN p.stock = 0 OR (p.stock > 0 AND p.stock <= p.threshold * 0.5) THEN 'critical' ELSE 'warning' END AS severity,

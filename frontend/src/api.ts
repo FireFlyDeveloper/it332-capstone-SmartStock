@@ -468,6 +468,33 @@ export function getDemandForecastPage(options: { historyMonths?: number; limit?:
   return apiFetch<DemandForecastPageResponse>(`/analytics/demand-forecast/page?${params.toString()}`)
 }
 
+export interface DemandForecastBacktestPeriod {
+  month: string
+  positiveHistoryMonths: number
+  forecastQuantity: number | null
+  actualQuantity: number
+  absoluteError: number | null
+}
+
+export interface DemandForecastBacktestResponse {
+  productId: string
+  method: 'simple_exponential_smoothing'
+  alpha: number
+  historyMonths: number
+  minimumPositiveMonths: number
+  salesDateBasis: 'delivered_order_created_month_utc'
+  generatedAt: string
+  periods: DemandForecastBacktestPeriod[]
+  summary: { evaluatedMonths: number; meanAbsoluteError: number | null }
+}
+
+export function getDemandForecastBacktest(options: { productId: string; months?: number; historyMonths?: number }): Promise<DemandForecastBacktestResponse> {
+  const params = new URLSearchParams({ productId: options.productId })
+  if (options.months !== undefined) params.set('months', String(options.months))
+  if (options.historyMonths !== undefined) params.set('historyMonths', String(options.historyMonths))
+  return apiFetch<DemandForecastBacktestResponse>(`/analytics/demand-forecast/backtest?${params.toString()}`)
+}
+
 export interface PolicyPerformancePageResponse extends PolicyPerformanceResponse {
   page: { limit: number; totalCount: number; hasMore: boolean; nextCursor: string | null }
 }

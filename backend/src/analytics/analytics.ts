@@ -1012,6 +1012,101 @@ export function buildDemandForecast(orders: Order[], products: Product[], histor
   };
 }
 
+export interface DemandForecastBacktestPeriod {
+  month: string;
+  positiveHistoryMonths: number;
+  forecastQuantity: number | null;
+  actualQuantity: number;
+  absoluteError: number | null;
+}
+
+export interface DemandForecastBacktest {
+  productId: string;
+  method: 'simple_exponential_smoothing';
+  alpha: 0.3;
+  historyMonths: number;
+  minimumPositiveMonths: 3;
+  salesDateBasis: 'delivered_order_created_month_utc';
+  generatedAt: string;
+  periods: DemandForecastBacktestPeriod[];
+  summary: { evaluatedMonths: number; meanAbsoluteError: number | null };
+}
+
+export function buildDemandForecastBacktestFromMonthlyHistory(
+  productId: string,
+  monthlyHistory: MonthlyQuantity[],
+  backtestMonths = 6,
+  historyMonths = 12,
+  now = new Date(),
+): DemandForecastBacktest {
+  if (!Number.isInteger(backtestMonths) || backtestMonths < 1 || backtestMonths > 12) throw new Error('backtestMonths must be an integer between 1 and 12');
+  if (!Number.isInteger(historyMonths) || historyMonths < 1 || historyMonths > 60) throw new Error('historyMonths must be an integer between 1 and 60');
+  const quantities = new Map(monthlyHistory.map(({ month, quantity }) => [month, quantity]));
+  const targetMonths = completeMonthKeys(now, backtestMonths);
+  const periods = targetMonths.map((month): DemandForecastBacktestPeriod => {
+    const [year, monthNumber] = month.split('-').map(Number);
+    const firstHistoryMonth = new Date(Date.UTC(year, monthNumber - 1 - historyMonths, 1));
+    const history = Array.from({ length: historyMonths }, (_, index) => {
+      const historyMonth = new Date(Date.UTC(firstHistoryMonth.getUTCFullYear(), firstHistoryMonth.getUTCMonth() + index, 1)).toISOString().slice(0, 7);
+      return { month: historyMonth, quantity: quantities.get(historyMonth) ?? 0 };
+    });
+    const positiveHistoryMonths = history.filter((entry) => entry.quantity > 0).length;
+    const forecastQuantity = positiveHistoryMonths >= 3
+      ? simpleExponentialSmoothingForecast(history.map((entry) => entry.quantity)).forecast
+      : null;
+    const actualQuantity = quantities.get(month) ?? 0;
+    return {
+      month,
+      positiveHistoryMonths,
+      forecastQuantity,
+      actualQuantity,
+      absoluteError: forecastQuantity === null ? null : roundTwo(Math.abs(forecastQuantity - actualQuantity)),
+    };
+  });
+  const errors = periods.flatMap((period) => period.absoluteError === null ? [] : [period.absoluteError]);
+  return {
+    productId,
+    method: 'simple_exponential_smoothing',
+    alpha: 0.3,
+    historyMonths,
+    minimumPositiveMonths: 3,
+    salesDateBasis: 'delivered_order_created_month_utc',
+    generatedAt: now.toISOString(),
+    periods,
+    summary: {
+      evaluatedMonths: errors.length,
+      meanAbsoluteError: errors.length ? roundTwo(errors.reduce((sum, value) => sum + value, 0) / errors.length) : null,
+    },
+  };
+}
+
+export function buildDemandForecastBacktest(
+  orders: Order[],
+  productId: string,
+  backtestMonths = 6,
+  historyMonths = 12,
+  now = new Date(),
+): DemandForecastBacktest {
+  if (!Number.isInteger(backtestMonths) || backtestMonths < 1 || backtestMonths > 12) throw new Error('backtestMonths must be an integer between 1 and 12');
+  if (!Number.isInteger(historyMonths) || historyMonths < 1 || historyMonths > 60) throw new Error('historyMonths must be an integer between 1 and 60');
+  const firstMonth = completeMonthKeys(now, backtestMonths + historyMonths)[0];
+  const quantities = new Map<string, number>();
+  for (const order of orders) {
+    if (order.orderStatus !== 'delivered') continue;
+    const month = monthKey(order.createdAt);
+    if (month < firstMonth || month >= now.toISOString().slice(0, 7)) continue;
+    for (const item of order.items) {
+      if (item.productId === productId) quantities.set(month, (quantities.get(month) ?? 0) + item.quantity);
+    }
+  }
+  const monthlyHistory = Array.from({ length: backtestMonths + historyMonths }, (_, index) => {
+    const [year, month] = firstMonth.split('-').map(Number);
+    const monthKeyValue = new Date(Date.UTC(year, month - 1 + index, 1)).toISOString().slice(0, 7);
+    return { month: monthKeyValue, quantity: quantities.get(monthKeyValue) ?? 0 };
+  });
+  return buildDemandForecastBacktestFromMonthlyHistory(productId, monthlyHistory, backtestMonths, historyMonths, now);
+}
+
 export interface DemandForecastCursor { name: string; productId: string }
 
 export function paginateDemandForecast(report: DemandForecastReport, limit: number, cursor: DemandForecastCursor | null = null) {

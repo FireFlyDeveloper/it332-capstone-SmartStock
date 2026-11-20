@@ -25,6 +25,8 @@ import {
   buildDashboardMonthlySalesTrend,
   buildMonthlyStockMovementByUnit,
   buildDemandForecast,
+  buildDemandForecastBacktest,
+  buildDemandForecastBacktestFromMonthlyHistory,
   paginateDemandForecast,
   classifyMovement,
   buildItemMovementClassification,
@@ -462,6 +464,43 @@ describe('analytics pure functions', () => {
     expect(result.products[0].history).toHaveLength(12);
   });
 
+  it('backtests one-month-ahead SES without using the target month in its own forecast', () => {
+    _resetOrderStore(false);
+    const makeSale = (referenceNumber: string, createdAt: string, orderStatus: 'delivered' | 'processing' | 'cancelled', quantity: number) => {
+      const order = createOrder({ referenceNumber, customerName: 'Customer', customerPhone: '1', deliveryAddress: 'x', deliveryDate: createdAt.slice(0, 10), items: [{ productId: 'P1', name: 'Part', quantity, unitPrice: 1 }] });
+      order.createdAt = createdAt;
+      order.orderStatus = orderStatus;
+    };
+    makeSale('BT-1', '2026-06-10T00:00:00.000Z', 'delivered', 10);
+    makeSale('BT-2', '2026-07-10T00:00:00.000Z', 'delivered', 20);
+    makeSale('BT-3', '2026-08-10T00:00:00.000Z', 'delivered', 30);
+    makeSale('BT-4', '2026-09-10T00:00:00.000Z', 'delivered', 50);
+    makeSale('BT-5', '2026-10-10T00:00:00.000Z', 'delivered', 40);
+    makeSale('BT-6', '2026-10-11T00:00:00.000Z', 'cancelled', 100);
+    makeSale('BT-7', '2026-10-12T00:00:00.000Z', 'processing', 100);
+
+    const result = buildDemandForecastBacktest(listOrders(), 'P1', 2, 3, new Date('2026-11-01T00:00:00.000Z'));
+    expect(result).toMatchObject({ salesDateBasis: 'delivered_order_created_month_utc', alpha: 0.3, historyMonths: 3, minimumPositiveMonths: 3 });
+    expect(result.periods).toEqual([
+      { month: '2026-09', positiveHistoryMonths: 3, forecastQuantity: 18.1, actualQuantity: 50, absoluteError: 31.9 },
+      { month: '2026-10', positiveHistoryMonths: 3, forecastQuantity: 31.1, actualQuantity: 40, absoluteError: 8.9 },
+    ]);
+    expect(result.summary).toEqual({ evaluatedMonths: 2, meanAbsoluteError: 20.4 });
+
+    const changedTargetOnly = buildDemandForecastBacktestFromMonthlyHistory('P1', [
+      { month: '2026-06', quantity: 10 }, { month: '2026-07', quantity: 20 }, { month: '2026-08', quantity: 30 },
+      { month: '2026-09', quantity: 999 }, { month: '2026-10', quantity: 40 },
+    ], 2, 3, new Date('2026-11-01T00:00:00.000Z'));
+    expect(changedTargetOnly.periods[0].forecastQuantity).toBe(result.periods[0].forecastQuantity);
+    expect(changedTargetOnly.periods[0].actualQuantity).toBe(999);
+  });
+
+  it('does not report a backtest accuracy score when no test month has enough prior sales history', () => {
+    const result = buildDemandForecastBacktestFromMonthlyHistory('P1', [], 2, 3, new Date('2026-11-01T00:00:00.000Z'));
+    expect(result.periods.every((period) => period.forecastQuantity === null && period.absoluteError === null)).toBe(true);
+    expect(result.summary).toEqual({ evaluatedMonths: 0, meanAbsoluteError: null });
+  });
+
   it('paginates only forecast rows with sufficient history using a stable name/id cursor', () => {
     const products = [
       { id: 'P2', sku: 'S-2', name: 'Alpha', category: 'glass' as const, unit: 'sheet', stock: 5, price: 10, threshold: 1, status: 'active' as const },
@@ -515,6 +554,7 @@ describe('analytics routes', () => {
     const adminOnlyEndpoints: Array<{ path: string; method?: string }> = [
       { path: '/analytics/orders/summary' },
       { path: '/analytics/demand-forecast/page' },
+      { path: '/analytics/demand-forecast/backtest?productId=invalid' },
       { path: '/analytics/demand-forecast' },
       { path: '/analytics/purchases/page' },
       { path: '/analytics/purchases' },
@@ -762,6 +802,21 @@ describe('analytics routes', () => {
     expect((await app.request('/analytics/demand-forecast/page?limit=0', { headers: { authorization: 'Bearer ' + token } })).status).toBe(400);
     expect((await app.request('/analytics/demand-forecast/page?cursor=not-a-cursor', { headers: { authorization: 'Bearer ' + token } })).status).toBe(400);
     expect((await app.request('/analytics/demand-forecast?historyMonths=61', { headers: { authorization: 'Bearer ' + token } })).status).toBe(400);
+  });
+
+  it('returns an authenticated rolling forecast backtest for a selected product', async () => {
+    const token = await login(app, ADMIN);
+    const productId = listProducts()[0].id;
+    const headers = { authorization: 'Bearer ' + token };
+    const res = await app.request(`/analytics/demand-forecast/backtest?productId=${encodeURIComponent(productId)}&months=2&historyMonths=3`, { headers });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { productId: string; method: string; alpha: number; periods: Array<{ month: string; forecastQuantity: number | null; actualQuantity: number; absoluteError: number | null }>; summary: { evaluatedMonths: number; meanAbsoluteError: number | null } };
+    expect(body).toMatchObject({ productId, method: 'simple_exponential_smoothing', alpha: 0.3 });
+    expect(body.periods).toHaveLength(2);
+    expect(body.periods.every((period) => period.forecastQuantity === null || period.absoluteError === Math.abs(period.forecastQuantity - period.actualQuantity))).toBe(true);
+    expect((await app.request('/analytics/demand-forecast/backtest?productId=missing', { headers })).status).toBe(404);
+    expect((await app.request(`/analytics/demand-forecast/backtest?productId=${encodeURIComponent(productId)}&months=13`, { headers })).status).toBe(400);
+    expect((await app.request('/analytics/demand-forecast/backtest?months=2', { headers })).status).toBe(400);
   });
 
   it('returns SES forecast for a known series', async () => {
