@@ -1155,7 +1155,7 @@ export async function listDemandForecastPageDb(input: {
     ), order_lines AS (
       SELECT item.value->>'productId' AS product_id,
         date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))::date AS month,
-        SUM((item.value->>'quantity')::int)::int AS quantity
+        SUM((item.value->>'quantity')::numeric)::double precision AS quantity
       FROM orders o
       CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS item(value)
       CROSS JOIN bounds
@@ -1165,7 +1165,7 @@ export async function listDemandForecastPageDb(input: {
       GROUP BY item.value->>'productId', date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))::date
     ), product_months AS (
       SELECT p.id::text AS product_id, p.sku, p.name, COALESCE(NULLIF(p.category, ''), 'glass') AS category, p.unit, p.stock, p.threshold, p.unit_price AS price,
-        m.month, COALESCE(ol.quantity, 0)::int AS quantity
+        m.month, COALESCE(ol.quantity, 0)::double precision AS quantity
       FROM products p CROSS JOIN months m
       LEFT JOIN order_lines ol ON ol.product_id = p.id::text AND ol.month = m.month
       WHERE p.deleted_at IS NULL
@@ -1277,7 +1277,7 @@ export async function listDemandForecastMonthlyHistoryDb(input: {
       FROM bounds
     ), order_lines AS (
       SELECT date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))::date AS month,
-        SUM((item.value->>'quantity')::int)::int AS quantity
+        SUM((item.value->>'quantity')::numeric)::double precision AS quantity
       FROM orders o
       CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS item(value)
       CROSS JOIN bounds
@@ -1288,7 +1288,7 @@ export async function listDemandForecastMonthlyHistoryDb(input: {
       GROUP BY date_trunc('month', (o.created_at AT TIME ZONE 'UTC'))::date
     )
     SELECT p.id::text AS product_id,
-      jsonb_agg(jsonb_build_object('month', to_char(m.month, 'YYYY-MM'), 'quantity', COALESCE(ol.quantity, 0)::int) ORDER BY m.month) AS monthly_history
+      jsonb_agg(jsonb_build_object('month', to_char(m.month, 'YYYY-MM'), 'quantity', COALESCE(ol.quantity, 0)::double precision) ORDER BY m.month) AS monthly_history
     FROM products p
     CROSS JOIN months m
     LEFT JOIN order_lines ol ON ol.month = m.month
@@ -1469,7 +1469,7 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
         AND ($2::date IS NULL OR o.delivery_date <= $2::date)
     ), all_item_quantities AS (
       SELECT item.value->>'productId' AS product_id,
-        SUM((item.value->>'quantity')::int)::int AS units_ordered
+        SUM((item.value->>'quantity')::numeric)::double precision AS units_ordered
       FROM orders o
       CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS item(value)
       WHERE o.deleted_at IS NULL AND o.order_status <> 'cancelled'
@@ -1477,7 +1477,7 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
     ), range_item_quantities AS (
       SELECT item.value->>'productId' AS product_id,
         (ARRAY_AGG(item.value->>'name' ORDER BY o.order_no COLLATE "C"))[1] AS name,
-        SUM((item.value->>'quantity')::int)::int AS quantity
+        SUM((item.value->>'quantity')::numeric)::double precision AS quantity
       FROM filtered_orders o
       CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS item(value)
       WHERE o.order_status <> 'cancelled'
@@ -1512,7 +1512,7 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
       SELECT p.id::text AS product_id, p.name,
         COALESCE(NULLIF(p.category, ''), 'glass') AS category,
         p.stock, COALESCE(p.threshold, 0) AS threshold,
-        COALESCE(q.units_ordered, 0)::int AS units_ordered,
+        COALESCE(q.units_ordered, 0)::double precision AS units_ordered,
         CASE WHEN p.stock <= 0 THEN 'out_of_stock'
           WHEN p.stock <= COALESCE(p.threshold, 0) * 0.5 THEN 'critical'
           WHEN p.stock <= COALESCE(p.threshold, 0) THEN 'low'
@@ -1574,7 +1574,7 @@ export async function getAnalyticsOrderSummaryDb(fromDate?: string, toDate?: str
     ), fewest_products AS (
       SELECT COALESCE(NULLIF(BTRIM(p.unit), ''), 'unknown') AS unit, p.name,
         COALESCE(NULLIF(p.category, ''), 'unknown') AS category, p.stock, COALESCE(p.threshold, 0) AS threshold,
-        COALESCE(q.units_ordered, 0)::int AS quantity, p.id::text AS product_id
+        COALESCE(q.units_ordered, 0)::double precision AS quantity, p.id::text AS product_id
       FROM products p LEFT JOIN all_item_quantities q ON q.product_id = p.id::text WHERE p.deleted_at IS NULL
     ), fewest_ranked AS (
       SELECT *, ROW_NUMBER() OVER (PARTITION BY unit ORDER BY quantity ASC, name COLLATE "C", product_id COLLATE "C") AS item_rank
@@ -1922,7 +1922,7 @@ export async function getDashboardOrderSummaryDb(): Promise<DashboardOrderSummar
     ), item_totals AS (
       SELECT item.value->>'productId' AS product_id,
         (ARRAY_AGG(item.value->>'name' ORDER BY o.order_no COLLATE "C"))[1] AS name,
-        SUM((item.value->>'quantity')::int)::int AS quantity
+        SUM((item.value->>'quantity')::numeric)::double precision AS quantity
       FROM orders o
       CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) AS item(value)
       WHERE o.deleted_at IS NULL AND o.order_status <> 'cancelled'
