@@ -51,13 +51,16 @@ describe('printReportDocument', () => {
       onload: null as (() => void) | null,
       onerror: null as (() => void) | null,
     } as unknown as HTMLIFrameElement
+    const appendChild = vi.fn((node: HTMLIFrameElement) => {
+      expect(node.srcdoc).toContain('Report');
+    });
     const documentRef = {
       createElement: vi.fn(() => frame),
-      body: { appendChild: vi.fn() },
-    } as unknown as Document
+      body: { appendChild },
+    } as unknown as Document;
 
     const printing = printReportDocument('<html><body>Report</body></html>', documentRef)
-    expect(documentRef.body.appendChild).toHaveBeenCalledWith(frame)
+    expect(appendChild).toHaveBeenCalledWith(frame)
     expect(frame.srcdoc).toContain('Report')
     frame.onload?.(new Event('load'))
     await printing

@@ -23,12 +23,16 @@ import {
   Calendar,
 } from 'lucide-react';
 import { useData } from '../components/DataContext';
-import { toFrontendOrder } from '../components/orderMapper';
+import { toFrontendOrder, type BackendOrderStatus } from '../components/orderMapper';
 import { getOrdersPage, getProductsPage, type ProductsPageResponse } from '../api';
 import type { Order, OrderItem } from '../types';
 import { formatCurrency, formatDate, getStatusColor, formatDateInput } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
+import { scheduleDebouncedValue } from '../utils/debounce';
+import { canRecordOrderPayment } from '../utils/orderPayment';
+import { buildOrderReceiptHtml } from '../utils/receiptDocument';
+import { printReportDocument } from '../utils/reportDocument';
 
 type DateRangePreset = '7d' | '30d' | 'all' | 'custom';
 const ORDERS_PAGE_SIZE = 25;
@@ -77,7 +81,8 @@ export const Orders: React.FC = () => {
 
   // ── Filter / search / modal state ────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'ready_for_pickup' | 'packed' | 'out_for_delivery' | 'completed' | 'cancelled'>('all');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | BackendOrderStatus>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
@@ -87,6 +92,7 @@ export const Orders: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState('');
   const [quantity, setQuantity] = useState(0);
   const [productSearch, setProductSearch] = useState('');
+  const [debouncedProductSearch, setDebouncedProductSearch] = useState('');
   const [productOptions, setProductOptions] = useState<ProductsPageResponse['items']>([]);
   const [productPage, setProductPage] = useState<ProductsPageResponse['page'] | null>(null);
   const [productOptionsLoading, setProductOptionsLoading] = useState(false);
@@ -131,6 +137,18 @@ export const Orders: React.FC = () => {
   const pageGeneration = useRef(0);
   const loadingMoreRef = useRef(false);
   const ordersSentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => scheduleDebouncedValue(
+    searchTerm,
+    searchTerm.trim() ? 300 : 0,
+    setDebouncedSearchTerm,
+  ), [searchTerm]);
+
+  useEffect(() => scheduleDebouncedValue(
+    productSearch,
+    productSearch.trim() ? 300 : 0,
+    setDebouncedProductSearch,
+  ), [productSearch]);
 
   const dateRangeAnchor = new Date();
 
@@ -187,7 +205,7 @@ export const Orders: React.FC = () => {
       const result = await getOrdersPage({
         limit: ORDERS_PAGE_SIZE,
         status: statusFilter,
-        search: searchTerm,
+        search: debouncedSearchTerm,
         fromDate: fromDate || null,
         toDate: toDate || null,
       });
@@ -202,7 +220,7 @@ export const Orders: React.FC = () => {
     } finally {
       if (requestId === pageGeneration.current) setPageLoading(false);
     }
-  }, [searchTerm, statusFilter, fromDate, toDate]);
+  }, [debouncedSearchTerm, statusFilter, fromDate, toDate]);
 
   useEffect(() => { void loadFirstOrderPage() }, [loadFirstOrderPage]);
 
@@ -223,7 +241,7 @@ export const Orders: React.FC = () => {
     setProductOptionsLoadMoreError('');
     productOptionsLoadingMoreRef.current = false;
     setProductOptionsLoadingMore(false);
-    getProductsPage({ limit: 25, search: productSearch })
+    getProductsPage({ limit: 25, search: debouncedProductSearch })
       .then((response) => {
         if (requestId !== productOptionsRequestRef.current) return;
         setProductOptions(response.items.filter((product) => product.status === 'active'));
@@ -238,16 +256,16 @@ export const Orders: React.FC = () => {
     return () => {
       if (requestId === productOptionsRequestRef.current) productOptionsRequestRef.current += 1;
     };
-  }, [modalOpen, modalMode, productSearch, productOptionsRetry]);
+  }, [modalOpen, modalMode, debouncedProductSearch, productOptionsRetry]);
 
   const loadMoreProductOptions = useCallback(async () => {
-    if (!modalOpen || modalMode !== 'create' || !productPage?.hasMore || !productPage.nextCursor || productOptionsLoading || productOptionsLoadingMoreRef.current) return;
+    if (!modalOpen || modalMode !== 'create' || productSearch.trim() !== debouncedProductSearch.trim() || !productPage?.hasMore || !productPage.nextCursor || productOptionsLoading || productOptionsLoadingMoreRef.current) return;
     const requestId = productOptionsRequestRef.current;
     productOptionsLoadingMoreRef.current = true;
     setProductOptionsLoadingMore(true);
     setProductOptionsLoadMoreError('');
     try {
-      const response = await getProductsPage({ limit: 25, cursor: productPage.nextCursor, search: productSearch });
+      const response = await getProductsPage({ limit: 25, cursor: productPage.nextCursor, search: debouncedProductSearch });
       if (requestId !== productOptionsRequestRef.current) return;
       setProductOptions((current) => [...current, ...response.items.filter((product) => product.status === 'active')]);
       setProductPage(response.page);
@@ -259,7 +277,7 @@ export const Orders: React.FC = () => {
         setProductOptionsLoadingMore(false);
       }
     }
-  }, [modalOpen, modalMode, productPage, productOptionsLoading, productSearch]);
+  }, [modalOpen, modalMode, productPage, productOptionsLoading, productSearch, debouncedProductSearch]);
 
   useEffect(() => {
     const sentinel = productOptionsSentinelRef.current;
@@ -273,7 +291,7 @@ export const Orders: React.FC = () => {
   }, [productPage?.hasMore, productOptionsLoading, productOptionsLoadingMore, productOptionsLoadMoreError, loadMoreProductOptions]);
 
   const loadMoreOrders = useCallback(async () => {
-    if (!pageHasMore || !pageNextCursor || loadingMoreRef.current) return;
+    if (searchTerm.trim() !== debouncedSearchTerm.trim() || !pageHasMore || !pageNextCursor || loadingMoreRef.current) return;
     loadingMoreRef.current = true;
     setPageLoadingMore(true);
     setPageLoadingMoreError('');
@@ -283,7 +301,7 @@ export const Orders: React.FC = () => {
         limit: ORDERS_PAGE_SIZE,
         cursor: pageNextCursor,
         status: statusFilter,
-        search: searchTerm,
+        search: debouncedSearchTerm,
         fromDate: fromDate || null,
         toDate: toDate || null,
       });
@@ -299,7 +317,7 @@ export const Orders: React.FC = () => {
       loadingMoreRef.current = false;
       if (requestId === pageGeneration.current) setPageLoadingMore(false);
     }
-  }, [pageHasMore, pageNextCursor, statusFilter, searchTerm, fromDate, toDate]);
+  }, [pageHasMore, pageNextCursor, statusFilter, searchTerm, debouncedSearchTerm, fromDate, toDate]);
 
   useEffect(() => {
     const sentinel = ordersSentinelRef.current;
@@ -536,6 +554,15 @@ export const Orders: React.FC = () => {
     }
   };
 
+  const handlePrintReceipt = async (order: Order) => {
+    try {
+      await printReportDocument(buildOrderReceiptHtml(order));
+      toast.info('Print dialog opened. Choose a printer or Save as PDF.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not prepare the receipt for printing.');
+    }
+  };
+
   const closeViewModal = () => {
     setViewOrder(null);
     setItemSearch('');
@@ -636,11 +663,9 @@ export const Orders: React.FC = () => {
               className="input w-full sm:w-44"
             >
               <option value="all">All Status</option>
-              <option value="pending">Pending</option>
-              <option value="ready_for_pickup">Ready for Pickup</option>
-              <option value="packed">Packed</option>
-              <option value="out_for_delivery">Out for Delivery</option>
-              <option value="completed">Completed</option>
+              <option value="processing">Packed</option>
+              <option value="in_transit">Out for Delivery</option>
+              <option value="delivered">Completed</option>
               <option value="cancelled">Cancelled</option>
             </select>
           </div>
@@ -1101,7 +1126,7 @@ export const Orders: React.FC = () => {
                 <button onClick={() => openEdit(viewOrder)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-blue-600" title="Edit Order">
                   <Edit3 className="w-5 h-5" />
                 </button>
-                <button onClick={() => { closeViewModal(); window.print(); }} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-700" title="Print Receipt">
+                <button type="button" onClick={() => void handlePrintReceipt(viewOrder)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-700" title="Print Receipt">
                   <Printer className="w-5 h-5" />
                 </button>
                 <button onClick={() => closeViewModal()} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
@@ -1307,15 +1332,6 @@ export const Orders: React.FC = () => {
                       Mark as {getNextStatus(viewOrder)?.replace(/_/g, ' ')}
                     </button>
                   )}
-                  {/* Payment */}
-                  {(viewOrder.paidAmount < viewOrder.total) && (
-                    <button
-                      onClick={() => { setPayModal(viewOrder); setPayAmount(viewOrder.total - viewOrder.paidAmount); }}
-                      className="btn-secondary flex items-center justify-center gap-2"
-                    >
-                      <DollarSign className="w-5 h-5" /> Process Payment
-                    </button>
-                  )}
                   {/* Refund */}
                   {viewOrder.paidAmount > 0 && (
                     <button
@@ -1340,7 +1356,24 @@ export const Orders: React.FC = () => {
                 </div>
               )}
 
-              {/* Completed — show view only */}
+              {canRecordOrderPayment(viewOrder) && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <p className="text-sm text-amber-900">Payment updates from the amount received. Recording the full remaining balance marks this order as paid.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayModal(viewOrder);
+                      setPayAmount(viewOrder.total - viewOrder.paidAmount);
+                    }}
+                    className="btn-primary inline-flex shrink-0 items-center justify-center gap-2"
+                  >
+                    <DollarSign className="w-5 h-5" />
+                    {viewOrder.paidAmount > 0 ? 'Pay Remaining Balance' : 'Mark as Paid'}
+                  </button>
+                </div>
+              )}
+
+              {/* Completed — show view only, except for recording an outstanding payment */}
               {viewOrder.orderStatus === 'completed' && (
                 <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
                   <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
@@ -1376,19 +1409,20 @@ export const Orders: React.FC = () => {
       {payModal && (
         <div className="responsive-dialog-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 animate-slideIn">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Process Payment</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Record Payment</h3>
             <p className="text-sm text-gray-500 mb-1">Order: {payModal.referenceNumber}</p>
             <p className="text-sm text-gray-500 mb-4">Balance: {formatCurrency(payModal.total - payModal.paidAmount)}</p>
             <div className="mb-4">
-              <label className="label">Payment Amount</label>
+              <label className="label">Amount actually received</label>
               <input type="number" value={payAmount}
                 onChange={e => setPayAmount(Math.min(Number(e.target.value), payModal.total - payModal.paidAmount))}
-                className="input" min={1} max={payModal.total - payModal.paidAmount} />
+                className="input" min={0.01} max={payModal.total - payModal.paidAmount} step="0.01" />
+              <p className="mt-1 text-xs text-gray-500">Recording the full balance changes Payment to Paid. A smaller amount records a partial payment.</p>
             </div>
             <div className="flex gap-3">
               <button onClick={() => setPayModal(null)} className="flex-1 btn-secondary">Cancel</button>
-              <button onClick={() => void handleRecordPayment()} disabled={savingFinanceAction} className="flex-1 btn-primary disabled:opacity-60">
-                {savingFinanceAction ? 'Saving…' : `Pay ${formatCurrency(payAmount)}`}
+              <button onClick={() => void handleRecordPayment()} disabled={savingFinanceAction || payAmount <= 0 || payAmount > payModal.total - payModal.paidAmount} className="flex-1 btn-primary disabled:opacity-60">
+                {savingFinanceAction ? 'Saving…' : Math.abs(payAmount - (payModal.total - payModal.paidAmount)) < 0.005 ? 'Mark as Paid' : 'Record Partial Payment'}
               </button>
             </div>
           </div>

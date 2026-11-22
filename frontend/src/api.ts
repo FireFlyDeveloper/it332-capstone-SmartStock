@@ -10,7 +10,7 @@
  * Last touched: 2026-07-17
  */
 
-import type { BackendOrder } from './components/orderMapper'
+import type { BackendOrder, BackendOrderStatus } from './components/orderMapper'
 import type { Delivery, Product } from './types'
 
 const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined)?.trim().replace(/\/+$/, '')) ?? ''
@@ -544,7 +544,7 @@ export interface DailySalesPageOptions {
 export interface OrdersPageOptions {
   limit?: number
   cursor?: string | null
-  status?: 'all' | 'pending' | 'ready_for_pickup' | 'packed' | 'out_for_delivery' | 'completed' | 'cancelled'
+  status?: 'all' | BackendOrderStatus
   search?: string
   fromDate?: string | null
   toDate?: string | null

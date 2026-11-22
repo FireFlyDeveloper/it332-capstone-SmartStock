@@ -16,6 +16,7 @@ import type { Product } from '../types';
 import { formatCurrency, getStatusColor, checkStockStatus } from '../utils/helpers';
 import { toCSV, downloadCSV } from '../utils/csv';
 import { toast } from 'sonner';
+import { scheduleDebouncedValue } from '../utils/debounce';
 
 type ProductFormData = {
   name: string;
@@ -58,8 +59,8 @@ function toProductFormData(product: Product): ProductFormData {
   };
 }
 
-function toProductPayload(form: ProductFormData): Omit<Product, 'id'> {
-  const numericValues = [form.stock, form.price, form.costPrice, form.threshold];
+function toProductPayload(form: ProductFormData, includeCostPrice: boolean): Omit<Product, 'id'> {
+  const numericValues = [form.stock, form.price, form.threshold, ...(includeCostPrice ? [form.costPrice] : [])];
   if (!form.name.trim() || !form.sku.trim() || !form.category || !form.unit.trim() || !form.status ||
       numericValues.some((value) => value.trim() === '' || !Number.isFinite(Number(value)) || Number(value) < 0)) {
     throw new Error('Complete all required product fields with valid values.');
@@ -72,7 +73,7 @@ function toProductPayload(form: ProductFormData): Omit<Product, 'id'> {
     unit: form.unit.trim(),
     stock: Number(form.stock),
     price: Number(form.price),
-    costPrice: Number(form.costPrice),
+    ...(includeCostPrice ? { costPrice: Number(form.costPrice) } : {}),
     threshold: Number(form.threshold),
     status: form.status,
     description: form.description.trim(),
@@ -87,6 +88,7 @@ export const Inventory: React.FC = () => {
   const { addProduct, updateProduct, deleteProduct, restockProduct } = useData();
   const { isAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'glass' | 'aluminum' | 'accessory'>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'healthy'>('all');
   const [batchSize, setBatchSize] = useState<number>(25);
@@ -103,6 +105,8 @@ export const Inventory: React.FC = () => {
   const requestGeneration = useRef(0);
   const loadingMoreRef = useRef(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => scheduleDebouncedValue(searchTerm, 300, setDebouncedSearchTerm), [searchTerm]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -135,7 +139,7 @@ export const Inventory: React.FC = () => {
         limit: batchSize,
         category: categoryFilter,
         stock: stockFilter,
-        search: searchTerm,
+        search: debouncedSearchTerm,
       });
       if (requestId !== requestGeneration.current) return;
       setPagedProducts(result.items);
@@ -148,12 +152,12 @@ export const Inventory: React.FC = () => {
     } finally {
       if (requestId === requestGeneration.current) setPageLoading(false);
     }
-  }, [batchSize, categoryFilter, stockFilter, searchTerm]);
+  }, [batchSize, categoryFilter, stockFilter, debouncedSearchTerm]);
 
   useEffect(() => { void loadFirstPage() }, [loadFirstPage]);
 
   const loadMore = useCallback(async () => {
-    if (!pageHasMore || !pageNextCursor || loadingMoreRef.current) return;
+    if (!pageHasMore || !pageNextCursor || loadingMoreRef.current || searchTerm.trim() !== debouncedSearchTerm.trim()) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     setLoadingMoreError('');
@@ -164,7 +168,7 @@ export const Inventory: React.FC = () => {
         cursor: pageNextCursor,
         category: categoryFilter,
         stock: stockFilter,
-        search: searchTerm,
+        search: debouncedSearchTerm,
       });
       if (requestId !== requestGeneration.current) return;
       setPagedProducts((current) => [...current, ...result.items]);
@@ -180,7 +184,7 @@ export const Inventory: React.FC = () => {
         setLoadingMore(false);
       }
     }
-  }, [batchSize, pageHasMore, pageNextCursor, categoryFilter, stockFilter, searchTerm]);
+  }, [batchSize, pageHasMore, pageNextCursor, categoryFilter, stockFilter, searchTerm, debouncedSearchTerm]);
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;
@@ -218,7 +222,7 @@ export const Inventory: React.FC = () => {
     if (savingProduct) return;
     setSavingProduct(true);
     try {
-      const payload = toProductPayload(formData);
+      const payload = toProductPayload(formData, isAdmin);
       if (editingProduct) {
         await updateProduct(editingProduct.id, payload);
         toast.success('Product updated successfully');
@@ -418,16 +422,14 @@ export const Inventory: React.FC = () => {
             >
               <Download className="h-4 w-4" /> {exportingCsv ? 'Exporting…' : 'Export CSV'}
             </button>
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => handleOpenModal()}
-                className="btn-primary flex items-center gap-2"
-              >
-                <Plus className="w-5 h-5" />
-                Add Product
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => handleOpenModal()}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Add Product
+            </button>
           </div>
         </div>
 
@@ -533,16 +535,14 @@ export const Inventory: React.FC = () => {
                           >
                             <RefreshCw className="w-4 h-4" />
                           </button>
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenModal(product)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Edit"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenModal(product)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
                           {isAdmin && (
                             <button
                               type="button"
@@ -582,17 +582,13 @@ export const Inventory: React.FC = () => {
               <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
                 No products are available yet. Add a product from the inventory controls to begin.
               </p>
-              {isAdmin ? (
-                <button
-                  type="button"
-                  onClick={() => handleOpenModal()}
-                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700"
-                >
-                  <Plus className="h-4 w-4" /> Add your first product
-                </button>
-              ) : (
-                <p className="mt-4 text-sm text-slate-600">Ask an admin to add the first product.</p>
-              )}
+              <button
+                type="button"
+                onClick={() => handleOpenModal()}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700"
+              >
+                <Plus className="h-4 w-4" /> Add your first product
+              </button>
             </div>
           )}
 
@@ -703,7 +699,7 @@ export const Inventory: React.FC = () => {
                     </select>
                   </div>
                   
-                  <div>
+                  {isAdmin && <div>
                     <label className="label">Supplier / Original Price (₱)</label>
                     <input
                       type="number"
@@ -715,7 +711,7 @@ export const Inventory: React.FC = () => {
                       step="0.01"
                       required
                     />
-                  </div>
+                  </div>}
 
                   <div>
                     <label className="label">Selling Price (Customer) (₱)</label>

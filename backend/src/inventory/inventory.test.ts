@@ -294,14 +294,49 @@ describe('product inventory routes', () => {
     expect(cleared.description).toBeUndefined();
   });
 
-  it('blocks staff from mutating products', async () => {
+  it('allows staff to create and edit products without viewing or changing supplier cost', async () => {
     const token = await login(app, STAFF);
-    const res = await app.request('/products', {
+    const headers = { authorization: 'Bearer ' + token, 'content-type': 'application/json' };
+    const createdResponse = await app.request('/products', {
       method: 'POST',
-      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ sku: 'x', name: 'x', category: 'glass', unit: 'pc', stock: 1, price: 1, threshold: 1 }),
+      headers,
+      body: JSON.stringify({ sku: 'STAFF-ADD-01', name: 'Staff Added', category: 'glass', unit: 'pc', stock: 1, price: 10, costPrice: 999, threshold: 1 }),
     });
-    expect(res.status).toBe(403);
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json() as { id: string; name: string; costPrice?: number };
+    expect(created).toMatchObject({ name: 'Staff Added' });
+    expect(created).not.toHaveProperty('costPrice');
+
+    const updateResponse = await app.request('/products/' + created.id, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ name: 'Staff Edited', costPrice: 777 }),
+    });
+    expect(updateResponse.status).toBe(200);
+    const updated = await updateResponse.json() as { name: string; costPrice?: number };
+    expect(updated).toMatchObject({ name: 'Staff Edited' });
+    expect(updated).not.toHaveProperty('costPrice');
+
+    const adminToken = await login(app, ADMIN);
+    const adminRead = await app.request('/products/' + created.id, {
+      headers: { authorization: 'Bearer ' + adminToken },
+    });
+    expect(adminRead.status).toBe(200);
+    expect(await adminRead.json()).toMatchObject({ name: 'Staff Edited', costPrice: 0 });
+
+    const remove = await app.request('/products/' + created.id, {
+      method: 'DELETE',
+      headers: { authorization: 'Bearer ' + token },
+    });
+    expect(remove.status).toBe(403);
+  });
+
+  it('rejects anonymous product create, edit, and delete requests', async () => {
+    const path = '/products/PRD-001';
+    const create = await app.request('/products', { method: 'POST', body: '{}' });
+    const update = await app.request(path, { method: 'PUT', body: '{}' });
+    const remove = await app.request(path, { method: 'DELETE' });
+    expect([create.status, update.status, remove.status]).toEqual([401, 401, 401]);
   });
 
   it('rejects duplicate SKU and invalid payloads', async () => {

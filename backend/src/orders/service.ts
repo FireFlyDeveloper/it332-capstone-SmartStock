@@ -160,7 +160,7 @@ export function listOrderRecords(): Order[] {
 
 export interface OrdersPageInput {
   limit: number;
-  status: 'all' | 'pending' | 'ready_for_pickup' | 'packed' | 'out_for_delivery' | 'completed' | 'cancelled';
+  status: 'all' | OrderStatus | 'pending' | 'ready_for_pickup' | 'packed' | 'out_for_delivery' | 'completed';
   search: string;
   fromDate: string | null;
   toDate: string | null;
@@ -168,20 +168,32 @@ export interface OrdersPageInput {
   cursorId: string | null;
 }
 
+type NormalizedOrderPageStatus = OrderStatus | 'all' | '__no_matches__';
+
+function normalizeOrderPageStatus(status: OrdersPageInput['status']): NormalizedOrderPageStatus {
+  switch (status) {
+    case 'packed': return 'processing';
+    case 'out_for_delivery': return 'in_transit';
+    case 'completed': return 'delivered';
+    // These UI states are not represented by the persisted order-status enum.
+    case 'pending':
+    case 'ready_for_pickup': return '__no_matches__';
+    default: return status;
+  }
+}
+
 export async function listOrderPageRecords(input: OrdersPageInput) {
+  const status = normalizeOrderPageStatus(input.status);
   if (isDbSyncActive()) {
-    const page = await listOrdersPageDb(input);
+    const page = await listOrdersPageDb({ ...input, status });
     if (!page) throw new Error('Database unavailable');
     return page;
   }
 
   const query = input.search.toLowerCase();
   const filtered = listOrders().filter((order) => {
-    const matchesStatus = input.status === 'all'
-      || (input.status === 'packed' && order.orderStatus === 'processing')
-      || (input.status === 'out_for_delivery' && order.orderStatus === 'in_transit')
-      || (input.status === 'completed' && order.orderStatus === 'delivered')
-      || (input.status === 'cancelled' && order.orderStatus === 'cancelled');
+    const matchesStatus = status === 'all'
+      || (status !== '__no_matches__' && order.orderStatus === status);
     const matchesSearch = !query || order.customerName.toLowerCase().includes(query)
       || order.referenceNumber.toLowerCase().includes(query) || order.id.toLowerCase().includes(query)
       || order.items.some((item) => item.name.toLowerCase().includes(query));

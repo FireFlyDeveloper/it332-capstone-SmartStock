@@ -81,7 +81,7 @@ export function printReportDocument(html: string, documentRef: Document = docume
       }
     }
 
-    documentRef.body.appendChild(frame)
     frame.srcdoc = html
+    documentRef.body.appendChild(frame)
   })
 }

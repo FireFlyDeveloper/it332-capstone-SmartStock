@@ -116,6 +116,37 @@ describe('order routes', () => {
     expect((await app.request(`/orders/page?cursor=${oversizedIdCursor}`, { headers })).status).toBe(400);
   });
 
+  it('filters order pages by persisted order status values', async () => {
+    const token = await login(app, STAFF);
+    const headers = { authorization: 'Bearer ' + token };
+    const seededOrders = listOrders();
+    const statuses = ['processing', 'in_transit', 'delivered', 'cancelled'] as const;
+
+    for (const status of statuses) {
+      const response = await app.request(`/orders/page?limit=100&status=${status}`, { headers });
+      expect(response.status, `status=${status}`).toBe(200);
+      const body = await response.json() as {
+        orders: Array<{ orderStatus: string }>;
+        page: { totalCount: number };
+      };
+      const expectedCount = seededOrders.filter((order) => order.orderStatus === status).length;
+      expect(body.page.totalCount, `count for ${status}`).toBe(expectedCount);
+      expect(body.orders.every((order) => order.orderStatus === status), `rows for ${status}`).toBe(true);
+    }
+
+    const legacyAliases = { packed: 'processing', out_for_delivery: 'in_transit', completed: 'delivered' } as const;
+    for (const [legacyStatus, persistedStatus] of Object.entries(legacyAliases)) {
+      const [legacyResponse, persistedResponse] = await Promise.all([
+        app.request(`/orders/page?limit=100&status=${legacyStatus}`, { headers }),
+        app.request(`/orders/page?limit=100&status=${persistedStatus}`, { headers }),
+      ]);
+      expect(legacyResponse.status).toBe(200);
+      const legacyBody = await legacyResponse.json() as { orders: Array<{ id: string }> };
+      const persistedBody = await persistedResponse.json() as { orders: Array<{ id: string }> };
+      expect(legacyBody.orders.map((order) => order.id).sort()).toEqual(persistedBody.orders.map((order) => order.id).sort());
+    }
+  });
+
   it('accepts application-generated varchar IDs in pagination cursors', async () => {
     const token = await login(app, STAFF);
     const headers = { authorization: 'Bearer ' + token };
@@ -222,7 +253,7 @@ describe('order routes', () => {
   });
 
   it('processes payments through unpaid, partial, and paid status transitions', async () => {
-    const token = await login(app, ADMIN);
+    const token = await login(app, STAFF);
     const create = await app.request('/orders', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
@@ -241,6 +272,13 @@ describe('order routes', () => {
     expect(partialJson.paidAmount).toBe(1200);
     expect(partialJson.paymentStatus).toBe('partial');
 
+    const delivered = await app.request('/orders/' + order.id, {
+      method: 'PUT',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ orderStatus: 'delivered' }),
+    });
+    expect(delivered.status).toBe(200);
+
     const paid = await app.request('/orders/' + order.id + '/payment', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
@@ -250,6 +288,10 @@ describe('order routes', () => {
     const paidJson = (await paid.json()) as { paidAmount: number; paymentStatus: string };
     expect(paidJson.paidAmount).toBe(3400);
     expect(paidJson.paymentStatus).toBe('paid');
+
+    const readback = await app.request('/orders/' + order.id, { headers: { authorization: 'Bearer ' + token } });
+    expect(readback.status).toBe(200);
+    expect(await readback.json()).toEqual(expect.objectContaining({ paidAmount: 3400, paymentStatus: 'paid' }));
   });
 
   it('cancels an order, refunds the remaining payment, restores stock, and is idempotent', async () => {

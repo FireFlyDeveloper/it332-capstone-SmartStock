@@ -125,18 +125,24 @@ export function getProductController(c: Context) {
 
 export async function createProductController(c: Context) {
   const body = await c.req.json().catch(() => null);
-  const result = await addProductRecord(body);
+  const safeBody = c.get('user').role === 'admin'
+    ? body
+    : { ...(typeof body === 'object' && body !== null ? body : {}), costPrice: 0 };
+  const result = await addProductRecord(safeBody);
   if (!result.ok) return c.json({ error: result.error }, result.status);
-  return c.json(result.data, 201);
+  return c.json(visibleProduct(c, result.data), 201);
 }
 
 export async function updateProductController(c: Context) {
   const id = c.req.param('id');
   if (!id) return c.json({ error: 'product id is required' }, 400);
   const body = await c.req.json().catch(() => null);
-  const result = await editProductRecord(id, body);
+  const safeBody = c.get('user').role === 'admin' || typeof body !== 'object' || body === null
+    ? body
+    : Object.fromEntries(Object.entries(body).filter(([field]) => field !== 'costPrice'));
+  const result = await editProductRecord(id, safeBody);
   if (!result.ok) return c.json({ error: result.error }, result.status);
-  return c.json(result.data);
+  return c.json(visibleProduct(c, result.data));
 }
 
 export async function deleteProductController(c: Context) {

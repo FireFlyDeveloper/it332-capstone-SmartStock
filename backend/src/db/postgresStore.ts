@@ -1974,11 +1974,7 @@ export async function listOrdersPageDb(input: {
     WITH filtered_orders AS MATERIALIZED (
       SELECT * FROM orders o
       WHERE o.deleted_at IS NULL
-        AND ($1::text = 'all'
-          OR ($1 = 'packed' AND o.order_status = 'processing')
-          OR ($1 = 'out_for_delivery' AND o.order_status = 'in_transit')
-          OR ($1 = 'completed' AND o.order_status = 'delivered')
-          OR ($1 = 'cancelled' AND o.order_status = 'cancelled'))
+        AND ($1::text = 'all' OR o.order_status = $1::text)
         AND ($2::text = '' OR POSITION(LOWER($2) IN LOWER(COALESCE(o.customer_name, ''))) > 0
           OR POSITION(LOWER($2) IN LOWER(COALESCE(o.order_no, ''))) > 0
           OR POSITION(LOWER($2) IN LOWER(o.id::text)) > 0

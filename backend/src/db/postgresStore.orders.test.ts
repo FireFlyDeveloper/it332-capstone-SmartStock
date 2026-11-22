@@ -46,7 +46,7 @@ describe('PostgreSQL Orders cursor query', () => {
 
     const result = await listOrdersPageDb({
       limit: 1,
-      status: 'packed',
+      status: 'processing',
       search: 'customer',
       fromDate: '2026-10-01',
       toDate: '2026-10-31',
@@ -64,13 +64,13 @@ describe('PostgreSQL Orders cursor query', () => {
       orders: [{ id: '123e4567-e89b-42d3-a456-426614174001', referenceNumber: 'SS-2026-74001' }],
     });
     const [sql, values] = database.query.mock.calls[0] as [string, unknown[]];
-    expect(sql).toContain("o.order_status = 'processing'");
+    expect(sql).toContain('o.order_status = $1');
     expect(sql).toContain('o.delivery_date >= $3::date');
     expect(sql).toContain('POSITION(LOWER($2)');
     expect(sql).toContain('jsonb_array_elements');
     expect(sql).toContain('ORDER BY created_at DESC, id::text DESC');
     expect(sql).toContain('LIMIT $7');
-    expect(values).toEqual(['packed', 'customer', '2026-10-01', '2026-10-31', '2026-10-29T00:00:00.000Z', '123e4567-e89b-42d3-a456-426614174000', 2]);
+    expect(values).toEqual(['processing', 'customer', '2026-10-01', '2026-10-31', '2026-10-29T00:00:00.000Z', '123e4567-e89b-42d3-a456-426614174000', 2]);
   });
 
   it('returns null when the PostgreSQL pool is unavailable', async () => {

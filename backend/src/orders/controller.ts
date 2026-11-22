@@ -22,7 +22,11 @@ export function listOrdersController(c: Context) {
   return c.json(listOrderRecords());
 }
 
-const ORDER_PAGE_STATUSES = ['all', 'pending', 'ready_for_pickup', 'packed', 'out_for_delivery', 'completed', 'cancelled'] as const;
+const ORDER_PAGE_STATUSES = [
+  'all', 'processing', 'in_transit', 'delivered', 'cancelled',
+  // Keep the previous UI labels accepted during rolling frontend releases.
+  'pending', 'ready_for_pickup', 'packed', 'out_for_delivery', 'completed',
+] as const;
 
 function validDate(value: string | undefined): value is string {
   return value !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(value)

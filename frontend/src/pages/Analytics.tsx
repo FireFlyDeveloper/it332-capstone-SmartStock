@@ -75,6 +75,12 @@ function formatAnalyticsDateRange(fromDate: string, toDate: string): string {
   return `${fromDate || 'Any date'} to ${toDate || 'Any date'}`;
 }
 
+export function AnalyticsInsightsLoading({ loading }: { loading: boolean }) {
+  return loading
+    ? <p role="status" className="text-sm text-slate-500">Reviewing sales, purchases, and stock activity…</p>
+    : null;
+}
+
 function simplifyInsightText(text: string): string {
   return text
     .replace(/\bsimple exponential smoothing\s*(?:\(\s*SES\s*\))?\s*(?:demand\s+)?forecast\b/gi, 'sales estimate based on past orders')
@@ -738,7 +744,6 @@ export const Analytics: React.FC = () => {
 
   return (
       <div className="space-y-6 sm:space-y-8 animate-fadeIn">
-        {aiInsightLoading && !aiInsight && <FullScreenLoading label="Loading SmartStock Insights..." overlay />}
         {/* Page Title Header */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -845,7 +850,7 @@ export const Analytics: React.FC = () => {
           </div>
           {aiInsightIsStale && aiInsight && <p role="status" className="text-sm font-medium text-amber-700">{aiInsightDatesAreStale ? 'The AI summary will refresh automatically for the selected dates.' : 'These insights use earlier criteria and are out of date. Refresh the summary to apply the current filters.'}</p>}
           {aiInsightError && <p role="alert" className="text-sm text-rose-700">{aiInsightError}</p>}
-          {aiInsightLoading && <p role="status" className="text-sm text-slate-500">Reviewing sales, purchases, and stock activity…</p>}
+          <AnalyticsInsightsLoading loading={aiInsightLoading} />
           {aiInsight && <div aria-live="polite" className="space-y-4 rounded-2xl bg-indigo-50/60 p-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">AI summary</span>

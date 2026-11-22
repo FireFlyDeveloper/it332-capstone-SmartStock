@@ -4,6 +4,7 @@ import { getDailySales, type DailySalesOrder, type DailySalesSummary } from '../
 import { formatCurrency, formatDateInput, getStatusColor } from '../utils/helpers';
 import { downloadCSV, toCSV } from '../utils/csv';
 import { toast } from 'sonner';
+import { scheduleDebouncedValue } from '../utils/debounce';
 
 const DAILY_SALES_PAGE_SIZE = 25;
 
@@ -22,12 +23,19 @@ export const DailySales: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [retryVersion, setRetryVersion] = useState(0);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const salesScrollerRef = useRef<HTMLDivElement | null>(null);
   const loadingMoreRef = useRef(false);
   const requestVersionRef = useRef(0);
+
+  useEffect(() => scheduleDebouncedValue(
+    search,
+    search.trim() ? 250 : 0,
+    setDebouncedSearch,
+  ), [search]);
 
   useEffect(() => {
     const requestVersion = ++requestVersionRef.current;
@@ -43,36 +51,33 @@ export const DailySales: React.FC = () => {
     setLoadMoreError('');
     loadingMoreRef.current = false;
 
-    const timer = window.setTimeout(() => {
-      getDailySales(selectedDate, {
-        limit: DAILY_SALES_PAGE_SIZE,
-        search,
-        status: statusFilter,
-      }).then((result) => {
-        if (!active || requestVersion !== requestVersionRef.current) return;
-        setSummary(result);
-        setOrders(result.orders);
-        setNextCursor(result.page.nextCursor);
-        setTotalCount(result.page.totalCount);
-        setHasMore(result.page.hasMore);
-      }).catch((reason: unknown) => {
-        if (active && requestVersion === requestVersionRef.current) {
-          setError(reason instanceof Error ? reason.message : 'Could not load daily sales.');
-        }
-      }).finally(() => {
-        if (active && requestVersion === requestVersionRef.current) setLoading(false);
-      });
-    }, search.trim() ? 250 : 0);
+    getDailySales(selectedDate, {
+      limit: DAILY_SALES_PAGE_SIZE,
+      search: debouncedSearch,
+      status: statusFilter,
+    }).then((result) => {
+      if (!active || requestVersion !== requestVersionRef.current) return;
+      setSummary(result);
+      setOrders(result.orders);
+      setNextCursor(result.page.nextCursor);
+      setTotalCount(result.page.totalCount);
+      setHasMore(result.page.hasMore);
+    }).catch((reason: unknown) => {
+      if (active && requestVersion === requestVersionRef.current) {
+        setError(reason instanceof Error ? reason.message : 'Could not load daily sales.');
+      }
+    }).finally(() => {
+      if (active && requestVersion === requestVersionRef.current) setLoading(false);
+    });
 
     return () => {
       active = false;
-      window.clearTimeout(timer);
       if (requestVersionRef.current === requestVersion) requestVersionRef.current += 1;
     };
-  }, [selectedDate, search, statusFilter, retryVersion]);
+  }, [selectedDate, debouncedSearch, statusFilter, retryVersion]);
 
   const loadMore = useCallback(async () => {
-    if (!hasMore || !nextCursor || loadingMoreRef.current) return;
+    if (search.trim() !== debouncedSearch.trim() || !hasMore || !nextCursor || loadingMoreRef.current) return;
     loadingMoreRef.current = true;
     const requestVersion = requestVersionRef.current;
     setLoadingMore(true);
@@ -81,7 +86,7 @@ export const DailySales: React.FC = () => {
       const result = await getDailySales(selectedDate, {
         limit: DAILY_SALES_PAGE_SIZE,
         cursor: nextCursor,
-        search,
+        search: debouncedSearch,
         status: statusFilter,
       });
       if (requestVersion !== requestVersionRef.current) return;
@@ -97,7 +102,7 @@ export const DailySales: React.FC = () => {
       loadingMoreRef.current = false;
       if (requestVersion === requestVersionRef.current) setLoadingMore(false);
     }
-  }, [hasMore, nextCursor, selectedDate, search, statusFilter]);
+  }, [hasMore, nextCursor, selectedDate, search, debouncedSearch, statusFilter]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
