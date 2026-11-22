@@ -341,7 +341,7 @@ describe('AI insight generation', () => {
     expect(result.summary).toContain('latest chart interval');
   });
 
-  it('reuses cached AI results for identical aggregate data and regenerates after a data change', async () => {
+  it('reuses cached AI results when only elapsed policy time changes and regenerates after source data changes', async () => {
     process.env.HERMES_API_KEY = 'test-hermes-api-key';
     process.env.HERMES_API_BASE_URL = 'https://hermes.example/v1';
     process.env.HERMES_MODEL = 'smartstockanalytics';
@@ -355,9 +355,13 @@ describe('AI insight generation', () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(responseBody, { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     const options = { fromDate: '2026-01-01', toDate: '2026-10-31', threshold: 5 };
+    const laterNow = new Date(TEST_NOW.getTime() + 6 * 60 * 60_000);
+    const firstPayload = await buildSafeInsightPayload(options, TEST_NOW);
+    const laterPayload = await buildSafeInsightPayload(options, laterNow);
+    expect(firstPayload.policyPerformance.trackedProductDays).not.toBe(laterPayload.policyPerformance.trackedProductDays);
 
     const first = await getAnalyticsInsight(options, TEST_NOW);
-    const repeated = await getAnalyticsInsight(options, TEST_NOW);
+    const repeated = await getAnalyticsInsight(options, laterNow);
     expect(first).toEqual(repeated);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 

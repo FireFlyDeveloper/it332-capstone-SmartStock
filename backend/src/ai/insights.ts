@@ -16,8 +16,25 @@ import { INSIGHT_SECTION_KEYS, type AiInsight, type InsightRequestOptions, type 
 const INSIGHT_HISTORY_MONTHS = 12;
 const FORECAST_PAGE_SIZE = 100;
 const MAX_UNIT_GROUPS = 25;
-const INSIGHT_CACHE_VERSION = 1;
+const INSIGHT_CACHE_VERSION = 2;
 const insightCache = new DataAwareCache<AiInsight>(64);
+const TIME_DERIVED_POLICY_FIELDS = new Set([
+  'trackedProductDays',
+  'timeAtOrBelowReorderPointPercent',
+  'outOfStockProductDays',
+  'averageTimeAtOrBelowDeltaPoints',
+  'averageOutOfStockDaysPer30Delta',
+  'averageOnHandDeltaByUnit',
+]);
+
+function createInsightDataFingerprint(payload: SafeInsightPayload): string {
+  // These policy measures advance with the request clock even without new source records.
+  // Keep stable event/count fields in the fingerprint so actual data changes still invalidate.
+  const stablePolicyPerformance = Object.fromEntries(
+    Object.entries(payload.policyPerformance).filter(([key]) => !TIME_DERIVED_POLICY_FIELDS.has(key)),
+  );
+  return createCacheFingerprint({ ...payload, policyPerformance: stablePolicyPerformance });
+}
 
 export function _resetAnalyticsInsightCache(): void {
   insightCache.clear();
@@ -251,7 +268,7 @@ export async function getAnalyticsInsight(options: InsightRequestOptions = {}, n
     baseUrl: config.baseUrl,
     sections: INSIGHT_SECTION_KEYS,
   });
-  const dataFingerprint = createCacheFingerprint(payload);
+  const dataFingerprint = createInsightDataFingerprint(payload);
   return insightCache.getOrCompute(scopeFingerprint, dataFingerprint, async () => {
     const ai = await callHermesInsight(payload, { apiKey: config.apiKey!, baseUrl: config.baseUrl!, model: config.model });
     return { ...ai, source: 'hermes' };
