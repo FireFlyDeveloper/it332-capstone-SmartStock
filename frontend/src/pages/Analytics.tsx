@@ -818,7 +818,6 @@ export const Analytics: React.FC = () => {
           {aiInsight && <div aria-live="polite" className="space-y-4 rounded-2xl bg-indigo-50/60 p-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">AI summary</span>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold capitalize text-slate-600">How sure: {aiInsight.confidence}</span>
               {aiInsightCriteria && <span className="text-xs text-slate-500">Selected dates: {formatAnalyticsDateRange(aiInsightCriteria.fromDate, aiInsightCriteria.toDate)} · Orders use delivery dates; stock movement and policy history use UTC event dates · Fast-moving cutoff: {describeFastMovingCutoff(aiInsightCriteria.threshold)}</span>}
             </div>
             <div>
