@@ -13,7 +13,7 @@ import { hashPassword } from '../auth/hash.js';
 import { _resetOrderStore, createOrder } from '../orders/store.js';
 import { _resetInventoryStore, createProduct, hydrateInventoryPolicyHistory, listProducts, recordInboundStock, recordOutboundStock, resetInventoryPolicyHistory } from '../inventory/store.js';
 import { analyticsRoutes } from '../analytics/routes.js';
-import { getAnalyticsInsight, buildSafeInsightPayload } from './insights.js';
+import { getAnalyticsInsight, buildSafeInsightPayload, _resetAnalyticsInsightCache } from './insights.js';
 import { INSIGHT_SECTION_KEYS, type SafeInsightPayload } from './types.js';
 import { validateAiInsightResponse } from './validator.js';
 import { callHermesInsight } from './hermes.js';
@@ -97,6 +97,7 @@ describe('AI insight generation', () => {
     vi.restoreAllMocks();
     process.env = { ...ORIGINAL_ENV };
     setDbSyncActive(false);
+    _resetAnalyticsInsightCache();
     delete process.env.HERMES_API_KEY;
     delete process.env.HERMES_API_BASE_URL;
     delete process.env.HERMES_MODEL;
@@ -108,6 +109,7 @@ describe('AI insight generation', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     process.env = { ...ORIGINAL_ENV };
   });
 
@@ -337,6 +339,34 @@ describe('AI insight generation', () => {
     expect(requestBody.messages[1].content).not.toContain('secret-address');
     expect(result.source).toBe('hermes');
     expect(result.summary).toContain('latest chart interval');
+  });
+
+  it('reuses cached AI results for identical aggregate data and regenerates after a data change', async () => {
+    process.env.HERMES_API_KEY = 'test-hermes-api-key';
+    process.env.HERMES_API_BASE_URL = 'https://hermes.example/v1';
+    process.env.HERMES_MODEL = 'smartstockanalytics';
+    const responseBody = JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+      summary: 'Cached aggregate summary.',
+      interpretations: VALID_INTERPRETATIONS,
+      recommendations: ['Review the current stock position.'],
+      risks: ['Check items with limited history.'],
+      confidence: 'medium',
+    }) } }] });
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(responseBody, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const options = { fromDate: '2026-01-01', toDate: '2026-10-31', threshold: 5 };
+
+    const first = await getAnalyticsInsight(options, TEST_NOW);
+    const repeated = await getAnalyticsInsight(options, TEST_NOW);
+    expect(first).toEqual(repeated);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const glass = listProducts().find((product) => product.sku === 'AI-GLASS');
+    if (!glass) throw new Error('AI test glass product was not seeded');
+    await recordInboundStock(glass.id, { quantity: 2, unitCost: 25, referenceNo: 'AI-CACHE-INVALIDATE', supplier: 'Supplier A', occurredAt: '2026-10-20T00:00:00.000Z' });
+    const refreshed = await getAnalyticsInsight(options, TEST_NOW);
+    expect(refreshed.source).toBe('hermes');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('fails visibly when Hermes returns an invalid response instead of synthesizing a fallback', async () => {

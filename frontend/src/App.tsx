@@ -15,6 +15,7 @@ import ProfilePage from './pages/Profile'
 import { StaffManagement } from './pages/StaffManagement'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { FullScreenLoading } from './components/FullScreenLoading'
 import './App.css'
 /*
  * App - SmartStock frontend root.
@@ -46,15 +47,7 @@ function AuthBootstrap({ children }: { children: React.ReactNode }) {
     }
   }, [token, validateSession])
 
-  if (!ready) {
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-surface-2">
-        <div className="font-mono text-xs uppercase tracking-[0.22em] text-text-muted">
-          Loading SmartStock...
-        </div>
-      </div>
-    )
-  }
+  if (!ready) return <FullScreenLoading />;
   return <>{children}</>
 }
 

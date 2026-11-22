@@ -26,18 +26,15 @@ import { useAuth } from '../components/AuthContext';
 import { apiFetch, getWebPushConfig, sendWebPushTest, type ApiError, type WebPushPreferences } from '../api';
 import { registerWebPush, supportsWebPush, syncWebPushPreferences, unregisterWebPush } from '../push';
 import { toast } from 'sonner';
-
-type ProfileTab = 'profile' | 'security' | 'notifications' | 'settings';
+import { resolveProfileTab, type ProfileTab } from '../utils/profileTabs';
 
 interface NotificationPreferences {
   inApp: boolean;
   browserPush: boolean;
-  emailDigest: boolean;
   soundAlerts: boolean;
   lowStockAlerts: boolean;
   orderStatusUpdates: boolean;
   deliveryDispatches: boolean;
-  weeklyFinancialReport: boolean;
 }
 
 interface AppSettings {
@@ -53,12 +50,10 @@ interface AppSettings {
 const DEFAULT_NOTIF_PREFS: NotificationPreferences = {
   inApp: true,
   browserPush: false,
-  emailDigest: true,
   soundAlerts: true,
   lowStockAlerts: true,
   orderStatusUpdates: true,
   deliveryDispatches: true,
-  weeklyFinancialReport: false,
 };
 
 const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -74,11 +69,14 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
 export const ProfilePage: React.FC = () => {
   const { user, updateUser, setAuth, isAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = (searchParams.get('tab') as ProfileTab) || 'profile';
+  const initialTab = resolveProfileTab(searchParams.get('tab'));
 
-  const [activeTab, setActiveTab] = useState<ProfileTab>(
-    ['profile', 'security', 'notifications', 'settings'].includes(initialTab) ? initialTab : 'profile'
-  );
+  const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab);
+
+  useEffect(() => {
+    const nextTab = resolveProfileTab(searchParams.get('tab'));
+    setActiveTab((current) => current === nextTab ? current : nextTab);
+  }, [searchParams]);
 
   // ── Profile Form State ──────────────────────────────────────────
   const [name, setName] = useState(user?.name || '');
@@ -108,7 +106,11 @@ export const ProfilePage: React.FC = () => {
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences>(() => {
     try {
       const stored = localStorage.getItem('smartstock_notif_prefs');
-      return stored ? { ...DEFAULT_NOTIF_PREFS, ...JSON.parse(stored) } : DEFAULT_NOTIF_PREFS;
+      if (!stored) return DEFAULT_NOTIF_PREFS;
+      const savedPreferences = JSON.parse(stored) as Record<string, unknown>;
+      delete savedPreferences.emailDigest;
+      delete savedPreferences.weeklyFinancialReport;
+      return { ...DEFAULT_NOTIF_PREFS, ...savedPreferences } as NotificationPreferences;
     } catch {
       return DEFAULT_NOTIF_PREFS;
     }
@@ -340,16 +342,24 @@ export const ProfilePage: React.FC = () => {
 
   const handleSaveNotifPrefs = async () => {
     try {
-      if (notifPrefs.browserPush) {
-        const synced = await syncWebPushPreferences(getPushPreferences());
-        if (!synced) throw new Error('Push subscription is missing');
-      } else await unregisterWebPush();
       localStorage.setItem('smartstock_notif_prefs', JSON.stringify(notifPrefs));
       window.dispatchEvent(new Event('smartstock-notif-prefs-changed'));
-      toast.success(notifPrefs.browserPush ? 'Notification preferences saved and synced to push delivery.' : 'Notification preferences saved on this browser.');
     } catch {
-      toast.error('Could not sync notification preferences. Your changes were not confirmed by the server.');
+      toast.error('Could not save notification preferences in this browser.');
+      return;
     }
+
+    if (notifPrefs.browserPush) {
+      try {
+        const synced = await syncWebPushPreferences(getPushPreferences());
+        if (!synced) throw new Error('Push subscription is missing');
+        toast.success('Notification preferences saved and synced to push delivery.');
+      } catch {
+        toast.error('Browser preferences were saved, but push preferences could not sync. Check this browser’s push subscription.');
+      }
+      return;
+    }
+    toast.success('Notification preferences saved on this browser.');
   };
 
   const handleSaveAppSettings = () => {
@@ -713,11 +723,17 @@ export const ProfilePage: React.FC = () => {
           <div className="bg-white rounded-[28px] p-6 sm:p-8 border border-[#f1f5f9] shadow-sm space-y-6">
             <div className="border-b border-slate-100 pb-4">
               <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Notification Preferences</h3>
-              <p className="text-xs text-slate-400 mt-0.5">When background push is enabled, stock, order, and delivery choices sync to your saved browser subscription. Sound alerts and weekly emails are not available yet.</p>
+              <p className="text-xs text-slate-400 mt-0.5">In-app and sound choices are saved in this browser. Stock, order, and delivery choices sync to this browser’s push subscription when background push is enabled.</p>
             </div>
 
             <div className="space-y-4">
               {[
+                {
+                  key: 'inApp',
+                  label: 'In-app notifications',
+                  desc: 'Show current alerts in the bell menu and unread badge.',
+                  icon: Bell,
+                },
                 {
                   key: 'lowStockAlerts',
                   label: 'Low-stock alerts',
@@ -739,14 +755,8 @@ export const ProfilePage: React.FC = () => {
                 {
                   key: 'soundAlerts',
                   label: 'Sound for urgent alerts',
-                  desc: 'Automatic alert sounds are not available yet.',
+                  desc: 'Play a short chime for a new critical stock alert while SmartStock is open.',
                   icon: Volume2,
-                },
-                {
-                  key: 'weeklyFinancialReport',
-                  label: 'Weekly sales & inventory email',
-                  desc: 'Weekly summary emails are not available yet.',
-                  icon: FileSpreadsheet,
                 },
               ].map((item) => {
                 const isEnabled = Boolean(notifPrefs[item.key as keyof NotificationPreferences]);
@@ -768,13 +778,16 @@ export const ProfilePage: React.FC = () => {
 
                     <button
                       type="button"
+                      role="switch"
+                      aria-label={item.label}
+                      aria-checked={isEnabled}
                       onClick={() =>
                         setNotifPrefs((prev) => ({
                           ...prev,
                           [item.key]: !prev[item.key as keyof NotificationPreferences],
                         }))
                       }
-                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
                         isEnabled ? 'bg-[#4f46e5]' : 'bg-slate-200'
                       }`}
                     >
