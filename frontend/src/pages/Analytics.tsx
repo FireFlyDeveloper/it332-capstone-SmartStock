@@ -18,6 +18,7 @@ import { formatCurrency } from '../utils/helpers';
 import { getDateRangeForPreset, type DateRangePreset, type QuickDateRangePreset } from '../utils/dateRange';
 import { formatCalendarMonth, latestConsecutiveCompleteMonths } from '../utils/monthlyTrend';
 import InsightBreakdown from '../components/InsightBreakdown';
+import { FullScreenLoading } from '../components/FullScreenLoading';
 import DemandForecastEvidence from '../components/DemandForecastEvidence';
 import { getAnalyticsInsights, getAnalyticsItemMovementPage, getAnalyticsMonthlyMovement, getAnalyticsOrderSummary, getAnalyticsPurchasesPage, getDemandForecastPage, getProductsPage, type AnalyticsInsightsResponse, type AnalyticsMonthlyMovementResponse, type AnalyticsItemMovementPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse, type PurchaseAnalyticsPageResponse } from '../api';
 import { toast } from 'sonner';
@@ -178,6 +179,7 @@ export const Analytics: React.FC = () => {
   const [aiInsightError, setAiInsightError] = useState('');
   const [aiInsightCriteria, setAiInsightCriteria] = useState<{ fromDate: string; toDate: string; threshold: number } | null>(null);
   const aiInsightRequestRef = useRef(0);
+  const aiInsightAutoRequestedRef = useRef(false);
   const aiInsightIsStale = !!aiInsightCriteria && (aiInsightCriteria.fromDate !== fromDate || aiInsightCriteria.toDate !== toDate || aiInsightCriteria.threshold !== Number(movementThreshold));
 
   useEffect(() => {
@@ -462,6 +464,11 @@ export const Analytics: React.FC = () => {
     }
   }, [fromDate, toDate, movementThreshold]);
 
+  useEffect(() => {
+    if (aiInsightAutoRequestedRef.current) return;
+    aiInsightAutoRequestedRef.current = true;
+    void generateInsights();
+  }, [generateInsights]);
   const handleDatePreset = (preset: QuickDateRangePreset) => {
     setDatePreset(preset);
     const range = getDateRangeForPreset(preset);
@@ -677,7 +684,7 @@ export const Analytics: React.FC = () => {
     : formatAnalyticsDateRange(fromDate, toDate);
 
   if (inventorySummaryLoading || orderSummaryLoading) {
-    return <div role="status" className="rounded-3xl bg-white p-8 text-center text-slate-600">Loading your analytics…</div>;
+    return <FullScreenLoading label="Loading SmartStock analytics..." />;
   }
   const sourceError = [inventorySummaryError && `Inventory summary: ${inventorySummaryError}`, orderSummaryError && `Order summary: ${orderSummaryError}`].filter(Boolean).join('; ');
   if (sourceError) {
@@ -700,6 +707,7 @@ export const Analytics: React.FC = () => {
 
   return (
       <div className="space-y-6 sm:space-y-8 animate-fadeIn">
+        {aiInsightLoading && !aiInsight && <FullScreenLoading label="Loading SmartStock Insights..." overlay />}
         {/* Page Title Header */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>

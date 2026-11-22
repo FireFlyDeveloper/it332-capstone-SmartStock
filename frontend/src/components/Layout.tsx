@@ -12,7 +12,7 @@
  * - Profile component: Avatar + Name + Role
  */
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -36,6 +36,7 @@ import {
 import { useAuth } from './AuthContext';
 import { useData } from './DataContext';
 import { NotificationDropdown } from './NotificationDropdown';
+import { profileTabPath } from '../utils/profileTabs';
 
 interface LayoutProps {
   children: ReactNode;
@@ -85,6 +86,27 @@ export function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setShowProfileMenu(false);
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (!showProfileMenu) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!profileMenuRef.current?.contains(event.target as Node)) setShowProfileMenu(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowProfileMenu(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [showProfileMenu]);
 
   const handleLogout = () => {
     logout();
@@ -227,10 +249,12 @@ export function Layout({ children }: LayoutProps) {
             <div className="h-6 w-px bg-slate-200" />
 
             {/* Profile Component: Avatar + Name + Role */}
-            <div className="relative">
+            <div className="relative" ref={profileMenuRef}>
               <button
                 type="button"
-                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                onClick={() => setShowProfileMenu((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={showProfileMenu}
                 className="flex items-center gap-3 p-1 rounded-2xl hover:bg-slate-50 transition-colors group"
               >
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-emerald-400 p-0.5 shadow-sm">
@@ -251,7 +275,7 @@ export function Layout({ children }: LayoutProps) {
 
               {/* Profile dropdown */}
               {showProfileMenu && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-[#f1f5f9] shadow-xl p-2 z-50 animate-fadeIn">
+                <div role="menu" aria-label="Profile menu" className="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-[#f1f5f9] shadow-xl p-2 z-50 animate-fadeIn">
                   <div className="px-3 py-2 border-b border-slate-100">
                     <p className="text-xs font-bold text-slate-900">{user?.name || 'Account'}</p>
                     <p className="text-[11px] text-slate-500 truncate">{user?.email || ''}</p>
@@ -261,7 +285,7 @@ export function Layout({ children }: LayoutProps) {
                       type="button"
                       onClick={() => {
                         setShowProfileMenu(false);
-                        navigate('/profile');
+                        navigate(profileTabPath('profile'));
                       }}
                       className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors flex items-center gap-2.5"
                     >
@@ -272,7 +296,7 @@ export function Layout({ children }: LayoutProps) {
                       type="button"
                       onClick={() => {
                         setShowProfileMenu(false);
-                        navigate('/profile?tab=security');
+                        navigate(profileTabPath('security'));
                       }}
                       className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors flex items-center gap-2.5"
                     >
@@ -283,7 +307,7 @@ export function Layout({ children }: LayoutProps) {
                       type="button"
                       onClick={() => {
                         setShowProfileMenu(false);
-                        navigate('/profile?tab=notifications');
+                        navigate(profileTabPath('notifications'));
                       }}
                       className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors flex items-center gap-2.5"
                     >
@@ -294,7 +318,7 @@ export function Layout({ children }: LayoutProps) {
                       type="button"
                       onClick={() => {
                         setShowProfileMenu(false);
-                        navigate('/profile?tab=settings');
+                        navigate(profileTabPath('settings'));
                       }}
                       className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors flex items-center gap-2.5"
                     >

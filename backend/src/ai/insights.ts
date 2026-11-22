@@ -10,11 +10,18 @@ import { buildPolicyPerformanceReport } from '../reports/service.js';
 import type { SalesDirection } from './types.js';
 import { getHermesConfig } from './config.js';
 import { callHermesInsight } from './hermes.js';
+import { createCacheFingerprint, DataAwareCache } from './cache.js';
 import { INSIGHT_SECTION_KEYS, type AiInsight, type InsightRequestOptions, type SafeInsightPayload } from './types.js';
 
 const INSIGHT_HISTORY_MONTHS = 12;
 const FORECAST_PAGE_SIZE = 100;
 const MAX_UNIT_GROUPS = 25;
+const INSIGHT_CACHE_VERSION = 1;
+const insightCache = new DataAwareCache<AiInsight>(64);
+
+export function _resetAnalyticsInsightCache(): void {
+  insightCache.clear();
+}
 
 function roundTwo(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -233,6 +240,20 @@ export async function getAnalyticsInsight(options: InsightRequestOptions = {}, n
     throw new Error('Hermes AI is not configured. Check the backend AI settings.');
   }
   const payload = await buildSafeInsightPayload(options, now);
-  const ai = await callHermesInsight(payload, { apiKey: config.apiKey, baseUrl: config.baseUrl, model: config.model });
-  return { ...ai, source: 'hermes' };
+  const scopeFingerprint = createCacheFingerprint({
+    version: INSIGHT_CACHE_VERSION,
+    fromDate: options.fromDate ?? null,
+    toDate: options.toDate ?? null,
+    movementFromDate: options.movementFromDate ?? options.fromDate ?? null,
+    movementToDate: options.movementToDate ?? options.toDate ?? null,
+    threshold: options.threshold ?? 10,
+    model: config.model,
+    baseUrl: config.baseUrl,
+    sections: INSIGHT_SECTION_KEYS,
+  });
+  const dataFingerprint = createCacheFingerprint(payload);
+  return insightCache.getOrCompute(scopeFingerprint, dataFingerprint, async () => {
+    const ai = await callHermesInsight(payload, { apiKey: config.apiKey!, baseUrl: config.baseUrl!, model: config.model });
+    return { ...ai, source: 'hermes' };
+  });
 }

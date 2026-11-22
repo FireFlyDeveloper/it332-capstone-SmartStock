@@ -13,18 +13,43 @@ import {
   Package,
   RefreshCw,
 } from 'lucide-react';
-import { getNotificationIds, getNotificationsPage, type NotificationFeedItem, type NotificationsPageResponse } from '../api';
+import { getNotificationChanges, getNotificationIds, getNotificationsPage, type NotificationFeedItem, type NotificationsPageResponse } from '../api';
+import { NotificationAlertTracker, playUrgentNotificationSound } from '../utils/notificationSound';
 
 export type NotificationItem = NotificationFeedItem;
 
 const READ_STORAGE_KEY = 'smartstock_read_notifications';
 const DISMISSED_STORAGE_KEY = 'smartstock_dismissed_notifications';
+const NOTIFICATION_PREFERENCES_KEY = 'smartstock_notif_prefs';
+const NOTIFICATION_POLL_INTERVAL_MS = 60_000;
+
+interface LocalNotificationPreferences {
+  inApp: boolean;
+  soundAlerts: boolean;
+}
+
+function readLocalNotificationPreferences(): LocalNotificationPreferences {
+  try {
+    const stored = localStorage.getItem(NOTIFICATION_PREFERENCES_KEY);
+    const value = stored ? JSON.parse(stored) as Record<string, unknown> : {};
+    return {
+      inApp: typeof value.inApp === 'boolean' ? value.inApp : true,
+      soundAlerts: typeof value.soundAlerts === 'boolean' ? value.soundAlerts : true,
+    };
+  } catch {
+    return { inApp: true, soundAlerts: true };
+  }
+}
+
 export const NotificationDropdown: React.FC = () => {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
+  const [localPreferences, setLocalPreferences] = useState(readLocalNotificationPreferences);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const localPreferencesRef = useRef(localPreferences);
+  const notificationAlertTrackerRef = useRef(new NotificationAlertTracker());
   const [readIds, setReadIds] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem(READ_STORAGE_KEY);
@@ -54,20 +79,51 @@ export const NotificationDropdown: React.FC = () => {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const refreshSources = useCallback(async () => {
+  useEffect(() => {
+    localPreferencesRef.current = localPreferences;
+  }, [localPreferences]);
+
+  const refreshSources = useCallback(async (background = false) => {
     const requestId = ++pageRequestRef.current;
     loadingMoreRef.current = false;
     setLoadingMore(false);
     setLoadMoreError('');
-    setSourcesLoading(true);
+    if (!background) setSourcesLoading(true);
     setSourcesError(null);
+    const currentReadIds = Array.from(readIds).slice(-10_000);
+    const currentDismissedIds = Array.from(dismissedIds).slice(-10_000);
     try {
       const result = await getNotificationsPage({
         limit: 25,
-        readIds: Array.from(readIds).slice(-10_000),
-        dismissedIds: Array.from(dismissedIds).slice(-10_000),
+        readIds: currentReadIds,
+        dismissedIds: currentDismissedIds,
         unreadOnly: activeTab === 'unread',
       });
+      if (requestId !== pageRequestRef.current) return;
+
+      if (!notificationAlertTrackerRef.current.isSeeded()) {
+        try {
+          const { ids } = await getNotificationIds(currentDismissedIds);
+          if (requestId !== pageRequestRef.current) return;
+          notificationAlertTrackerRef.current.seed(ids, result.items);
+        } catch {
+          // Keep the baseline unseeded and retry later; an incomplete baseline must not replay old critical alerts.
+        }
+      } else {
+        let newItems: NotificationFeedItem[] = [];
+        try {
+          const { items } = await getNotificationChanges(notificationAlertTrackerRef.current.getKnownIds(), currentDismissedIds);
+          if (requestId !== pageRequestRef.current) return;
+          newItems = items;
+        } catch {
+          newItems = result.items;
+        }
+        const alertChange = notificationAlertTrackerRef.current.observe(newItems, result.items);
+        if (localPreferencesRef.current.soundAlerts && alertChange.shouldSound) {
+          playUrgentNotificationSound();
+        }
+      }
+
       if (requestId !== pageRequestRef.current) return;
       setAllNotifications(result.items);
       setNotificationsPage(result.page);
@@ -75,20 +131,43 @@ export const NotificationDropdown: React.FC = () => {
     } catch (error) {
       if (requestId === pageRequestRef.current) setSourcesError(error instanceof Error ? error.message : 'Could not load current notifications.');
     } finally {
-      if (requestId === pageRequestRef.current) setSourcesLoading(false);
+      if (requestId === pageRequestRef.current && !background) setSourcesLoading(false);
     }
   }, [activeTab, dismissedIds, readIds]);
 
   useEffect(() => { void refreshSources(); }, [refreshSources]);
 
   useEffect(() => {
-    const refresh = () => { void refreshSources(); };
+    const refresh = () => { void refreshSources(true); };
+    const preferencesChanged = () => {
+      const nextPreferences = readLocalNotificationPreferences();
+      localPreferencesRef.current = nextPreferences;
+      setLocalPreferences(nextPreferences);
+      void refreshSources(true);
+    };
+    const storageChanged = (event: StorageEvent) => {
+      if (event.key === NOTIFICATION_PREFERENCES_KEY) preferencesChanged();
+    };
     window.addEventListener('smartstock-notifications-refresh', refresh);
-    return () => window.removeEventListener('smartstock-notifications-refresh', refresh);
+    window.addEventListener('smartstock-notif-prefs-changed', preferencesChanged);
+    window.addEventListener('storage', storageChanged);
+    return () => {
+      window.removeEventListener('smartstock-notifications-refresh', refresh);
+      window.removeEventListener('smartstock-notif-prefs-changed', preferencesChanged);
+      window.removeEventListener('storage', storageChanged);
+    };
   }, [refreshSources]);
 
   useEffect(() => {
-    if (isOpen) void refreshSources();
+    if (!localPreferences.inApp && !localPreferences.soundAlerts) return;
+    const timer = window.setInterval(() => {
+      if (!loadingMoreRef.current) void refreshSources(true);
+    }, NOTIFICATION_POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [localPreferences.inApp, localPreferences.soundAlerts, refreshSources]);
+
+  useEffect(() => {
+    if (isOpen) void refreshSources(true);
   }, [isOpen, refreshSources]);
 
 
@@ -137,10 +216,10 @@ export const NotificationDropdown: React.FC = () => {
     };
   }, [isOpen]);
 
-  const unreadCount = notificationSummary.unreadCount;
-  const displayedNotifications = allNotifications;
+  const unreadCount = localPreferences.inApp ? notificationSummary.unreadCount : 0;
+  const displayedNotifications = localPreferences.inApp ? allNotifications : [];
   const visibleDisplayedNotifications = displayedNotifications;
-  const hasMore = notificationsPage?.hasMore ?? false;
+  const hasMore = localPreferences.inApp && (notificationsPage?.hasMore ?? false);
 
   const loadMore = useCallback(async () => {
     if (!notificationsPage?.hasMore || !notificationsPage.nextCursor || sourcesLoading || loadingMoreRef.current) return;
@@ -278,7 +357,7 @@ export const NotificationDropdown: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-extrabold text-slate-900 text-sm">Notifications</h3>
-                  {sourcesReady && unreadCount > 0 && (
+                  {localPreferences.inApp && sourcesReady && unreadCount > 0 && (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-600 border border-rose-100">
                       {unreadCount} new
                     </span>
@@ -289,7 +368,7 @@ export const NotificationDropdown: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-1">
-              {sourcesReady && unreadCount > 0 && (
+              {localPreferences.inApp && sourcesReady && unreadCount > 0 && (
                 <button
                   type="button"
                   onClick={markAllAsRead}
@@ -300,7 +379,7 @@ export const NotificationDropdown: React.FC = () => {
                   <span>Mark read</span>
                 </button>
               )}
-              {sourcesReady && notificationSummary.totalCount > 0 && (
+              {localPreferences.inApp && sourcesReady && notificationSummary.totalCount > 0 && (
                 <button
                   type="button"
                   onClick={handleClearAll}
@@ -314,7 +393,7 @@ export const NotificationDropdown: React.FC = () => {
             </div>
           </div>
 
-          {sourcesReady && (
+          {localPreferences.inApp && sourcesReady && (
             <div className="flex items-center justify-between gap-3 px-4 py-2 bg-slate-50/70 border-b border-slate-100">
               <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
                 Show
@@ -323,13 +402,25 @@ export const NotificationDropdown: React.FC = () => {
                   <option value="unread">Unread ({unreadCount})</option>
                 </select>
               </label>
-              <span className="text-[11px] text-slate-400">Browser notifications are local to this open app.</span>
+              <span className="text-[11px] text-slate-400">Read and dismissed state is saved in this browser; push can arrive while the app is closed.</span>
             </div>
           )}
 
           {/* Notifications Scrollable List */}
           <div ref={listRef} className="max-h-[360px] overflow-y-auto divide-y divide-slate-100">
-            {sourcesLoading ? (
+            {!localPreferences.inApp ? (
+              <div role="status" className="p-8 text-center">
+                <p className="text-xs font-bold text-slate-700">In-app notifications are turned off.</p>
+                <p className="mt-1 text-[11px] text-slate-500">Enable them in Settings to see alerts in this menu.</p>
+                <button
+                  type="button"
+                  onClick={() => { setIsOpen(false); navigate('/profile?tab=notifications'); }}
+                  className="mt-3 text-xs font-bold text-indigo-600 hover:underline"
+                >
+                  Manage notification settings
+                </button>
+              </div>
+            ) : sourcesLoading ? (
               <div role="status" className="p-8 text-center text-xs text-slate-500">
                 Loading alerts from current product and order records…
               </div>
