@@ -180,7 +180,11 @@ export const Analytics: React.FC = () => {
   const [aiInsightCriteria, setAiInsightCriteria] = useState<{ fromDate: string; toDate: string; threshold: number } | null>(null);
   const aiInsightRequestRef = useRef(0);
   const aiInsightAutoRequestedRef = useRef(false);
-  const aiInsightIsStale = !!aiInsightCriteria && (aiInsightCriteria.fromDate !== fromDate || aiInsightCriteria.toDate !== toDate || aiInsightCriteria.threshold !== Number(movementThreshold));
+  const aiInsightGenerateRef = useRef<() => void>(() => undefined);
+  const aiInsightDateRangeRef = useRef({ fromDate, toDate });
+  const aiInsightDateRefreshTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const aiInsightDatesAreStale = !!aiInsightCriteria && (aiInsightCriteria.fromDate !== fromDate || aiInsightCriteria.toDate !== toDate);
+  const aiInsightIsStale = !!aiInsightCriteria && (aiInsightDatesAreStale || aiInsightCriteria.threshold !== Number(movementThreshold));
 
   useEffect(() => {
     aiInsightRequestRef.current += 1;
@@ -445,6 +449,10 @@ export const Analytics: React.FC = () => {
       setAiInsightError('Enter a valid number of units to mark a product as fast-moving.');
       return;
     }
+    if (aiInsightDateRefreshTimerRef.current !== null) {
+      window.clearTimeout(aiInsightDateRefreshTimerRef.current);
+      aiInsightDateRefreshTimerRef.current = null;
+    }
     const requestId = ++aiInsightRequestRef.current;
     const criteria = { fromDate, toDate, threshold };
     setAiInsightError('');
@@ -463,12 +471,35 @@ export const Analytics: React.FC = () => {
       if (requestId === aiInsightRequestRef.current) setAiInsightLoading(false);
     }
   }, [fromDate, toDate, movementThreshold]);
+  useEffect(() => {
+    aiInsightGenerateRef.current = () => { void generateInsights(); };
+  }, [generateInsights]);
 
   useEffect(() => {
     if (aiInsightAutoRequestedRef.current) return;
     aiInsightAutoRequestedRef.current = true;
     void generateInsights();
   }, [generateInsights]);
+
+  // Debounce paired date edits so the request uses the settled range once.
+  useEffect(() => {
+    const previous = aiInsightDateRangeRef.current;
+    if (previous.fromDate === fromDate && previous.toDate === toDate) return;
+    aiInsightDateRangeRef.current = { fromDate, toDate };
+    if (!aiInsightAutoRequestedRef.current) return;
+
+    const timerId = window.setTimeout(() => {
+      if (aiInsightDateRefreshTimerRef.current === timerId) aiInsightDateRefreshTimerRef.current = null;
+      aiInsightGenerateRef.current();
+    }, 500);
+    aiInsightDateRefreshTimerRef.current = timerId;
+
+    return () => {
+      window.clearTimeout(timerId);
+      if (aiInsightDateRefreshTimerRef.current === timerId) aiInsightDateRefreshTimerRef.current = null;
+    };
+  }, [fromDate, toDate]);
+
   const handleDatePreset = (preset: QuickDateRangePreset) => {
     setDatePreset(preset);
     const range = getDateRangeForPreset(preset);
@@ -812,7 +843,7 @@ export const Analytics: React.FC = () => {
               {aiInsightLoading ? 'Preparing…' : aiInsight ? 'Refresh summary' : 'Get a quick summary'}
             </button>
           </div>
-          {aiInsightIsStale && aiInsight && <p role="status" className="text-sm font-medium text-amber-700">These insights use earlier criteria and are out of date. Refresh the summary to apply the current filters.</p>}
+          {aiInsightIsStale && aiInsight && <p role="status" className="text-sm font-medium text-amber-700">{aiInsightDatesAreStale ? 'The AI summary will refresh automatically for the selected dates.' : 'These insights use earlier criteria and are out of date. Refresh the summary to apply the current filters.'}</p>}
           {aiInsightError && <p role="alert" className="text-sm text-rose-700">{aiInsightError}</p>}
           {aiInsightLoading && <p role="status" className="text-sm text-slate-500">Reviewing sales, purchases, and stock activity…</p>}
           {aiInsight && <div aria-live="polite" className="space-y-4 rounded-2xl bg-indigo-50/60 p-4">
