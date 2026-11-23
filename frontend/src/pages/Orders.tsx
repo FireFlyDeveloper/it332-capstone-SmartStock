@@ -874,11 +874,11 @@ export const Orders: React.FC = () => {
           CREATE / EDIT MODAL
          ═══════════════════════════════════════════════════════════════ */}
       {modalOpen && (
-        <div className="responsive-dialog-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideIn">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
+        <div className="responsive-dialog-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4">
+          <div className="flex max-h-[90dvh] w-full max-w-2xl min-h-0 flex-col overflow-hidden rounded-2xl bg-white animate-slideIn">
+            <div className="relative z-20 flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white p-4 sm:p-6">
               <div>
-                <h3 className="text-xl font-semibold text-gray-900">
+                <h3 className="text-lg font-semibold text-gray-900 sm:text-xl">
                   {modalMode === 'create' ? 'Create New Order' : 'Edit Order'}
                 </h3>
                 {modalMode === 'edit' && <p className="text-sm text-gray-500">{editingOrderId}</p>}
@@ -886,7 +886,7 @@ export const Orders: React.FC = () => {
               <button onClick={closeModal} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <form onSubmit={handleSubmit} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-6">
               {/* ── Customer ─────────────────────────────────────── */}
               <div className="space-y-4">
                 <h4 className="font-medium text-gray-900 flex items-center gap-2">
@@ -1091,7 +1091,7 @@ export const Orders: React.FC = () => {
               </div>
 
               {/* ── Actions ────────────────────────────────────────── */}
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
                 <button type="button" onClick={closeModal} className="flex-1 btn-secondary">Cancel</button>
                 <button type="submit" className="flex-1 btn-primary" disabled={form.items.length === 0}>
                   {savingOrder ? 'Saving…' : modalMode === 'create' ? 'Create Order' : 'Save Changes'}
@@ -1106,14 +1106,14 @@ export const Orders: React.FC = () => {
           VIEW ORDER MODAL
          ═══════════════════════════════════════════════════════════════ */}
       {viewOrder && (
-        <div className="responsive-dialog-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideIn">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
+        <div className="responsive-dialog-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4">
+          <div className="flex max-h-[90dvh] w-full max-w-2xl min-h-0 flex-col overflow-hidden rounded-2xl bg-white animate-slideIn">
+            <div className="relative z-20 flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white p-3 sm:gap-3 sm:p-6">
               <div>
-                <h3 className="text-xl font-semibold text-gray-900">Order Details</h3>
-                <p className="text-sm text-gray-500">{viewOrder.referenceNumber} · {viewOrder.id}</p>
+                <h3 className="text-lg font-semibold text-gray-900 sm:text-xl">Order Details</h3>
+                <p className="break-all text-xs text-gray-500 sm:text-sm">{viewOrder.referenceNumber} · {viewOrder.id}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-0.5 sm:gap-2">
                 <a
                   href={`/tracking/${encodeURIComponent(viewOrder.referenceNumber)}`}
                   target="_blank"
@@ -1133,28 +1133,25 @@ export const Orders: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-6">
               {/* ── Progress Timeline ──────────────────────────────── */}
               {(viewOrder.orderStatus !== 'cancelled') && (
-                <div className="bg-gray-50 rounded-xl p-4 sm:p-6">
+                <div className="bg-gray-50 rounded-xl p-3 sm:p-6">
                   <h4 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
                     <Clock className="w-4 h-4 text-gray-400" /> Order Progress
                   </h4>
-                  <div className="flex items-start w-full relative">
+                  <div className="relative flex w-full flex-col gap-4 md:flex-row md:items-start md:gap-0">
                     {getSteps(viewOrder.orderType).map((step, i, arr) => {
                       const current = getCurrentStep(viewOrder.orderStatus, viewOrder.orderType);
                       const done = i <= current;
                       const isCurrent = i === current;
                       return (
-                        <div key={step.key} className="relative flex-1 flex flex-col items-center">
+                        <div key={step.key} className="relative flex min-h-8 items-start gap-3 md:min-h-0 md:flex-1 md:flex-col md:items-center md:gap-0">
                           {/* Segment connector line to next step */}
                           {i < arr.length - 1 && (
-                            <div className="absolute top-4 left-1/2 w-full h-0.5 -translate-y-1/2 bg-gray-200 z-0">
+                            <div className="absolute left-4 top-8 z-0 h-[calc(100%+1rem)] w-0.5 bg-gray-200 md:left-1/2 md:top-4 md:h-0.5 md:w-full md:-translate-y-1/2">
                               <div
-                                className="h-full bg-blue-600 transition-all duration-500"
-                                style={{
-                                  width: i < current ? '100%' : '0%',
-                                }}
+                                className={`bg-blue-600 transition-all duration-500 ${i < current ? 'h-full w-full' : 'h-0 w-full md:h-full md:w-0'}`}
                               />
                             </div>
                           )}
@@ -1170,7 +1167,7 @@ export const Orders: React.FC = () => {
 
                           {/* Step Label */}
                           <p
-                            className={`mt-2 text-[11px] font-medium text-center px-1 leading-tight ${
+                            className={`mt-1 text-sm font-medium leading-tight md:mt-2 md:px-1 md:text-center md:text-[11px] ${
                               isCurrent ? 'text-blue-700 font-bold' : done ? 'text-gray-900 font-semibold' : 'text-gray-400'
                             }`}
                           >

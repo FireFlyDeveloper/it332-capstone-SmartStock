@@ -138,6 +138,8 @@ export const Analytics: React.FC = () => {
   const [purchaseLoadingMore, setPurchaseLoadingMore] = useState(false);
   const [purchaseError, setPurchaseError] = useState('');
   const [purchaseLoadMoreError, setPurchaseLoadMoreError] = useState('');
+  const purchaseSentinelRef = useRef<HTMLDivElement | null>(null);
+  const purchaseScrollerRef = useRef<HTMLDivElement | null>(null);
   const purchaseRequestRef = useRef(0);
   const purchaseLoadingMoreRef = useRef(false);
   const [forecast, setForecast] = useState<DemandForecastProduct[]>([]);
@@ -293,6 +295,16 @@ export const Analytics: React.FC = () => {
       }
     }
   }, [purchaseData, purchaseLoading]);
+
+  useEffect(() => {
+    const sentinel = purchaseSentinelRef.current;
+    if (!sentinel || !purchaseData?.page.hasMore || purchaseLoading || purchaseLoadingMore || purchaseLoadMoreError || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMorePurchases();
+    }, { root: purchaseScrollerRef.current, rootMargin: '120px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [purchaseData?.page.hasMore, purchaseLoading, purchaseLoadingMore, purchaseLoadMoreError, loadMorePurchases]);
 
   useEffect(() => {
     const requestId = ++snapshotRequestRef.current;
@@ -1354,7 +1366,7 @@ export const Analytics: React.FC = () => {
               <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-600">Priced receipts</p><p className="mt-1 text-xl font-black text-slate-900">{purchaseData.pricedReceiptCount}</p></div>
               <div className="rounded-2xl bg-orange-50 p-4"><p className="text-xs uppercase text-orange-700">Unpriced receipts</p><p className="mt-1 text-xl font-black text-orange-900">{purchaseData.unpricedReceiptCount}</p></div>
             </div>
-            {purchaseRows.length === 0 ? <p className="rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">No inbound purchase receipts were recorded for {purchaseData.year}.</p> : <div className="max-h-96 overflow-auto rounded-xl border border-slate-100">
+            {purchaseRows.length === 0 ? <p className="rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">No inbound purchase receipts were recorded for {purchaseData.year}.</p> : <div ref={purchaseScrollerRef} className="max-h-96 overflow-auto rounded-xl border border-slate-100">
               <div className="min-w-[980px]"><table className="w-full text-left">
                 <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase text-slate-500 shadow-sm"><tr>
                   <th className="px-4 py-3">Product</th><th className="px-4 py-3">Material type</th><th className="px-4 py-3">Supplier</th>
@@ -1369,13 +1381,14 @@ export const Analytics: React.FC = () => {
                   <td className="px-4 py-3 text-right text-sm font-semibold">{formatCurrency(row.totalCost)}</td><td className="px-4 py-3 text-right text-sm">{row.unpricedQuantity} {row.unit}</td>
                 </tr>)}</tbody>
               </table></div>
+              {purchaseData.page.hasMore && <div ref={purchaseSentinelRef} role="status" className="py-3 text-center text-xs text-slate-400">More purchase groups are available below.</div>}
             </div>}
             <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
               <span>Showing {purchaseRows.length} of {purchaseData.page.totalCount} product-and-supplier groups; the totals above cover all groups.</span>
-              {purchaseData.page.hasMore && <button type="button" onClick={() => void loadMorePurchases()} disabled={purchaseLoadingMore} className="rounded-lg border border-amber-200 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50">{purchaseLoadingMore ? 'Loading…' : purchaseLoadMoreError ? 'Retry loading purchases' : 'Load more purchases'}</button>}
+              {purchaseData.page.hasMore && typeof IntersectionObserver === 'undefined' && <button type="button" onClick={() => void loadMorePurchases()} disabled={purchaseLoadingMore} className="rounded-lg border border-amber-200 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50">{purchaseLoadingMore ? 'Loading…' : 'Load more purchases'}</button>}
             </div>
             {purchaseLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more purchase groups…</p>}
-            {purchaseLoadMoreError && <p role="alert" className="text-center text-sm text-rose-700">{purchaseLoadMoreError}</p>}
+            {purchaseLoadMoreError && <div role="alert" className="text-center text-sm text-rose-700"><p>{purchaseLoadMoreError}</p><button type="button" onClick={() => void loadMorePurchases()} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
           </>}
         </section>
 
