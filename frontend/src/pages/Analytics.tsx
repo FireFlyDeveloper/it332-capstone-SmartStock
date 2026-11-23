@@ -138,6 +138,7 @@ export const Analytics: React.FC = () => {
   const [purchaseLoadingMore, setPurchaseLoadingMore] = useState(false);
   const [purchaseError, setPurchaseError] = useState('');
   const [purchaseLoadMoreError, setPurchaseLoadMoreError] = useState('');
+  const purchaseLoadMoreErrorRef = useRef(false);
   const purchaseSentinelRef = useRef<HTMLDivElement | null>(null);
   const purchaseScrollerRef = useRef<HTMLDivElement | null>(null);
   const purchaseRequestRef = useRef(0);
@@ -248,6 +249,7 @@ export const Analytics: React.FC = () => {
     setPurchaseRows([]);
     setPurchaseError('');
     setPurchaseLoadMoreError('');
+    purchaseLoadMoreErrorRef.current = false;
     setPurchaseLoading(true);
     setPurchaseLoadingMore(false);
     purchaseLoadingMoreRef.current = false;
@@ -276,7 +278,7 @@ export const Analytics: React.FC = () => {
   }, [purchaseYear, purchaseRetry]);
 
   const loadMorePurchases = useCallback(async () => {
-    if (!purchaseData?.page.hasMore || !purchaseData.page.nextCursor || purchaseLoading || purchaseLoadingMoreRef.current) return;
+    if (!purchaseData?.page.hasMore || !purchaseData.page.nextCursor || purchaseLoading || purchaseLoadingMoreRef.current || purchaseLoadMoreErrorRef.current) return;
     const requestId = purchaseRequestRef.current;
     purchaseLoadingMoreRef.current = true;
     setPurchaseLoadingMore(true);
@@ -287,7 +289,10 @@ export const Analytics: React.FC = () => {
       setPurchaseRows((current) => [...current, ...result.groups]);
       setPurchaseData(result);
     } catch (error) {
-      if (requestId === purchaseRequestRef.current) setPurchaseLoadMoreError(error instanceof Error ? error.message : 'Could not load more annual purchase groups.');
+      if (requestId === purchaseRequestRef.current) {
+        purchaseLoadMoreErrorRef.current = true;
+        setPurchaseLoadMoreError(error instanceof Error ? error.message : 'Could not load more annual purchase groups.');
+      }
     } finally {
       if (requestId === purchaseRequestRef.current) {
         purchaseLoadingMoreRef.current = false;
@@ -295,6 +300,17 @@ export const Analytics: React.FC = () => {
       }
     }
   }, [purchaseData, purchaseLoading]);
+
+  const retryMorePurchases = useCallback(() => {
+    purchaseLoadMoreErrorRef.current = false;
+    void loadMorePurchases();
+  }, [loadMorePurchases]);
+
+  const handlePurchaseScroll = useCallback(() => {
+    const scroller = purchaseScrollerRef.current;
+    if (!scroller || !purchaseData?.page.hasMore || purchaseLoading || purchaseLoadingMoreRef.current || purchaseLoadMoreErrorRef.current || purchaseLoadMoreError) return;
+    if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 120) void loadMorePurchases();
+  }, [purchaseData?.page.hasMore, purchaseLoading, purchaseLoadMoreError, loadMorePurchases]);
 
   useEffect(() => {
     const sentinel = purchaseSentinelRef.current;
@@ -304,7 +320,7 @@ export const Analytics: React.FC = () => {
     }, { root: purchaseScrollerRef.current, rootMargin: '120px' });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [purchaseData?.page.hasMore, purchaseLoading, purchaseLoadingMore, purchaseLoadMoreError, loadMorePurchases]);
+  }, [purchaseData?.page.hasMore, purchaseLoading, purchaseLoadingMore, purchaseLoadMoreError, purchaseRows.length, loadMorePurchases]);
 
   useEffect(() => {
     const requestId = ++snapshotRequestRef.current;
@@ -1366,7 +1382,7 @@ export const Analytics: React.FC = () => {
               <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs uppercase text-slate-600">Priced receipts</p><p className="mt-1 text-xl font-black text-slate-900">{purchaseData.pricedReceiptCount}</p></div>
               <div className="rounded-2xl bg-orange-50 p-4"><p className="text-xs uppercase text-orange-700">Unpriced receipts</p><p className="mt-1 text-xl font-black text-orange-900">{purchaseData.unpricedReceiptCount}</p></div>
             </div>
-            {purchaseRows.length === 0 ? <p className="rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">No inbound purchase receipts were recorded for {purchaseData.year}.</p> : <div ref={purchaseScrollerRef} className="max-h-96 overflow-auto rounded-xl border border-slate-100">
+            {purchaseRows.length === 0 ? <p className="rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">No inbound purchase receipts were recorded for {purchaseData.year}.</p> : <div ref={purchaseScrollerRef} onScroll={handlePurchaseScroll} className="max-h-96 overflow-auto rounded-xl border border-slate-100">
               <div className="min-w-[980px]"><table className="w-full text-left">
                 <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase text-slate-500 shadow-sm"><tr>
                   <th className="px-4 py-3">Product</th><th className="px-4 py-3">Material type</th><th className="px-4 py-3">Supplier</th>
@@ -1385,10 +1401,10 @@ export const Analytics: React.FC = () => {
             </div>}
             <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
               <span>Showing {purchaseRows.length} of {purchaseData.page.totalCount} product-and-supplier groups; the totals above cover all groups.</span>
-              {purchaseData.page.hasMore && typeof IntersectionObserver === 'undefined' && <button type="button" onClick={() => void loadMorePurchases()} disabled={purchaseLoadingMore} className="rounded-lg border border-amber-200 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50">{purchaseLoadingMore ? 'Loading…' : 'Load more purchases'}</button>}
+              {purchaseData.page.hasMore && !purchaseLoadMoreError && typeof IntersectionObserver === 'undefined' && <button type="button" onClick={() => void loadMorePurchases()} disabled={purchaseLoadingMore} className="rounded-lg border border-amber-200 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50">{purchaseLoadingMore ? 'Loading…' : 'Load more purchases'}</button>}
             </div>
             {purchaseLoadingMore && <p role="status" className="py-2 text-center text-xs text-slate-400">Loading more purchase groups…</p>}
-            {purchaseLoadMoreError && <div role="alert" className="text-center text-sm text-rose-700"><p>{purchaseLoadMoreError}</p><button type="button" onClick={() => void loadMorePurchases()} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
+            {purchaseLoadMoreError && <div role="alert" className="text-center text-sm text-rose-700"><p>{purchaseLoadMoreError}</p><button type="button" onClick={retryMorePurchases} className="mt-2 font-semibold text-indigo-600">Retry</button></div>}
           </>}
         </section>
 
