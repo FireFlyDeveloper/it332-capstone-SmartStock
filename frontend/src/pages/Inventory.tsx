@@ -364,7 +364,7 @@ export const Inventory: React.FC = () => {
   return (
       <div className="space-y-6 animate-fadeIn">
         {/* Header Actions */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-between">
+        <div className="flex flex-col xl:flex-row gap-4 justify-between">
           <div className="flex flex-col sm:flex-row gap-3">
             {/* Search */}
             <div className="relative">

@@ -4,9 +4,9 @@
   --auth-muted: #647089;
   --auth-soft: #f6f8fc;
   --auth-border: #dce3ef;
-  --auth-accent: #4f46e5;
-  --auth-accent-dark: #4338ca;
-  --auth-accent-soft: #eef2ff;
+  --auth-accent: #26745b;
+  --auth-accent-dark: #1d5f49;
+  --auth-accent-soft: #edf5ef;
 
   display: grid;
   grid-template-columns: minmax(420px, 0.92fr) minmax(500px, 1.08fr);
@@ -23,7 +23,7 @@
   min-width: 0;
   padding: 48px clamp(28px, 6vw, 88px);
   background:
-    radial-gradient(ellipse at 2% 100%, rgba(79, 70, 229, 0.045), transparent 40%),
+    radial-gradient(ellipse at 2% 100%, rgba(38, 116, 91, 0.045), transparent 40%),
     #fff;
 }
 
@@ -59,7 +59,7 @@
   right: -240px;
   top: -230px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(79, 70, 229, 0.27), transparent 68%);
+  background: radial-gradient(circle, rgba(38, 116, 91, 0.27), transparent 68%);
 }
 
 @media (max-width: 980px) {

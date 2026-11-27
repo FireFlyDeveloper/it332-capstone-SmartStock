@@ -721,7 +721,7 @@ export const Orders: React.FC = () => {
                   type="date"
                   value={fromDate}
                   onChange={(e) => handleFromDateChange(e.target.value)}
-                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#4f46e5] focus:outline-none transition-all shadow-2xs"
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#26745b] focus:outline-none transition-all shadow-2xs"
                 />
               </div>
 
@@ -734,7 +734,7 @@ export const Orders: React.FC = () => {
                   type="date"
                   value={toDate}
                   onChange={(e) => handleToDateChange(e.target.value)}
-                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#4f46e5] focus:outline-none transition-all shadow-2xs"
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#26745b] focus:outline-none transition-all shadow-2xs"
                 />
               </div>
 
@@ -1118,7 +1118,7 @@ export const Orders: React.FC = () => {
                   href={`/tracking/${encodeURIComponent(viewOrder.referenceNumber)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-2 hover:bg-indigo-50 rounded-lg text-gray-500 hover:text-[#4f46e5] transition-colors"
+                  className="p-2 hover:bg-indigo-50 rounded-lg text-gray-500 hover:text-[#26745b] transition-colors"
                   title="Open Live Public Tracking in new tab"
                 >
                   <Compass className="w-5 h-5" />

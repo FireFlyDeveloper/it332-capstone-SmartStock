@@ -6,7 +6,7 @@
  * - Top logo 40x40px rounded-xl box + brand title
  * - Grouped navigation under uppercase labels (GESTION, FINANCES)
  * - Navigation items: 13px font, text-slate-400, right-aligned chevron
- * - Active state: Background #4f46e5, white text, shadow-[0_10px_15px_-3px_rgba(79,70,229,0.4)]
+ * - Active state: Background #26745b, white text, shadow-[0_10px_15px_-3px_rgba(79,70,229,0.4)]
  * - Header: 80px height, #ffffff, border-bottom 1px solid #f1f5f9; no global search input
  * - Right icon group: notifications with red dot
  * - Profile component: Avatar + Name + Role
@@ -87,6 +87,9 @@ export function Layout({ children }: LayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const currentPage = navGroups
+    .flatMap((group) => group.items)
+    .find((item) => item.path === location.pathname || (item.path !== '/' && location.pathname.startsWith(item.path)));
 
   useEffect(() => {
     setShowProfileMenu(false);
@@ -125,7 +128,9 @@ export function Layout({ children }: LayoutProps) {
 
       {/* 280px Fixed-width Dark Navy Sidebar */}
       <aside
-      className={`layout-sidebar
+        id="smartstock-primary-navigation"
+        aria-label="Primary navigation"
+        className={`layout-sidebar
           fixed inset-y-0 left-0 z-50
           w-[min(280px,calc(100vw-1.5rem))] min-w-0 max-w-[calc(100vw-1.5rem)] bg-[#0f172a] border-r border-[#1e293b]
           flex flex-col justify-between
@@ -139,7 +144,7 @@ export function Layout({ children }: LayoutProps) {
           <div className="h-[80px] px-6 flex items-center justify-between border-b border-[#1e293b]">
             <NavLink to="/" className="flex items-center gap-3 group">
               {/* 40x40px rounded-xl logo box */}
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#4f46e5] to-[#6366f1] flex items-center justify-center shadow-lg shadow-indigo-950/60 group-hover:scale-105 transition-transform">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#26745b] to-[#33856c] flex items-center justify-center shadow-lg shadow-indigo-950/60 group-hover:scale-105 transition-transform">
                 <Package className="w-5 h-5 text-white" />
               </div>
               <div className="flex flex-col">
@@ -188,7 +193,7 @@ export function Layout({ children }: LayoutProps) {
                         text-[13px] font-medium transition-all duration-300
                         ${
                           isActive
-                            ? 'bg-[#4f46e5] text-white shadow-[0_10px_15px_-3px_rgba(79,70,229,0.4)] font-semibold'
+                            ? 'bg-[#26745b] text-white shadow-[0_10px_15px_-3px_rgba(79,70,229,0.4)] font-semibold'
                             : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
                         }
                       `}
@@ -228,16 +233,22 @@ export function Layout({ children }: LayoutProps) {
       <div className="app-layout__content flex-1 flex flex-col lg:pl-[280px] min-w-0">
         {/* Sticky Header: 80px height, #ffffff, border-bottom #f1f5f9 */}
         <header className="layout-topbar sticky top-0 z-30 h-16 sm:h-20 bg-white border-b border-[#f1f5f9] px-3 sm:px-4 lg:px-8 flex items-center justify-between gap-2 shadow-[0_1px_3px_rgb(0_0_0/0.02)]">
-          {/* Mobile navigation toggle; global search is intentionally absent. */}
-          <div className="flex flex-1 items-center gap-4">
+          {/* Mobile navigation toggle and current page context. */}
+          <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
             <button
               type="button"
               onClick={() => setIsMobileMenuOpen(true)}
-              className="lg:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
+              className="lg:hidden inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-100"
               aria-label="Open menu"
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="smartstock-primary-navigation"
             >
               <Menu className="w-5 h-5" />
             </button>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-slate-900 sm:text-base">{currentPage?.label ?? 'SmartStock'}</p>
+              <p className="hidden text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 sm:block">Operations workspace</p>
+            </div>
           </div>
 
           {/* Right: Notifications + Profile */}
@@ -258,7 +269,7 @@ export function Layout({ children }: LayoutProps) {
                 className="flex items-center gap-3 p-1 rounded-2xl hover:bg-slate-50 transition-colors group"
               >
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-emerald-400 p-0.5 shadow-sm">
-                  <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center font-extrabold text-sm text-[#4f46e5]">
+                  <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center font-extrabold text-sm text-[#26745b]">
                     {user?.name ? user.name[0].toUpperCase() : '?'}
                   </div>
                 </div>

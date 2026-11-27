@@ -378,7 +378,7 @@ export const ProfilePage: React.FC = () => {
         <div className="flex items-center gap-5">
           {/* Avatar with initial */}
           <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-[24px] bg-gradient-to-tr from-indigo-600 via-indigo-500 to-emerald-400 p-1 shadow-md shadow-indigo-900/10 shrink-0">
-            <div className="w-full h-full bg-white rounded-[20px] flex items-center justify-center font-black text-2xl sm:text-3xl text-[#4f46e5]">
+            <div className="w-full h-full bg-white rounded-[20px] flex items-center justify-center font-black text-2xl sm:text-3xl text-[#26745b]">
               {name ? name.charAt(0).toUpperCase() : 'U'}
             </div>
           </div>
@@ -391,7 +391,7 @@ export const ProfilePage: React.FC = () => {
               <span
                 className={`px-3 py-0.5 rounded-full text-xs font-black uppercase tracking-wider ${
                   isAdmin
-                    ? 'bg-indigo-50 text-[#4f46e5] border border-indigo-100'
+                    ? 'bg-indigo-50 text-[#26745b] border border-indigo-100'
                     : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                 }`}
               >
@@ -432,7 +432,7 @@ export const ProfilePage: React.FC = () => {
               onClick={() => handleTabChange(tab.key as ProfileTab)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap ${
                 isActive
-                  ? 'bg-[#4f46e5] text-white shadow-md shadow-indigo-900/15'
+                  ? 'bg-[#26745b] text-white shadow-md shadow-indigo-900/15'
                   : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200/70'
               }`}
             >
@@ -459,7 +459,7 @@ export const ProfilePage: React.FC = () => {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none"
+                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#26745b]/30 focus:border-[#26745b] outline-none"
                   placeholder="Enter full name"
                   required
                 />
@@ -475,7 +475,7 @@ export const ProfilePage: React.FC = () => {
                   required={isAdmin}
                   autoComplete="email"
                   className={isAdmin
-                    ? 'w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none'
+                    ? 'w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#26745b]/30 focus:border-[#26745b] outline-none'
                     : 'w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-500 cursor-not-allowed'}
                 />
                 <p className="text-[10px] text-slate-400">{isAdmin ? 'This email is also your login address.' : 'Email is managed by organization admin'}</p>
@@ -518,7 +518,7 @@ export const ProfilePage: React.FC = () => {
                     type={showCurrentPassword ? 'text' : 'password'}
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="w-full pl-3.5 pr-10 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none"
+                    className="w-full pl-3.5 pr-10 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#26745b]/30 focus:border-[#26745b] outline-none"
                     placeholder="Enter current password"
                     required
                   />
@@ -540,7 +540,7 @@ export const ProfilePage: React.FC = () => {
                     type={showNewPassword ? 'text' : 'password'}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full pl-3.5 pr-10 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none"
+                    className="w-full pl-3.5 pr-10 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#26745b]/30 focus:border-[#26745b] outline-none"
                     placeholder="Minimum 8 characters"
                     required
                   />
@@ -593,7 +593,7 @@ export const ProfilePage: React.FC = () => {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none"
+                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#26745b]/30 focus:border-[#26745b] outline-none"
                   placeholder="Re-enter new password"
                   required
                 />
@@ -649,7 +649,7 @@ export const ProfilePage: React.FC = () => {
           {/* Browser permission controls for Notifications */}
           <div className="bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/60 rounded-[28px] p-6 sm:p-8 border border-indigo-100 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#4f46e5] text-white flex items-center justify-center shrink-0 shadow-md shadow-indigo-900/15">
+              <div className="w-12 h-12 rounded-2xl bg-[#26745b] text-white flex items-center justify-center shrink-0 shadow-md shadow-indigo-900/15">
                 <Radio className="w-6 h-6 animate-pulse" />
               </div>
               <div className="space-y-1">
@@ -694,7 +694,7 @@ export const ProfilePage: React.FC = () => {
                     disabled={pushBusy || !pushConfig?.configured || pushConfigError}
                     className="btn-secondary flex items-center gap-1.5 text-xs font-bold py-2 px-3.5 shadow-2xs text-slate-700 disabled:opacity-50"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-[#4f46e5]" />
+                    <Sparkles className="w-3.5 h-3.5 text-[#26745b]" />
                     <span>{pushBusy ? 'Sending...' : 'Send Test Push'}</span>
                   </button>
                   <button
@@ -767,7 +767,7 @@ export const ProfilePage: React.FC = () => {
                     className="flex items-center justify-between p-4 bg-[#f8fafc] rounded-2xl border border-slate-100 transition-colors hover:bg-slate-50"
                   >
                     <div className="flex items-center gap-3.5">
-                      <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/80 text-[#4f46e5] flex items-center justify-center shadow-2xs shrink-0">
+                      <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/80 text-[#26745b] flex items-center justify-center shadow-2xs shrink-0">
                         <Icon className="w-5 h-5" />
                       </div>
                       <div>
@@ -788,7 +788,7 @@ export const ProfilePage: React.FC = () => {
                         }))
                       }
                       className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
-                        isEnabled ? 'bg-[#4f46e5]' : 'bg-slate-200'
+                        isEnabled ? 'bg-[#26745b]' : 'bg-slate-200'
                       }`}
                     >
                       <span
@@ -837,7 +837,7 @@ export const ProfilePage: React.FC = () => {
                   onChange={(e) =>
                     setAppSettings((prev) => ({ ...prev, currency: e.target.value as 'PHP' | 'USD' }))
                   }
-                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none"
+                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#26745b]/30 focus:border-[#26745b] outline-none"
                 >
                   <option value="PHP">PHP (₱) - Philippine Peso</option>
                   <option value="USD">USD ($) - US Dollar</option>
@@ -855,7 +855,7 @@ export const ProfilePage: React.FC = () => {
                   onChange={(e) =>
                     setAppSettings((prev) => ({ ...prev, dateFormat: e.target.value as any }))
                   }
-                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none"
+                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#26745b]/30 focus:border-[#26745b] outline-none"
                 >
                   <option value="YYYY-MM-DD">YYYY-MM-DD (ISO 8601 Standard)</option>
                   <option value="MM/DD/YYYY">MM/DD/YYYY (US Format)</option>
@@ -874,7 +874,7 @@ export const ProfilePage: React.FC = () => {
                   onChange={(e) =>
                     setAppSettings((prev) => ({ ...prev, dataDensity: e.target.value as any }))
                   }
-                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none"
+                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#26745b]/30 focus:border-[#26745b] outline-none"
                 >
                   <option value="comfortable">Comfortable (Standard spacing &amp; typography)</option>
                   <option value="compact">Compact (Higher data row density)</option>
@@ -892,7 +892,7 @@ export const ProfilePage: React.FC = () => {
                   onChange={(e) =>
                     setAppSettings((prev) => ({ ...prev, autoRefreshInterval: Number(e.target.value) }))
                   }
-                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none"
+                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#26745b]/30 focus:border-[#26745b] outline-none"
                 >
                   <option value={15}>Every 15 seconds</option>
                   <option value={30}>Every 30 seconds (Default)</option>
@@ -912,7 +912,7 @@ export const ProfilePage: React.FC = () => {
                   onChange={(e) =>
                     setAppSettings((prev) => ({ ...prev, defaultExportType: e.target.value as any }))
                   }
-                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none"
+                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#26745b]/30 focus:border-[#26745b] outline-none"
                 >
                   <option value="sales">Sales Statement</option>
                   <option value="purchases">Purchases Summary</option>
@@ -932,7 +932,7 @@ export const ProfilePage: React.FC = () => {
                   onChange={(e) =>
                     setAppSettings((prev) => ({ ...prev, defaultExportFormat: e.target.value as any }))
                   }
-                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none"
+                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200/90 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#26745b]/30 focus:border-[#26745b] outline-none"
                 >
                   <option value="pdf">PDF Document (Formatted)</option>
                   <option value="xlsx">Excel Spreadsheet (XLSX)</option>

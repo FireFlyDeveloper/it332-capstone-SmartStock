@@ -30,8 +30,8 @@
   height: 7px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #a5b4fc;
-  box-shadow: 0 0 0 4px rgba(165, 180, 252, 0.11);
+  background: #91bca3;
+  box-shadow: 0 0 0 4px rgb(145 188 163 / 0.12);
 }
 
 .auth-art__content {
@@ -56,7 +56,7 @@
 .auth-art__visual-glow {
   position: absolute;
   inset: 14% -22% 12%;
-  background: radial-gradient(ellipse, rgba(99, 102, 241, 0.26), transparent 66%);
+  background: radial-gradient(ellipse, rgb(51 133 108 / 0.26), transparent 66%);
 }
 
 .auth-art__glass {
@@ -88,8 +88,8 @@
   left: 34%;
   width: 42%;
   height: 45%;
-  border-color: rgba(199, 210, 254, 0.84);
-  background: linear-gradient(145deg, rgba(165, 180, 252, 0.3), rgba(79, 70, 229, 0.075) 75%);
+  border-color: rgb(190 216 200 / 0.84);
+  background: linear-gradient(145deg, rgb(145 188 163 / 0.3), rgb(38 116 91 / 0.075) 75%);
 }
 
 .auth-art__visual-label {
@@ -107,7 +107,7 @@
 .auth-art__visual-dot {
   width: 5px;
   height: 5px;
-  background: #818cf8;
+  background: #5a9a7d;
   box-shadow: none;
 }
 
@@ -117,7 +117,7 @@
 
 .auth-art__eyebrow {
   margin: 0 0 18px;
-  color: #a5b4fc;
+  color: #91bca3;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.17em;

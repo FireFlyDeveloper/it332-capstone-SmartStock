@@ -306,7 +306,7 @@ export const NotificationDropdown: React.FC = () => {
         return <Truck className="w-4 h-4 text-sky-600" />;
       case 'order':
       default:
-        return <ShoppingBag className="w-4 h-4 text-[#4f46e5]" />;
+        return <ShoppingBag className="w-4 h-4 text-[#26745b]" />;
     }
   };
 
@@ -330,7 +330,7 @@ export const NotificationDropdown: React.FC = () => {
         onClick={() => setIsOpen(!isOpen)}
         className={`relative p-2.5 rounded-2xl transition-all ${
           isOpen
-            ? 'bg-indigo-50 text-[#4f46e5]'
+            ? 'bg-indigo-50 text-[#26745b]'
             : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
         }`}
         title="Notifications"
@@ -351,7 +351,7 @@ export const NotificationDropdown: React.FC = () => {
           {/* Header */}
           <div className="p-4 border-b border-[#f1f5f9] flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl bg-indigo-50 text-[#26745b] flex items-center justify-center">
                 <Bell className="w-4 h-4" />
               </div>
               <div>
@@ -372,7 +372,7 @@ export const NotificationDropdown: React.FC = () => {
                 <button
                   type="button"
                   onClick={markAllAsRead}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold text-[#4f46e5] hover:bg-indigo-50 transition-colors"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold text-[#26745b] hover:bg-indigo-50 transition-colors"
                   title="Mark all as read"
                 >
                   <CheckCheck className="w-3.5 h-3.5" />
@@ -428,7 +428,7 @@ export const NotificationDropdown: React.FC = () => {
               <div role="alert" className="p-6 text-center">
                 <p className="text-xs font-bold text-slate-700">Alerts could not be loaded.</p>
                 <p className="text-[11px] text-slate-500 mt-1">Product or order data is unavailable, so the alert list may be incomplete.</p>
-                <button type="button" onClick={retrySources} className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-[#4f46e5] hover:underline">
+                <button type="button" onClick={retrySources} className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-[#26745b] hover:underline">
                   <RefreshCw className="w-3.5 h-3.5" />
                   Retry
                 </button>
@@ -476,7 +476,7 @@ export const NotificationDropdown: React.FC = () => {
                           {item.title}
                         </p>
                         {!isRead && (
-                          <span className="w-2 h-2 rounded-full bg-[#4f46e5] shrink-0" />
+                          <span className="w-2 h-2 rounded-full bg-[#26745b] shrink-0" />
                         )}
                       </div>
                       <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5 leading-relaxed">
@@ -486,7 +486,7 @@ export const NotificationDropdown: React.FC = () => {
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                           {item.contextLabel}
                         </span>
-                        <div className="flex items-center gap-1 text-[10px] font-bold text-[#4f46e5] opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-1 text-[10px] font-bold text-[#26745b] opacity-0 group-hover:opacity-100 transition-opacity">
                           <span>View</span>
                           <ExternalLink className="w-2.5 h-2.5" />
                         </div>
@@ -525,7 +525,7 @@ export const NotificationDropdown: React.FC = () => {
                 setIsOpen(false);
                 navigate('/inventory');
               }}
-              className="flex items-center gap-1 font-bold text-slate-600 hover:text-[#4f46e5] transition-colors"
+              className="flex items-center gap-1 font-bold text-slate-600 hover:text-[#26745b] transition-colors"
             >
               <Package className="w-3.5 h-3.5" />
               <span>Inventory</span>
@@ -536,7 +536,7 @@ export const NotificationDropdown: React.FC = () => {
                 setIsOpen(false);
                 navigate('/delivery');
               }}
-              className="flex items-center gap-1 font-bold text-slate-600 hover:text-[#4f46e5] transition-colors"
+              className="flex items-center gap-1 font-bold text-slate-600 hover:text-[#26745b] transition-colors"
             >
               <Truck className="w-3.5 h-3.5" />
               <span>Deliveries</span>

@@ -20,7 +20,7 @@ export const QuickActionsGrid: React.FC = () => {
       subtitle: 'Create sales order',
       icon: ShoppingBag,
       path: '/orders',
-      iconBg: 'bg-indigo-50 text-[#4f46e5]',
+      iconBg: 'bg-indigo-50 text-[#26745b]',
       hoverBorder: 'hover:border-indigo-200',
     },
     {

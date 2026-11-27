@@ -640,7 +640,7 @@ export const Analytics: React.FC = () => {
   const categoryListedPriceTotal = categoryListedPriceBreakdown.reduce((total, item) => total + item.value, 0);
 
   const avgOrderValue = orderSummary?.averageOrderValue ?? 0;
-  const lowStockCount = inventorySummary?.activeLowStockCount ?? 0;
+
 
   const topSellingItems = useMemo(() => (orderSummary?.topSellingItems ?? []).map((item) => {
     let shortName = item.name
@@ -776,16 +776,16 @@ export const Analytics: React.FC = () => {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-[-0.02em]">
-              Business Insights &amp; Sales Estimates
+              Analytics
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              See sales trends, stock levels, and product movement. Sales estimates use past orders and are separate from the AI summary.
+              Detailed sales, inventory, purchase, and movement analysis. Current workload and low-stock alerts remain on Dashboard.
             </p>
           </div>
           <button
             type="button"
             onClick={() => navigate('/daily-sales')}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-indigo-50 text-[#4f46e5] hover:bg-indigo-100/80 border border-indigo-100 text-xs font-bold transition-all shadow-2xs self-start sm:self-auto"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-indigo-50 text-[#26745b] hover:bg-indigo-100/80 border border-indigo-100 text-xs font-bold transition-all shadow-2xs self-start sm:self-auto"
           >
             <Banknote className="w-4 h-4" />
             <span>Daily Sales</span>
@@ -829,7 +829,7 @@ export const Analytics: React.FC = () => {
                   type="date"
                   value={fromDate}
                   onChange={(e) => handleFromDateChange(e.target.value)}
-                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#4f46e5] focus:outline-none transition-all shadow-2xs"
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#26745b] focus:outline-none transition-all shadow-2xs"
                 />
               </div>
 
@@ -842,7 +842,7 @@ export const Analytics: React.FC = () => {
                   type="date"
                   value={toDate}
                   onChange={(e) => handleToDateChange(e.target.value)}
-                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#4f46e5] focus:outline-none transition-all shadow-2xs"
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#26745b] focus:outline-none transition-all shadow-2xs"
                 />
               </div>
 
@@ -897,7 +897,7 @@ export const Analytics: React.FC = () => {
         </section>
 
         {/* Key Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {/* 1. Stock at Listed Prices */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover flex flex-col justify-between min-w-0">
             <div className="flex items-center justify-between gap-2 mb-4 min-w-0">
@@ -925,7 +925,7 @@ export const Analytics: React.FC = () => {
           {/* 2. Order Volume */}
           <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover flex flex-col justify-between min-w-0">
             <div className="flex items-center gap-2 mb-4 min-w-0">
-              <div className="w-11 h-11 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0 shadow-2xs">
+              <div className="w-11 h-11 rounded-xl bg-indigo-50 text-[#26745b] flex items-center justify-center shrink-0 shadow-2xs">
                 <Package className="w-5 h-5" />
               </div>
             </div>
@@ -968,31 +968,6 @@ export const Analytics: React.FC = () => {
             </div>
           </div>
 
-          {/* 4. Low Stock Items */}
-          <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover flex flex-col justify-between min-w-0">
-            <div className="flex items-center justify-between gap-2 mb-4 min-w-0">
-              <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 shadow-2xs">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold shrink-0 border border-amber-100/60">
-                <Clock className="w-3.5 h-3.5 shrink-0" />
-                <span>Needs attention</span>
-              </div>
-            </div>
-            <div className="space-y-1 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 truncate">
-                Active Low Stock Items
-              </p>
-              <div className="min-w-0">
-                <span
-                  title={`${lowStockCount} items`}
-                  className="text-2xl sm:text-[26px] font-black text-slate-900 tracking-tight leading-none truncate block"
-                >
-                  {lowStockCount}
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Charts Row 1 */}
@@ -1049,7 +1024,7 @@ export const Analytics: React.FC = () => {
                 <h3 className="text-lg font-bold text-slate-900">Monthly Order Transactions {orderTrendChange !== null && <span title={`Complete-month change: ${comparisonLabel}`} className={`ml-2 inline-flex items-center text-xs font-semibold ${orderTrendChange >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{orderTrendChange >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}{Math.abs(orderTrendChange)} vs {comparableMonths ? formatCalendarMonth(comparableMonths.previous.month) : 'prior month'}</span>}</h3>
                 <p className="text-xs text-slate-500">Counts all recorded orders by delivery date, including cancelled and non-cancelled transactions.</p>
               </div>
-              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0 shadow-2xs"><Package className="w-4 h-4" /></div>
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-[#26745b] flex items-center justify-center shrink-0 shadow-2xs"><Package className="w-4 h-4" /></div>
             </div>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={chartSalesData}>
@@ -1058,7 +1033,7 @@ export const Analytics: React.FC = () => {
                 <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={{ stroke: '#f1f5f9' }} allowDecimals={false} />
                 <Tooltip labelFormatter={(month) => formatCalendarMonth(String(month))} formatter={(value: number, name: string) => [value, name]} contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #f1f5f9', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.08)', fontSize: '12px', fontWeight: '600' }} />
                 <Legend />
-                <Bar dataKey="nonCancelledOrders" name="Non-cancelled" stackId="transactions" fill="#4f46e5" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="nonCancelledOrders" name="Non-cancelled" stackId="transactions" fill="#26745b" radius={[0, 0, 0, 0]} />
                 <Bar dataKey="cancelledOrders" name="Cancelled" stackId="transactions" fill="#f97316" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -1170,7 +1145,7 @@ export const Analytics: React.FC = () => {
                   Top 5 quantities in non-cancelled orders for the selected delivery-date range; category uses current catalog metadata.
                 </p>
               </div>
-              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0 shadow-2xs">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-[#26745b] flex items-center justify-center shrink-0 shadow-2xs">
                 <Package className="w-4 h-4" />
               </div>
             </div>
@@ -1294,6 +1269,11 @@ export const Analytics: React.FC = () => {
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500 font-medium">Total Products</span>
                 <span className="font-bold text-slate-900">{inventorySummary?.totalProducts ?? 0}</span>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-slate-500">Glass products</span><strong className="mt-1 block text-slate-900">{inventorySummary?.activeGlassCount ?? 0}</strong></div>
+                <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-slate-500">Aluminum</span><strong className="mt-1 block text-slate-900">{inventorySummary?.activeAluminumCount ?? 0}</strong></div>
+                <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-slate-500">Accessories</span><strong className="mt-1 block text-slate-900">{inventorySummary?.activeAccessoryCount ?? 0}</strong></div>
               </div>
             </div>
           </div>

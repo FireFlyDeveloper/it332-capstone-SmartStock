@@ -206,7 +206,7 @@ export const TrackingPage: React.FC = () => {
                 value={referenceInput}
                 onChange={(e) => setReferenceInput(e.target.value)}
                 placeholder="Enter your order reference"
-                className="w-full pl-12 pr-4 py-3.5 bg-[#f8fafc] border border-slate-200/90 rounded-2xl focus:ring-2 focus:ring-[#4f46e5]/30 focus:border-[#4f46e5] outline-none text-sm text-slate-800 font-semibold transition-all shadow-2xs"
+                className="w-full pl-12 pr-4 py-3.5 bg-[#f4f7f5] border border-slate-200/90 rounded-2xl focus:ring-2 focus:ring-[#26745b]/30 focus:border-[#26745b] outline-none text-sm text-slate-800 font-semibold transition-all shadow-2xs"
               />
             </div>
             <button
@@ -283,7 +283,7 @@ export const TrackingPage: React.FC = () => {
               {/* Public-safe customer and address details */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                 <div className="p-4 bg-[#f8fafc] rounded-2xl border border-slate-100 flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#26745b] flex items-center justify-center shrink-0">
                     <User className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
@@ -293,7 +293,7 @@ export const TrackingPage: React.FC = () => {
                 </div>
 
                 <div className="p-4 bg-[#f8fafc] rounded-2xl border border-slate-100 flex items-start gap-3 md:col-span-2">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#26745b] flex items-center justify-center shrink-0">
                     <MapPin className="w-5 h-5" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -332,7 +332,7 @@ export const TrackingPage: React.FC = () => {
                         {idx < arr.length - 1 && (
                           <div className="absolute top-5 left-1/2 w-full h-1 -translate-y-1/2 bg-slate-100 z-0">
                             <div 
-                              className="h-full bg-[#4f46e5] transition-all duration-500"
+                              className="h-full bg-[#26745b] transition-all duration-500"
                               style={{ 
                                 width: (isDelivered || idx < currentStepIndex) ? '100%' : '0%' 
                               }}
@@ -343,9 +343,9 @@ export const TrackingPage: React.FC = () => {
                         <div
                           className={`relative z-10 w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-2xs ${
                             isCurrent
-                              ? 'bg-[#4f46e5] text-white ring-4 ring-indigo-100 shadow-md shadow-indigo-900/20'
+                              ? 'bg-[#26745b] text-white ring-4 ring-indigo-100 shadow-md shadow-indigo-900/20'
                               : isCompleted
-                              ? 'bg-[#4f46e5] text-white'
+                              ? 'bg-[#26745b] text-white'
                               : 'bg-white border-2 border-slate-200 text-slate-300'
                           }`}
                         >
@@ -358,7 +358,7 @@ export const TrackingPage: React.FC = () => {
                         <p
                           className={`mt-3 text-xs font-bold tracking-tight text-center px-1 leading-tight ${
                             isCurrent
-                              ? 'text-[#4f46e5]'
+                              ? 'text-[#26745b]'
                               : isCompleted
                               ? 'text-slate-900'
                               : 'text-slate-400'
@@ -378,7 +378,7 @@ export const TrackingPage: React.FC = () => {
               {/* Status Note Banner */}
               <div className="mt-8 p-4 bg-[#f8fafc] rounded-2xl border border-slate-100 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-[#26745b] flex items-center justify-center shrink-0">
                     <Truck className="w-4 h-4" />
                   </div>
                   <div>
@@ -394,7 +394,7 @@ export const TrackingPage: React.FC = () => {
                   type="button"
                   onClick={() => executeSearch(order.referenceNumber)}
                   disabled={loading}
-                  className="p-2 text-slate-400 hover:text-[#4f46e5] hover:bg-indigo-50 rounded-xl transition-colors print:hidden"
+                  className="p-2 text-slate-400 hover:text-[#26745b] hover:bg-indigo-50 rounded-xl transition-colors print:hidden"
                   title="Refresh status"
                 >
                   <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -406,7 +406,7 @@ export const TrackingPage: React.FC = () => {
             <div className="bg-white rounded-[28px] p-6 sm:p-8 border border-[#f1f5f9] shadow-sm">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-                  <ShoppingBag className="w-5 h-5 text-[#4f46e5]" />
+                  <ShoppingBag className="w-5 h-5 text-[#26745b]" />
                   <span>Order Items &amp; Billing Summary</span>
                 </h3>
                 {getPaymentBadge(order.paymentStatus)}
@@ -436,7 +436,7 @@ export const TrackingPage: React.FC = () => {
               <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Order Amount</span>
-                  <p className="text-2xl font-black text-[#4f46e5]">
+                  <p className="text-2xl font-black text-[#26745b]">
                     {formatCurrency(order.total)}
                   </p>
                 </div>
@@ -459,7 +459,7 @@ export const TrackingPage: React.FC = () => {
         {!order && !loading && (
           <div className="bg-white rounded-[28px] p-8 border border-[#f1f5f9] shadow-sm space-y-6">
             <div className="max-w-md mx-auto text-center space-y-2">
-              <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center mx-auto shadow-2xs">
+              <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-[#26745b] flex items-center justify-center mx-auto shadow-2xs">
                 <ShieldCheck className="w-7 h-7" />
               </div>
               <h3 className="text-lg font-black text-slate-900 tracking-tight">
@@ -478,7 +478,7 @@ export const TrackingPage: React.FC = () => {
               </div>
 
               <div className="p-4 rounded-2xl bg-[#f8fafc] border border-slate-100 space-y-1.5">
-                <span className="w-7 h-7 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center font-bold text-xs">2</span>
+                <span className="w-7 h-7 rounded-xl bg-indigo-50 text-[#26745b] flex items-center justify-center font-bold text-xs">2</span>
                 <p className="text-xs font-bold text-slate-900">Check the returned status</p>
                 <p className="text-[11px] text-slate-500">The status badge reflects the value returned by the tracking service.</p>
               </div>

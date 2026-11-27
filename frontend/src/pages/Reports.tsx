@@ -600,7 +600,7 @@ export const Reports: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/daily-sales')}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-indigo-50 text-[#4f46e5] hover:bg-indigo-100/80 border border-indigo-100 text-xs font-bold transition-all shadow-2xs self-start sm:self-auto"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-indigo-50 text-[#26745b] hover:bg-indigo-100/80 border border-indigo-100 text-xs font-bold transition-all shadow-2xs self-start sm:self-auto"
           >
             <Banknote className="w-4 h-4" />
             <span>Daily Sales</span>
@@ -645,7 +645,7 @@ export const Reports: React.FC = () => {
                   type="date"
                   value={fromDate}
                   onChange={(e) => handleFromDateChange(e.target.value)}
-                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#4f46e5] focus:outline-none transition-all shadow-2xs"
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#26745b] focus:outline-none transition-all shadow-2xs"
                 />
               </div>
 
@@ -658,7 +658,7 @@ export const Reports: React.FC = () => {
                   type="date"
                   value={toDate}
                   onChange={(e) => handleToDateChange(e.target.value)}
-                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#4f46e5] focus:outline-none transition-all shadow-2xs"
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:bg-white focus:border-[#26745b] focus:outline-none transition-all shadow-2xs"
                 />
               </div>
 
@@ -691,7 +691,7 @@ export const Reports: React.FC = () => {
                 <select
                   value={exportType}
                   onChange={(e) => setExportType(e.target.value as ExportType)}
-                  className="rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:border-[#4f46e5] focus:outline-none shadow-2xs"
+                  className="rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:border-[#26745b] focus:outline-none shadow-2xs"
                   title="Choose report type to export"
                 >
                   <option value="sales">Sales Report</option>
@@ -772,9 +772,9 @@ export const Reports: React.FC = () => {
             badge={`${completedOrders} completed`}
             icon={ShoppingCart}
             iconBoxBg="bg-indigo-50"
-            iconColor="text-[#4f46e5]"
+            iconColor="text-[#26745b]"
             badgeBg="bg-indigo-50"
-            badgeColor="text-[#4f46e5]"
+            badgeColor="text-[#26745b]"
             badgeBorder="border-indigo-100/60"
             badgeIcon={Package}
           />
@@ -802,6 +802,58 @@ export const Reports: React.FC = () => {
             badgeIcon={Clock}
           />
         </div>
+
+        <section aria-labelledby="report-status-breakdowns" className="space-y-4">
+          <div>
+            <h2 id="report-status-breakdowns" className="text-lg font-extrabold text-slate-900">Report Status Breakdowns</h2>
+            <p className="mt-1 text-xs text-slate-500">Orders in the selected delivery-date range. These report totals are separate from Daily Sales, which groups by UTC order creation date.</p>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
+              <h3 className="text-lg font-bold text-slate-900 mb-4">Order Status Breakdown</h3>
+              <div className="space-y-4">
+                {[
+                  { status: 'Completed', count: statusCounts.completed, color: 'bg-emerald-500' },
+                  { status: 'In Progress', count: statusCounts.inProgress, color: 'bg-sky-500' },
+                  { status: 'Pending', count: statusCounts.pending, color: 'bg-amber-500' },
+                  { status: 'Cancelled', count: statusCounts.cancelled, color: 'bg-rose-500' },
+                ].map((item) => (
+                  <div key={item.status} className="space-y-2">
+                    <div className="flex justify-between text-sm font-medium">
+                      <span className="text-slate-600">{item.status}</span>
+                      <span className="font-bold text-slate-900">{item.count} orders</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div className={`h-2 rounded-full ${item.color} transition-all duration-500`} style={{ width: `${totalOrders > 0 ? (item.count / totalOrders) * 100 : 0}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
+              <h3 className="text-lg font-bold text-slate-900 mb-4">Payment Status Breakdown</h3>
+              <div className="space-y-4">
+                {[
+                  { status: 'Paid', count: paymentCounts.paid, color: 'bg-emerald-500' },
+                  { status: 'Pending', count: paymentCounts.pending, color: 'bg-amber-500' },
+                  { status: 'Partial', count: paymentCounts.partial, color: 'bg-orange-500' },
+                  { status: 'Refunded', count: paymentCounts.refunded, color: 'bg-rose-500' },
+                ].map((item) => (
+                  <div key={item.status} className="space-y-2">
+                    <div className="flex justify-between text-sm font-medium">
+                      <span className="text-slate-600">{item.status}</span>
+                      <span className="font-bold text-slate-900">{item.count} orders</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div className={`h-2 rounded-full ${item.color} transition-all duration-500`} style={{ width: `${totalOrders > 0 ? (item.count / totalOrders) * 100 : 0}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
 
         <section className="space-y-4 rounded-[28px] border border-[#f1f5f9] bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold text-slate-900">Annual procurement spending</h2><p className="text-xs text-slate-500">Recorded receipt acquisition costs only. Unknown costs are excluded, never estimated from selling prices.</p></div><label className="report-screen-only text-xs font-semibold text-slate-600">Year <input className="input ml-2 w-28" type="number" min="2000" max="2100" value={purchaseYear} onChange={e => setPurchaseYear(e.target.value)}/></label><span className="report-print-only text-xs font-semibold text-slate-700">Reporting year: {purchaseYear}</span></div>
@@ -899,61 +951,6 @@ export const Reports: React.FC = () => {
                   </div>
                 </>}
         </section>
-
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Order Status Breakdown */}
-          <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Order Status Breakdown</h3>
-            <div className="space-y-4">
-              {[
-                { status: 'Completed', count: statusCounts.completed, color: 'bg-emerald-500' },
-                { status: 'In Progress', count: statusCounts.inProgress, color: 'bg-sky-500' },
-                { status: 'Pending', count: statusCounts.pending, color: 'bg-amber-500' },
-                { status: 'Cancelled', count: statusCounts.cancelled, color: 'bg-rose-500' },
-              ].map((item) => (
-                <div key={item.status} className="space-y-2">
-                  <div className="flex justify-between text-sm font-medium">
-                    <span className="text-slate-600">{item.status}</span>
-                    <span className="font-bold text-slate-900">{item.count} orders</span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                    <div 
-                      className={`h-2 rounded-full ${item.color} transition-all duration-500`} 
-                      style={{ width: `${totalOrders > 0 ? (item.count / totalOrders) * 100 : 0}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Payment Status Breakdown */}
-          <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Payment Status Breakdown</h3>
-            <div className="space-y-4">
-              {[
-                { status: 'Paid', count: paymentCounts.paid, color: 'bg-emerald-500' },
-                { status: 'Pending', count: paymentCounts.pending, color: 'bg-amber-500' },
-                { status: 'Partial', count: paymentCounts.partial, color: 'bg-orange-500' },
-                { status: 'Refunded', count: paymentCounts.refunded, color: 'bg-rose-500' },
-              ].map((item) => (
-                <div key={item.status} className="space-y-2">
-                  <div className="flex justify-between text-sm font-medium">
-                    <span className="text-slate-600">{item.status}</span>
-                    <span className="font-bold text-slate-900">{item.count} orders</span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                    <div 
-                      className={`h-2 rounded-full ${item.color} transition-all duration-500`} 
-                      style={{ width: `${totalOrders > 0 ? (item.count / totalOrders) * 100 : 0}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
 
       </div>
   );

@@ -260,7 +260,7 @@ export const DeliveryPage: React.FC = () => {
                 <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-indigo-50/40 via-white to-white">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#26745b] flex items-center justify-center shrink-0">
                         <Truck className="w-5 h-5" />
                       </div>
                       <div className="min-w-0">
@@ -319,7 +319,7 @@ export const DeliveryPage: React.FC = () => {
                               {index < arr.length - 1 && (
                                 <div className="absolute top-3.5 left-1/2 w-full h-0.5 -translate-y-1/2 bg-slate-200 z-0">
                                   <div
-                                    className="h-full bg-[#4f46e5] transition-all duration-500"
+                                    className="h-full bg-[#26745b] transition-all duration-500"
                                     style={{ width: (isDelivered || index < currentStep) ? '100%' : '0%' }}
                                   />
                                 </div>
@@ -327,7 +327,7 @@ export const DeliveryPage: React.FC = () => {
 
                               <div className={`
                                 relative z-10 w-7 h-7 rounded-full flex items-center justify-center transition-all
-                                ${isCompleted ? 'bg-[#4f46e5] text-white shadow-2xs' : 'bg-slate-200 text-slate-400'}
+                                ${isCompleted ? 'bg-[#26745b] text-white shadow-2xs' : 'bg-slate-200 text-slate-400'}
                                 ${isCurrent ? 'ring-4 ring-indigo-100' : ''}
                               `}>
                                 {isCurrent ? (

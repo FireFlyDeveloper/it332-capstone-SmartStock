@@ -1,7 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  Package,
-  TrendingUp,
   ShoppingBag,
   Truck,
   AlertTriangle,
@@ -11,35 +9,18 @@ import {
 import { useData } from '../components/DataContext';
 import { useAuth } from '../components/AuthContext';
 import {
-  getAnalyticsSalesTrends,
   getDashboardOrderSummary,
   getDashboardRecentActivity,
   getProductsPage,
   type ProductsPageResponse,
-  type AnalyticsSalesTrend,
   type DashboardActivityRecord,
   type DashboardOrderSummary,
-  type DashboardSalesRange,
 } from '../api';
-import { formatCurrency, formatCurrencyWhole } from '../utils/helpers';
 
-import { InteractiveDonut, type DonutSegment } from '../components/InteractiveDonut';
+
 import { RecentActivityTimeline } from '../components/RecentActivityTimeline';
-import { OperationsInsightsBanner } from '../components/GlassPromoBanner';
 import { QuickActionsGrid } from '../components/QuickActionsGrid';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  Cell,
-  Legend,
-} from 'recharts';
+import { Link } from 'react-router-dom';
 
 interface KpiCardProps {
   label: string;
@@ -51,13 +32,11 @@ interface KpiCardProps {
 }
 
 /**
- * 5-Column KPI Card
- * Spec:
- * - White background, responsive padding, rounded-3xl (28px radius)
- * - Icon in colored background box (12px radius)
- * - Label in 10px bold uppercase, tracking 0.08em
- * - Value sized to fit comfortably without clipping or overflowing
- * - Shows backend-derived KPI values without implying unverified trends.
+ * Operational KPI card
+ * - White surface with restrained corner radius and border
+ * - Icon in a compact colored box
+ * - Label and value stay readable without clipping
+ * - Shows backend-derived current workload values without implying trends.
  */
 const KpiCard: React.FC<KpiCardProps> = ({
   label,
@@ -105,26 +84,17 @@ const KpiCard: React.FC<KpiCardProps> = ({
   );
 };
 
-function formatMonthLabel(month: string): string {
-  const date = new Date(`${month}-01T00:00:00.000Z`);
-  return Number.isNaN(date.getTime())
-    ? month
-    : date.toLocaleDateString(undefined, { month: 'short', year: '2-digit', timeZone: 'UTC' });
-}
-
 export const Dashboard: React.FC = () => {
   const { deliverySummary, deliveriesLoading, deliveriesError, refreshDeliveries } = useData();
   const { user } = useAuth();
-  const [timeRange, setTimeRange] = useState<DashboardSalesRange>('6M');
+
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [inventorySummary, setInventorySummary] = useState<ProductsPageResponse['summary'] | null>(null);
   const [inventorySummaryLoading, setInventorySummaryLoading] = useState(true);
   const [inventorySummaryError, setInventorySummaryError] = useState('');
   const [inventorySummaryRetry, setInventorySummaryRetry] = useState(0);
   const inventorySummaryRequestRef = useRef(0);
-  const [salesTrend, setSalesTrend] = useState<AnalyticsSalesTrend[]>([]);
-  const [salesTrendLoading, setSalesTrendLoading] = useState(true);
-  const [salesTrendError, setSalesTrendError] = useState<string | null>(null);
+
   const [orderSummary, setOrderSummary] = useState<DashboardOrderSummary | null>(null);
   const [orderSummaryLoading, setOrderSummaryLoading] = useState(true);
   const [orderSummaryError, setOrderSummaryError] = useState<string | null>(null);
@@ -151,18 +121,6 @@ export const Dashboard: React.FC = () => {
     };
   }, [inventorySummaryRetry]);
 
-  useEffect(() => {
-    let active = true;
-    setSalesTrendLoading(true);
-    setSalesTrendError(null);
-    getAnalyticsSalesTrends(timeRange)
-      .then((rows) => { if (active) setSalesTrend(rows); })
-      .catch((cause: unknown) => {
-        if (active) setSalesTrendError(cause instanceof Error ? cause.message : 'Request failed');
-      })
-      .finally(() => { if (active) setSalesTrendLoading(false); });
-    return () => { active = false; };
-  }, [timeRange, dashboardRefreshKey]);
 
   useEffect(() => {
     let active = true;
@@ -190,41 +148,12 @@ export const Dashboard: React.FC = () => {
     return () => { active = false; };
   }, [dashboardRefreshKey]);
 
-  const totalStockAtListPrice = inventorySummary?.totalInventoryValue ?? 0;
   const lowStockItems = inventorySummary?.activeLowStockCount ?? 0;
   const activeOrders = orderSummary?.activeOrderCount ?? 0;
   const inTransitDeliveries = deliverySummary.inTransitCount;
 
-  const currentMonthKey = new Date().toISOString().slice(0, 7);
-  const monthlySales = useMemo(
-    () => salesTrend.map((row) => ({
-      ...row,
-      monthKey: row.month,
-      month: `${formatMonthLabel(row.month)}${row.month === currentMonthKey ? ' (MTD)' : ''}`,
-    })),
-    [salesTrend, currentMonthKey],
-  );
-  const currentMonth = monthlySales.find((row) => row.monthKey === currentMonthKey);
-  const currentMonthOrderValue = currentMonth?.grossOrderValue ?? 0;
-  const currentMonthGrossSales = currentMonth?.grossSales ?? 0;
-  const totalOrderValueInRange = monthlySales.reduce((sum, row) => sum + row.grossOrderValue, 0);
-  const averageMonthlyOrderValue = monthlySales.length > 0
-    ? Math.round(totalOrderValueInRange / monthlySales.length)
-    : 0;
 
-  const topItems = orderSummary?.topItems ?? [];
-
-  const glassSkuCount = inventorySummary?.activeGlassCount ?? 0;
-  const aluminumSkuCount = inventorySummary?.activeAluminumCount ?? 0;
-  const accessorySkuCount = inventorySummary?.activeAccessoryCount ?? 0;
-  const distributionData: DonutSegment[] = [
-    { label: 'Glass products', shortLabel: 'Glass', value: glassSkuCount, color: '#10b981' },
-    { label: 'Aluminum products', shortLabel: 'Aluminum', value: aluminumSkuCount, color: '#4f46e5' },
-    { label: 'Accessory products', shortLabel: 'Accessory', value: accessorySkuCount, color: '#8b5cf6' },
-  ];
-
-  const orderStatusCounts = (orderSummary?.orderStatusCounts ?? []).map(({ status, count }) => [status, count] as [string, number]);
-  const customTooltipFormatter = (value: number, name: string) => [formatCurrency(value), name];
+  const orderStatusCounts = orderSummary?.orderStatusCounts ?? [];
 
   const retryDashboard = () => {
     setDashboardRefreshKey((current) => current + 1);
@@ -277,35 +206,9 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* ── 2. 5-Column KPI Row ─────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4 2xl:gap-5">
-        {/* KPI 1: Current stock at listed unit prices */}
-        <KpiCard
-          label="STOCK AT LIST PRICE"
-          value={formatCurrencyWhole(totalStockAtListPrice)}
-          icon={Package}
-          iconBoxBg="bg-indigo-50"
-          iconColor="text-[#4f46e5]"
-        />
-
-        {/* KPI 2: Current-month gross order value */}
-        <KpiCard
-          label="THIS MONTH'S GROSS ORDER VALUE (MTD)"
-          value={salesTrendLoading ? 'Loading…' : salesTrendError ? 'Unavailable' : formatCurrencyWhole(currentMonthOrderValue)}
-          icon={TrendingUp}
-          iconBoxBg="bg-emerald-50"
-          iconColor="text-[#10b981]"
-        />
-
-        <KpiCard
-          label="THIS MONTH'S GROSS SALES (MTD)"
-          value={salesTrendLoading ? 'Loading…' : salesTrendError ? 'Unavailable' : formatCurrencyWhole(currentMonthGrossSales)}
-          icon={TrendingUp}
-          iconBoxBg="bg-teal-50"
-          iconColor="text-teal-600"
-        />
-
-        {/* KPI 3: Active Orders (Blue/Info) */}
+      {/* ── 2. Operational KPI Row ──────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
+        {/* Active order count is an operational workload signal. */}
         <KpiCard
           label="ACTIVE ORDERS"
           value={orderSummaryLoading ? 'Loading…' : orderSummaryError ? 'Unavailable' : activeOrders}
@@ -315,7 +218,7 @@ export const Dashboard: React.FC = () => {
           iconColor="text-[#3b82f6]"
         />
 
-        {/* KPI 4: In-Transit Deliveries (Amber) */}
+        {/* In-transit deliveries are an operational workload signal. */}
         <KpiCard
           label="IN TRANSIT"
           value={inTransitDeliveries}
@@ -325,7 +228,7 @@ export const Dashboard: React.FC = () => {
           iconColor="text-[#f59e0b]"
         />
 
-        {/* KPI 5: Low Stock Alerts (Rose) */}
+        {/* Low stock is an actionable inventory signal. */}
         <KpiCard
           label="LOW STOCK"
           value={lowStockItems}
@@ -336,344 +239,59 @@ export const Dashboard: React.FC = () => {
         />
       </div>
 
-      {/* ── 3. Main Analytics Area (12-col Grid) ────────────────────── */}
-      <div className="space-y-6">
-        {/* Top Row: (6-col) Line chart, (3-col) Donut chart, (3-col) Top items */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* (6-col) Line Chart for Monthly Trends with Interactive Nodes */}
-          <div className="lg:col-span-6 bg-white rounded-[40px] p-6 sm:p-8 border border-[#f1f5f9] shadow-[0_4px_6px_-1px_rgb(0_0_0/0.05)] transition-all duration-300 hover:scale-[1.01] hover:shadow-md flex flex-col justify-between">
-            <div>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                    FINANCIAL OVERVIEW
-                  </span>
-                  <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em]">
-                    Monthly Gross Sales &amp; Gross Order Value
-                  </h3>
-                </div>
-
-                <select
-                  aria-label="Monthly sales date range"
-                  value={timeRange}
-                  onChange={(event) => setTimeRange(event.target.value as DashboardSalesRange)}
-                  className="input w-auto self-start"
-                >
-                  <option value="6M">Last 6 months</option>
-                  <option value="1Y">Last year</option>
-                  <option value="ALL">All time</option>
-                </select>
-              </div>
-
-              {/* Chart with interactive nodes */}
-              <div className="w-full h-[290px]">
-                {salesTrendLoading ? (
-                  <div role="status" className="flex h-full items-center justify-center text-sm text-slate-500">Loading order values…</div>
-                ) : salesTrendError ? (
-                  <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-rose-700">
-                    <span>Could not load sales trend: {salesTrendError}</span>
-                    <button type="button" onClick={retryDashboard} className="font-semibold text-indigo-600">Retry</button>
-                  </div>
-                ) : monthlySales.length === 0 ? (
-                  <div className="flex h-full items-center justify-center text-sm text-slate-500">No order records in this range.</div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart
-                    data={monthlySales}
-                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient id="indigoTrendGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="#4f46e5" stopOpacity={0.0} />
-                      </linearGradient>
-                      <linearGradient id="tealTrendGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0d9488" stopOpacity={0.18} />
-                        <stop offset="95%" stopColor="#0d9488" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis
-                      dataKey="month"
-                      stroke="#94a3b8"
-                      fontSize={11}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      stroke="#94a3b8"
-                      fontSize={11}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(val) => `₱${val / 1000}k`}
-                    />
-                    <Tooltip
-                      formatter={customTooltipFormatter}
-                      contentStyle={{
-                        backgroundColor: '#ffffff',
-                        border: '1px solid #f1f5f9',
-                        borderRadius: '16px',
-                        boxShadow: '0 10px 15px -3px rgba(0,0,0,0.08)',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                      }}
-                    />
-                    <Legend />
-                    <Area
-                      type="monotone"
-                      dataKey="grossOrderValue"
-                      name="Gross Order Value"
-                      stroke="#4f46e5"
-                      strokeWidth={3}
-                      fillOpacity={1}
-                      fill="url(#indigoTrendGrad)"
-                      activeDot={{
-                        r: 6,
-                        fill: '#4f46e5',
-                        stroke: '#ffffff',
-                        strokeWidth: 3,
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="grossSales"
-                      name="Gross Sales (delivered)"
-                      stroke="#0d9488"
-                      strokeWidth={2.5}
-                      fill="url(#tealTrendGrad)"
-                      fillOpacity={1}
-                    />
-                  </AreaChart>
-                  </ResponsiveContainer>
-                  )}
-              </div>
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500">
-              Gross Order Value uses order-record month and excludes cancelled orders. Gross Sales includes delivered orders only, grouped by recorded delivery date because a separate completion timestamp is not stored. Current month is month-to-date.
-            </div>
+      {user?.role === 'admin' && (
+        <section className="flex flex-col gap-4 rounded-3xl border border-[#dce8df] bg-[#eaf2ec] p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6" aria-labelledby="analytics-destination-title">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-emerald-800">Detailed analysis</p>
+            <h2 id="analytics-destination-title" className="mt-1 text-lg font-extrabold text-slate-900">Trends and comparisons live in Analytics</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-600">Open the dedicated workspace for date-filtered sales, product movement, purchases, and stock history.</p>
           </div>
+          <Link to="/analytics" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-[#26745b] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#1d5f49]">
+            Open Analytics <span aria-hidden="true" className="ml-2">→</span>
+          </Link>
+        </section>
+      )}
 
-          {/* (3-col) Donut Chart for Distribution with Custom Legend */}
-          <div className="lg:col-span-3 bg-white rounded-[40px] p-6 sm:p-8 border border-[#f1f5f9] shadow-[0_4px_6px_-1px_rgb(0_0_0/0.05)] transition-all duration-300 hover:scale-[1.01] hover:shadow-md flex flex-col justify-between">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                DISTRIBUTION
-              </span>
-              <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em] mb-4">
-                Inventory by Product Category
-              </h3>
-
-              {/* Spec: Interactive Donut Chart with Centered Metrics & Legend */}
-              <InteractiveDonut
-                data={distributionData}
-                totalLabel="ACTIVE PRODUCTS"
-                valueUnit="active products"
-                size={185}
-              />
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 text-[11px] text-slate-400 text-center font-medium">
-              Active product counts by category; stock units are not mixed.
-            </div>
-          </div>
-
-          {/* Top products by ordered quantity from backend orders */}
-          <div className="lg:col-span-3 bg-white rounded-[40px] p-6 sm:p-8 border border-[#f1f5f9] shadow-[0_4px_6px_-1px_rgb(0_0_0/0.05)] transition-all duration-300 hover:scale-[1.01] hover:shadow-md flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                    ORDER QUANTITY
-                  </span>
-                  <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em]">
-                    Top Ordered Products
-                  </h3>
-                </div>
-                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center">
-                  <Package className="w-4 h-4" />
-                </div>
-              </div>
-
-              <div className="space-y-3.5">
-                {orderSummaryLoading ? (
-                  <p role="status" className="py-6 text-center text-sm text-slate-500">Loading ordered products…</p>
-                ) : orderSummaryError ? (
-                  <p role="alert" className="py-6 text-center text-sm text-rose-700">Could not load order summary: {orderSummaryError}</p>
-                ) : topItems.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-slate-500">No non-cancelled order items are available.</p>
-                ) : topItems.map((item) => (
-                  <div
-                    key={item.productId}
-                    className="flex items-center justify-between p-2.5 rounded-2xl hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs flex-shrink-0 ${item.category === 'glass' ? 'bg-blue-50 text-blue-600' : item.category === 'aluminum' ? 'bg-emerald-50 text-emerald-600' : item.category === 'accessory' ? 'bg-violet-50 text-violet-600' : 'bg-slate-100 text-slate-500'}`}>
-                        {item.category === 'glass' ? 'GL' : item.category === 'aluminum' ? 'AL' : item.category === 'accessory' ? 'AC' : '—'}
-                      </div>
-                      <div className="truncate">
-                        <p className="font-bold text-xs text-slate-800 truncate">{item.name}</p>
-                        <span className="text-[10px] uppercase font-bold text-slate-400">
-                          {item.category ?? 'Unclassified'}{item.unit ? ` · ${item.unit}` : ''}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right flex-shrink-0 pl-2">
-                      <span className="font-black text-xs text-slate-900">{item.quantity}</span>
-                      <p className="text-[10px] text-slate-400 font-medium">{item.unit ?? 'ordered'}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 text-xs text-slate-500">
-              Ranked by quantity in orders that were not cancelled.
-            </div>
-          </div>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <div className="xl:col-span-7">
+          <RecentActivityTimeline
+            activities={recentActivity}
+            loading={activityLoading}
+            error={activityError}
+            onRetry={() => setDashboardRefreshKey((current) => current + 1)}
+          />
         </div>
-
-        {/* Bottom Row: (4-col) Timeline, (5-col) Bar chart with currency header, (3-col) Status summary */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* (4-col) Vertical Timeline for Recent Activity */}
-          <div className="lg:col-span-4">
-            <RecentActivityTimeline
-              activities={recentActivity}
-              loading={activityLoading}
-              error={activityError}
-              onRetry={() => setDashboardRefreshKey((current) => current + 1)}
-            />
-          </div>
-
-          {/* (5-col) Vertical Bar Chart for Revenue with Large Currency Total */}
-          <div className="lg:col-span-5 bg-white rounded-[40px] p-6 sm:p-8 border border-[#f1f5f9] shadow-[0_4px_6px_-1px_rgb(0_0_0/0.05)] transition-all duration-300 hover:scale-[1.01] hover:shadow-md flex flex-col justify-between">
+        <section className="rounded-3xl border border-[#e5ece7] bg-white p-5 shadow-sm sm:p-6 xl:col-span-5" aria-labelledby="dashboard-order-status-title">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              {/* Header with large currency total */}
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                    OVERALL PERFORMANCE
-                  </span>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Gross Order Value in selected range
-                  </p>
-                  {/* Large Currency Total */}
-                  <div className="mt-2">
-                    <span className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-                      {salesTrendLoading ? 'Loading…' : salesTrendError ? 'Unavailable' : formatCurrency(totalOrderValueInRange)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Vertical Bar Chart */}
-              <div className="w-full h-[230px] mt-2">
-                {salesTrendLoading ? (
-                  <div role="status" className="flex h-full items-center justify-center text-sm text-slate-500">Loading order values…</div>
-                ) : salesTrendError ? (
-                  <div role="alert" className="flex h-full items-center justify-center text-center text-sm text-rose-700">Could not load order values: {salesTrendError}</div>
-                ) : monthlySales.length === 0 ? (
-                  <div className="flex h-full items-center justify-center text-sm text-slate-500">No order records in this range.</div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                    data={monthlySales}
-                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis
-                      dataKey="month"
-                      stroke="#94a3b8"
-                      fontSize={11}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      stroke="#94a3b8"
-                      fontSize={11}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(v) => `₱${v / 1000}k`}
-                    />
-                    <Tooltip
-                      formatter={customTooltipFormatter}
-                      contentStyle={{
-                        backgroundColor: '#ffffff',
-                        border: '1px solid #f1f5f9',
-                        borderRadius: '16px',
-                        boxShadow: '0 10px 15px -3px rgba(0,0,0,0.08)',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                      }}
-                    />
-                    <Bar dataKey="grossOrderValue" name="Gross Order Value" radius={[8, 8, 0, 0]}>
-                      {monthlySales.map((_, idx) => (
-                        <Cell
-                          key={`bar-${idx}`}
-                          fill={idx === monthlySales.length - 1 ? '#10b981' : '#4f46e5'}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Current snapshot</p>
+              <h2 id="dashboard-order-status-title" className="mt-1 text-lg font-extrabold text-slate-900">Order status</h2>
             </div>
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span>Monthly average gross order value (zero-transaction months included; current month is MTD): {salesTrendLoading || salesTrendError ? '—' : formatCurrency(averageMonthlyOrderValue)}</span>
-              <span className="font-extrabold text-slate-800">{salesTrendLoading || salesTrendError ? '—' : `${monthlySales.length} months in range`}</span>
-            </div>
+            <ShoppingBag className="h-5 w-5 text-emerald-700" aria-hidden="true" />
           </div>
-
-          {/* Current order status counts from backend records */}
-          <div className="lg:col-span-3 bg-white rounded-[40px] p-6 sm:p-8 border border-[#f1f5f9] shadow-[0_4px_6px_-1px_rgb(0_0_0/0.05)]">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                CURRENT SNAPSHOT
-              </span>
-              <h3 className="text-lg font-extrabold text-slate-900 tracking-[-0.02em] mb-4">
-                Record Status
-              </h3>
-
-              <div>
-                <section aria-label="Order status counts">
-                  <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Orders</h4>
-                  {orderSummaryLoading ? (
-                    <p role="status" className="text-xs text-slate-400">Loading order counts…</p>
-                  ) : orderSummaryError ? (
-                    <p role="alert" className="text-xs text-rose-700">Order counts unavailable: {orderSummaryError}</p>
-                  ) : orderStatusCounts.length === 0 ? (
-                    <p className="text-xs text-slate-400">No order records.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {orderStatusCounts.map(([status, count]) => (
-                        <li key={status} className="flex items-center justify-between gap-2 text-xs">
-                          <span className="capitalize text-slate-600">{status.replaceAll('_', ' ')}</span>
-                          <span className="font-bold text-slate-900">{count}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-              </div>
-            </div>
-            <p className="mt-3 border-t border-slate-100 pt-3 text-[11px] text-slate-400">
-              Counts reflect current order records.
-            </p>
-          </div>
-        </div>
+          {orderSummaryLoading ? (
+            <p role="status" className="mt-6 text-sm text-slate-500">Loading current order counts…</p>
+          ) : orderSummaryError ? (
+            <p role="alert" className="mt-6 text-sm text-rose-700">Order counts unavailable: {orderSummaryError}</p>
+          ) : orderStatusCounts.length === 0 ? (
+            <p className="mt-6 text-sm text-slate-500">No order records.</p>
+          ) : (
+            <ul className="mt-5 divide-y divide-slate-100">
+              {orderStatusCounts.map(({ status, count }) => (
+                <li key={status} className="flex items-center justify-between py-3 text-sm">
+                  <span className="capitalize text-slate-600">{status.replaceAll('_', ' ')}</span>
+                  <span className="font-bold tabular-nums text-slate-900">{count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">Counts reflect current order records, not a selected reporting period.</p>
+        </section>
       </div>
 
-      {/* ── 4. Bottom Utility Section ───────────────────────────────── */}
-      {/* A two-part grid: Left (8-col) Glassmorphism Promo Banner, Right (4-col) Actions Rapides */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-8">
-          <OperationsInsightsBanner />
-        </div>
-        <div className="lg:col-span-4">
-          <QuickActionsGrid />
-        </div>
+      {/* Dashboard actions stay task-focused; analysis is linked above once. */}
+      <div className="w-full xl:max-w-2xl">
+        <QuickActionsGrid />
       </div>
     </div>
   );
