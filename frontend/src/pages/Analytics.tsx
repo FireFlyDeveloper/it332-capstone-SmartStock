@@ -17,7 +17,6 @@ import {
 import { formatCurrency } from '../utils/helpers';
 import { getDateRangeForPreset, type DateRangePreset, type QuickDateRangePreset } from '../utils/dateRange';
 import { formatCalendarMonth, latestConsecutiveCompleteMonths } from '../utils/monthlyTrend';
-import InsightBreakdown from '../components/InsightBreakdown';
 import DemandForecastEvidence from '../components/DemandForecastEvidence';
 import { getAnalyticsInsights, getAnalyticsItemMovementPage, getAnalyticsMonthlyMovement, getAnalyticsOrderSummary, getAnalyticsPurchasesPage, getDemandForecastPage, getProductsPage, type AnalyticsInsightsResponse, type AnalyticsMonthlyMovementResponse, type AnalyticsItemMovementPage, type AnalyticsOrderSummary, type DemandForecastPageResponse, type DemandForecastProduct, type ProductsPageResponse, type PurchaseAnalyticsPageResponse } from '../api';
 import { toast } from 'sonner';
@@ -558,17 +557,12 @@ export const Analytics: React.FC = () => {
     return () => observer.disconnect();
   }, [forecastPage?.hasMore, forecastLoading, forecastLoadingMore, forecastLoadMoreError, loadMoreForecast]);
 
-  // Inventory statistics are aggregated by the backend over the full catalog.
-  const totalInventoryValue = inventorySummary?.totalInventoryValue ?? 0;
   const categoryListedPriceBreakdown = [
     { label: 'Glass stock at list price', value: inventorySummary?.glassInventoryValue ?? 0, colorClass: 'bg-sky-500' },
     { label: 'Aluminum stock at list price', value: inventorySummary?.aluminumInventoryValue ?? 0, colorClass: 'bg-emerald-500' },
     { label: 'Accessory stock at list price', value: inventorySummary?.accessoryInventoryValue ?? 0, colorClass: 'bg-violet-500' },
   ];
   const categoryListedPriceTotal = categoryListedPriceBreakdown.reduce((total, item) => total + item.value, 0);
-
-  const avgOrderValue = orderSummary?.averageOrderValue ?? 0;
-  const lowStockCount = inventorySummary?.activeLowStockCount ?? 0;
 
   const topSellingItems = useMemo(() => (orderSummary?.topSellingItems ?? []).map((item) => {
     let shortName = item.name
@@ -821,108 +815,8 @@ export const Analytics: React.FC = () => {
               <div><h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">What you can do</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{aiInsight.recommendations.map((item, index) => <li key={`rec-${index}`}>{simplifyInsightText(item)}</li>)}</ul></div>
               <div><h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">Things to watch</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{aiInsight.risks.map((item, index) => <li key={`risk-${index}`}>{simplifyInsightText(item)}</li>)}</ul></div>
             </div>
-            <InsightBreakdown interpretations={aiInsight.interpretations} forecastProducts={availableForecastRows} forecastLoading={forecastLoading} />
           </div>}
         </section>
-
-        {/* Key Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* 1. Stock at Listed Prices */}
-          <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover flex flex-col justify-between min-w-0">
-            <div className="flex items-center justify-between gap-2 mb-4 min-w-0">
-
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#10b981] flex items-center justify-center shrink-0 shadow-2xs">
-                <TrendingUp className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="space-y-1 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 truncate">
-                Stock at Listed Prices
-              </p>
-              <div className="min-w-0">
-                <span
-                  title={formatCurrency(totalInventoryValue)}
-                  className="text-2xl sm:text-[26px] font-black text-slate-900 tracking-tight leading-none truncate block"
-                >
-                  {formatCurrency(totalInventoryValue)}
-                </span>
-                <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Current stock × listed selling price; not acquisition cost.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 2. Order Volume */}
-          <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover flex flex-col justify-between min-w-0">
-            <div className="flex items-center gap-2 mb-4 min-w-0">
-              <div className="w-11 h-11 rounded-xl bg-indigo-50 text-[#4f46e5] flex items-center justify-center shrink-0 shadow-2xs">
-                <Package className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="space-y-1 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 truncate">
-                Order Records
-              </p>
-              <div className="min-w-0">
-                <span
-                  title={`${(orderSummary?.totalOrderCount ?? 0)} orders`}
-                  className="text-2xl sm:text-[26px] font-black text-slate-900 tracking-tight leading-none truncate block"
-                >
-                  {(orderSummary?.totalOrderCount ?? 0)}
-                </span>
-                <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Counts all recorded order transactions in the selected delivery-date range, including cancelled and non-cancelled orders.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 3. Average Gross Order Value */}
-          <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover flex flex-col justify-between min-w-0">
-            <div className="flex items-center gap-2 mb-4 min-w-0">
-              <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 shadow-2xs">
-                <PieChart className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="space-y-1 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 truncate">
-                Average Gross Order Value
-              </p>
-              <div className="min-w-0">
-                <span
-                  title={formatCurrency(avgOrderValue)}
-                  className="text-2xl sm:text-[26px] font-black text-slate-900 tracking-tight leading-none truncate block"
-                >
-                  {formatCurrency(avgOrderValue)}
-                </span>
-                <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Non-cancelled order totals; unpaid/partial orders included, refunds not deducted.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 4. Low Stock Items */}
-          <div className="bg-white rounded-[28px] shadow-sm border border-[#f1f5f9] p-6 micro-hover flex flex-col justify-between min-w-0">
-            <div className="flex items-center justify-between gap-2 mb-4 min-w-0">
-              <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 shadow-2xs">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold shrink-0 border border-amber-100/60">
-                <Clock className="w-3.5 h-3.5 shrink-0" />
-                <span>Needs attention</span>
-              </div>
-            </div>
-            <div className="space-y-1 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 truncate">
-                Active Low Stock Items
-              </p>
-              <div className="min-w-0">
-                <span
-                  title={`${lowStockCount} items`}
-                  className="text-2xl sm:text-[26px] font-black text-slate-900 tracking-tight leading-none truncate block"
-                >
-                  {lowStockCount}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Charts Row 1 */}
         <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-950">
@@ -956,6 +850,7 @@ export const Analytics: React.FC = () => {
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Monthly Gross Order Value {grossOrderValueChange !== null && <span title={`Complete-month change: ${comparisonLabel}`} className={`ml-2 inline-flex items-center text-xs font-semibold ${grossOrderValueChange >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{grossOrderValueChange >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}{formatCurrency(Math.abs(grossOrderValueChange))} vs {comparableMonths ? formatCalendarMonth(comparableMonths.previous.month) : 'prior month'}</span>}</h3>
                 <p className="text-xs text-slate-500">By delivery date; all non-cancelled orders, whether delivered or not. Refunds are not deducted.</p>
+                <p className="mt-1 text-xs font-semibold text-slate-600">Average gross order value in this range: {formatCurrency(orderSummary?.averageOrderValue ?? 0)}</p>
               </div>
               <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0 shadow-2xs"><TrendingUp className="w-4 h-4" /></div>
             </div>
@@ -1367,10 +1262,7 @@ export const Analytics: React.FC = () => {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="grid grid-cols-2 gap-3 md:w-48 md:grid-cols-1">
-              <div className="rounded-2xl bg-emerald-50 p-4"><p className="text-xs font-semibold text-emerald-700">Inbound · {monthlyMovementUnit}</p><p className="mt-1 text-2xl font-black text-emerald-900">{monthlyMovementChartRows.reduce((sum, row) => sum + row.inboundQuantity, 0)}</p></div>
-              <div className="rounded-2xl bg-orange-50 p-4"><p className="text-xs font-semibold text-orange-700">Outbound · {monthlyMovementUnit}</p><p className="mt-1 text-2xl font-black text-orange-900">{monthlyMovementChartRows.reduce((sum, row) => sum + row.outboundQuantity, 0)}</p></div>
-            </div>
+            <p className="text-xs text-slate-500">Use the bars to compare inbound and outbound quantities month by month. Totals are not combined across units.</p>
           </div>}
         </section>
 
